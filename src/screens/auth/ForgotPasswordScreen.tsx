@@ -1,152 +1,129 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import { useAuth } from '../../hooks/useAuth';
-import { validateEmail } from '../../utils/validation';
-import { Colors, Typography, Spacing } from '../../utils/theme';
-import { MaterialIcons as Icon } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ScreenContainer } from '../../components/auth/ScreenContainer';
+import { BackButton } from '../../components/auth/BackButton';
+import { AuthTextInput } from '../../components/auth/AuthTextInput';
+import { GradientButton } from '../../components/auth/GradientButton';
+import { PrivacyNotice } from '../../components/auth/PrivacyNotice';
+import { colors, radii, spacing, typography } from '../../constants/theme';
+import { sendPasswordResetEmail } from '../../services/authService';
+import { isNotEmpty, isValidEmail } from '../../utils/validation';
+import type { AuthStackParamList } from '../../navigation/types';
 
-const ForgotPasswordScreen = () => {
-  const navigation = useNavigation();
-  const { resetPassword } = useAuth();
+type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
+
+export function ForgotPasswordScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSent, setIsSent] = useState(false);
 
   const handleSubmit = async () => {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      setError('Email is required');
+    if (!isNotEmpty(email)) {
+      setError('Email address is required.');
       return;
     }
-    if (!validateEmail(trimmedEmail)) {
-      setError('Please enter a valid email');
+    if (!isValidEmail(email)) {
+      setError('Enter a valid email address.');
       return;
     }
-    setError('');
-    setLoading(true);
-    try {
-      await resetPassword(trimmedEmail);
-      Alert.alert(
-        'Reset Link Sent',
-        'Check your email for instructions to reset your password.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not send reset link');
-    } finally {
-      setLoading(false);
+    setError(undefined);
+    setFormError(null);
+
+    setIsSubmitting(true);
+    const result = await sendPasswordResetEmail(email);
+    setIsSubmitting(false);
+
+    if (result.error) {
+      setFormError(result.error);
+      return;
     }
+    setIsSent(true);
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Icon name="arrow-back" size={24} color={Colors.primary} />
-      </TouchableOpacity>
+    <ScreenContainer>
+      <BackButton onPress={() => navigation.goBack()} />
 
-      <View style={styles.content}>
-        <View style={styles.illustrationContainer}>
-          <View style={styles.iconCircle}>
-            <Icon name="lock" size={64} color={Colors.primary} />
-          </View>
+      <View style={styles.header}>
+        <View style={styles.iconWrap}>
+          <Ionicons name="lock-closed-outline" size={32} color={colors.primary} />
         </View>
-
         <Text style={styles.title}>Forgot Password?</Text>
         <Text style={styles.subtitle}>
-          Enter your registered email address and we'll send you password reset instructions.
+          Enter your registered email address and we&apos;ll send you password reset instructions.
         </Text>
+      </View>
 
-        <View style={styles.form}>
-          <Input
-            icon="mail"
-            placeholder="Email Address"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            textContentType="emailAddress"
-            error={error}
-          />
-          <Button title="Send Reset Link" onPress={handleSubmit} loading={loading} />
-        </View>
-
-        <View style={styles.footer}>
-          <Icon name="lock" size={16} color={Colors.outline} />
-          <Text style={styles.footerText}>
-            Your information is protected under the Data Privacy Act of 2012.
+      {isSent ? (
+        <View style={styles.sentBanner}>
+          <Ionicons name="checkmark-circle-outline" size={20} color={colors.success} />
+          <Text style={styles.sentText}>
+            Reset instructions sent to {email}. Check your inbox and follow the link to continue.
           </Text>
         </View>
+      ) : (
+        <View style={styles.form}>
+          <AuthTextInput
+            icon="mail-outline"
+            placeholder="Email Address"
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              setError(undefined);
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            error={error}
+            testID="forgot-password-email"
+          />
+
+          {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
+          <GradientButton
+            label="Send Reset Link"
+            onPress={handleSubmit}
+            loading={isSubmitting}
+            style={styles.submitButton}
+            testID="forgot-password-submit"
+          />
+        </View>
+      )}
+
+      <View style={styles.footer}>
+        <PrivacyNotice />
       </View>
-    </KeyboardAvoidingView>
+    </ScreenContainer>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  backButton: {
-    padding: 16,
-    marginTop: 8,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.marginMobile,
-    paddingBottom: Spacing.sectionPadding,
-  },
-  illustrationContainer: {
+  header: { alignItems: 'center', marginTop: spacing.stackLg, marginBottom: spacing.sectionPadding },
+  iconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: radii.full,
+    backgroundColor: colors.white,
     alignItems: 'center',
-    marginVertical: Spacing.stackLG,
-  },
-  iconCircle: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    backgroundColor: Colors.primaryFixed,
     justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
+    marginBottom: spacing.stackLg,
   },
-  title: {
-    ...Typography.headlineLG_mobile,
-    color: Colors.primary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    ...Typography.bodyMD,
-    color: Colors.onSurfaceVariant,
-    textAlign: 'center',
-    marginBottom: Spacing.stackLG,
-  },
-  form: {
-    gap: Spacing.stackMD,
-  },
-  footer: {
+  title: { ...typography.headlineLg, fontSize: 26, color: colors.primary, marginBottom: spacing.stackSm },
+  subtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant, textAlign: 'center', paddingHorizontal: spacing.stackSm },
+  form: {},
+  formError: { ...typography.bodySm, color: colors.error, marginTop: spacing.stackMd, textAlign: 'center' },
+  submitButton: { marginTop: spacing.stackLg },
+  sentBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 'auto',
-    paddingTop: Spacing.stackLG,
+    alignItems: 'flex-start',
+    backgroundColor: colors.successContainer,
+    borderRadius: radii.lg,
+    padding: spacing.gutterMd,
   },
-  footerText: {
-    ...Typography.labelSM,
-    color: Colors.outline,
-    textAlign: 'center',
-  },
+  sentText: { ...typography.bodySm, color: colors.onSurface, marginLeft: 8, flex: 1, lineHeight: 20 },
+  footer: { marginTop: 'auto', paddingVertical: spacing.stackLg },
 });
-
-export default ForgotPasswordScreen;

@@ -2,6 +2,7 @@
   "expo": {
     "name": "safeher-mobile",
     "slug": "safeher-mobile",
+    "scheme": "safeher",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -22,7 +23,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-splash-screen"
     ]
   }
 }

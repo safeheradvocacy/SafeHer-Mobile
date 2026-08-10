@@ -1,170 +1,106 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import Button from '../../components/common/Button';
-import { Colors, Typography, Spacing } from '../../utils/theme';
-import { MaterialIcons as Icon } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ScreenContainer } from '../../components/auth/ScreenContainer';
+import { GradientButton } from '../../components/auth/GradientButton';
+import { TextButton } from '../../components/auth/TextButton';
+import { SafeHerLogo } from '../../components/branding/SafeHerLogo';
+import { colors, radii, shadows, spacing, typography } from '../../constants/theme';
+import type { AuthStackParamList } from '../../navigation/types';
 
-const WelcomeScreen = () => {
-  const navigation = useNavigation();
+type Props = NativeStackScreenProps<AuthStackParamList, 'Welcome'>;
 
-  const onGetStarted = () => {
-    navigation.navigate('Register');
-  };
-
-  const onSignIn = () => {
-    navigation.navigate('Login');
-  };
-
+export function WelcomeScreen({ navigation }: Props) {
   return (
-    <View style={styles.container}>
+    <ScreenContainer>
       <View style={styles.header}>
-        <Image
-          source={require('../../assets/images/safeher-logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.title}>SafeHer</Text>
+        <SafeHerLogo size={88} />
         <Text style={styles.subtitle}>Protection, Support, and Hope in Every Step.</Text>
       </View>
 
-      <View style={styles.illustrationContainer}>
-        <Image
-          source={require('../../assets/images/welcome-illustration.png')}
-          style={styles.illustration}
-          resizeMode="contain"
-        />
-      </View>
-
-      <View style={styles.partnersContainer}>
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text style={styles.partnersLabel}>In Partnership With</Text>
-          <View style={styles.line} />
+      <View style={styles.partnerSection}>
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerLabel}>IN PARTNERSHIP WITH</Text>
+          <View style={styles.dividerLine} />
         </View>
-        <View style={styles.partnerCards}>
-          <View style={styles.partnerCard}>
-            <Icon name="account-balance" size={32} color={Colors.primary} />
-            <Text style={styles.partnerName}>PSWDO</Text>
-            <Text style={styles.partnerDesc}>Provincial Social Welfare and Development Office</Text>
-          </View>
-          <View style={styles.partnerCard}>
-            <Icon name="assured-workload" size={32} color={Colors.primary} />
-            <Text style={styles.partnerName}>MSWDO</Text>
-            <Text style={styles.partnerDesc}>Municipal Social Welfare and Development Office</Text>
-          </View>
+
+        <View style={styles.partnerRow}>
+          <PartnerCard icon="business-outline" name="PSWDO" description="Provincial Social Welfare and Development Office" />
+          <PartnerCard icon="shield-checkmark-outline" name="MSWDO" description="Municipal Social Welfare and Development Office" />
         </View>
       </View>
 
       <View style={styles.actions}>
-        <Button title="Get Started" onPress={onGetStarted} />
-        <TouchableOpacity onPress={onSignIn} style={styles.signInLink}>
-          <Text style={styles.signInText}>
-            Already have an account? <Text style={styles.signInHighlight}>Sign In</Text>
-          </Text>
-        </TouchableOpacity>
+        <GradientButton
+          label="Get Started"
+          icon="arrow-forward"
+          onPress={() => navigation.navigate('CreateAccount')}
+          testID="welcome-get-started"
+        />
+        <View style={styles.signInRow}>
+          <Text style={styles.signInText}>Already have an account? </Text>
+          <TextButton label="Sign In" onPress={() => navigation.navigate('Login')} testID="welcome-sign-in" />
+        </View>
       </View>
+    </ScreenContainer>
+  );
+}
+
+function PartnerCard({
+  icon,
+  name,
+  description,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  name: string;
+  description: string;
+}) {
+  return (
+    <View style={[styles.partnerCard, shadows.card]}>
+      <View style={styles.partnerIconWrap}>
+        <Ionicons name={icon} size={22} color={colors.primary} />
+      </View>
+      <Text style={styles.partnerName}>{name}</Text>
+      <Text style={styles.partnerDescription}>{description}</Text>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    paddingHorizontal: Spacing.marginMobile,
-    paddingTop: Spacing.sectionPadding,
-    paddingBottom: Spacing.sectionPadding,
-  },
-  header: {
-    alignItems: 'center',
-  },
-  logo: {
-    width: 120,
-    height: 120,
-  },
-  title: {
-    ...Typography.headlineLG_mobile,
-    color: Colors.primary,
-    marginTop: 4,
-  },
+  header: { alignItems: 'center', marginTop: spacing.stackLg },
   subtitle: {
-    ...Typography.bodyMD,
-    color: Colors.onSurfaceVariant,
+    ...typography.bodyLg,
+    color: colors.onSurfaceVariant,
     textAlign: 'center',
+    marginTop: spacing.stackMd,
+    paddingHorizontal: spacing.stackLg,
   },
-  illustrationContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  illustration: {
-    width: '100%',
-    height: 200,
-  },
-  partnersContainer: {
-    marginVertical: Spacing.stackLG,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.stackMD,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.outlineVariant,
-  },
-  partnersLabel: {
-    ...Typography.labelSM,
-    color: Colors.outline,
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-  },
-  partnerCards: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
+  partnerSection: { marginTop: spacing.sectionPadding },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.stackLg },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.outlineVariant },
+  dividerLabel: { ...typography.labelSm, color: colors.outline, marginHorizontal: 12, letterSpacing: 1 },
+  partnerRow: { flexDirection: 'row', gap: spacing.gutterMd },
   partnerCard: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  partnerName: {
-    ...Typography.labelLG,
-    color: Colors.onSurface,
-    marginTop: 8,
-  },
-  partnerDesc: {
-    ...Typography.labelSM,
-    color: Colors.onSurfaceVariant,
-    textAlign: 'center',
-    fontSize: 10,
-    marginTop: 4,
-  },
-  actions: {
-    marginTop: Spacing.stackMD,
-  },
-  signInLink: {
-    marginTop: Spacing.stackMD,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: spacing.gutterMd,
     alignItems: 'center',
   },
-  signInText: {
-    ...Typography.bodySM,
-    color: Colors.onSurfaceVariant,
+  partnerIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
+    backgroundColor: colors.softLavender,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.stackSm,
   },
-  signInHighlight: {
-    color: Colors.primary,
-    fontWeight: '600',
-  },
+  partnerName: { ...typography.labelLg, fontSize: 16, color: colors.onSurface, marginBottom: 4 },
+  partnerDescription: { ...typography.bodySm, fontSize: 12, color: colors.onSurfaceVariant, textAlign: 'center' },
+  actions: { marginTop: 'auto', paddingBottom: spacing.stackLg },
+  signInRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.stackMd },
+  signInText: { ...typography.bodyMd, color: colors.onSurfaceVariant },
 });
-
-export default WelcomeScreen;

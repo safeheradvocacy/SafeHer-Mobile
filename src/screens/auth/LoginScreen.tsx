@@ -1,235 +1,143 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import Checkbox from '../../components/common/Checkbox';
-import { useAuth } from '../../hooks/useAuth';
-import { setItem, getItem, REMEMBER_ME_KEY, USER_EMAIL_KEY } from '../../utils/storage';
-import { validateEmail } from '../../utils/validation';
-import { Colors, Typography, Spacing } from '../../utils/theme';
-import { MaterialIcons as Icon } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ScreenContainer } from '../../components/auth/ScreenContainer';
+import { BackButton } from '../../components/auth/BackButton';
+import { AuthTextInput } from '../../components/auth/AuthTextInput';
+import { PasswordInput } from '../../components/auth/PasswordInput';
+import { CheckboxRow } from '../../components/auth/CheckboxRow';
+import { GradientButton } from '../../components/auth/GradientButton';
+import { SecondaryButton } from '../../components/auth/SecondaryButton';
+import { TextButton } from '../../components/auth/TextButton';
+import { OrDivider } from '../../components/auth/OrDivider';
+import { PrivacyNotice } from '../../components/auth/PrivacyNotice';
+import { colors, spacing, typography } from '../../constants/theme';
+import { signIn, getRememberedEmail } from '../../services/authService';
+import { validateLoginForm, hasErrors, type FieldErrors } from '../../utils/validation';
+import type { AuthStackParamList } from '../../navigation/types';
 
-const LoginScreen = () => {
-  const navigation = useNavigation();
-  const { signIn } = useAuth();
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
+export function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Load saved email if remember me
-    const loadSaved = async () => {
-      const savedEmail = await getItem(USER_EMAIL_KEY);
-      const remember = await getItem(REMEMBER_ME_KEY);
-      if (remember) {
-        setEmail(savedEmail || '');
+    getRememberedEmail().then((savedEmail) => {
+      if (savedEmail) {
+        setEmail(savedEmail);
         setRememberMe(true);
       }
-    };
-    loadSaved();
+    });
   }, []);
 
-  const validate = () => {
-    let valid = true;
-    const newErrors = { email: '', password: '' };
-    if (!email) {
-      newErrors.email = 'Email is required';
-      valid = false;
-    } else if (!validateEmail(email.trim())) {
-      newErrors.email = 'Please enter a valid email';
-      valid = false;
-    }
-    if (!password) {
-      newErrors.password = 'Password is required';
-      valid = false;
-    }
-    setErrors(newErrors);
-    return valid;
-  };
-
   const handleLogin = async () => {
-    if (!validate()) return;
-    const trimmedEmail = email.trim();
-    setLoading(true);
-    try {
-      await signIn(trimmedEmail, password);
-      // Save remember me
-      if (rememberMe) {
-        await setItem(REMEMBER_ME_KEY, true);
-        await setItem(USER_EMAIL_KEY, trimmedEmail);
-      } else {
-        await setItem(REMEMBER_ME_KEY, false);
-        await setItem(USER_EMAIL_KEY, '');
-      }
-      // RootNavigator will switch to AppStack
-    } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const fieldErrors = validateLoginForm(email, password);
+    setErrors(fieldErrors);
+    setFormError(null);
+    if (hasErrors(fieldErrors)) return;
 
-  const navigateToForgot = () => navigation.navigate('ForgotPassword');
-  const navigateToRegister = () => navigation.navigate('Register');
+    setIsSubmitting(true);
+    const result = await signIn({ email, password, rememberMe });
+    setIsSubmitting(false);
+
+    if (result.error) {
+      setFormError(result.error);
+      return;
+    }
+    // On success, onAuthStateChange in AuthProvider updates global state and
+    // the root navigator (see App.tsx) swaps to the authenticated stack.
+  };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Icon name="arrow-back" size={24} color={Colors.primary} />
-      </TouchableOpacity>
+    <ScreenContainer>
+      <BackButton onPress={() => navigation.goBack()} />
 
-      <View style={styles.content}>
+      <View style={styles.header}>
         <Text style={styles.title}>Welcome Back</Text>
         <Text style={styles.subtitle}>Sign in securely to continue.</Text>
+      </View>
 
-        <View style={styles.form}>
-          <Input
-            icon="mail"
-            placeholder="Email Address"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            textContentType="emailAddress"
-            error={errors.email}
-          />
-          <Input
-            icon="lock"
+      <View style={styles.form}>
+        <AuthTextInput
+          icon="mail-outline"
+          placeholder="Email Address"
+          value={email}
+          onChangeText={(text) => {
+            setEmail(text);
+            setErrors((prev) => ({ ...prev, email: undefined }));
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          error={errors.email}
+          testID="login-email"
+        />
+
+        <View style={styles.fieldSpacing}>
+          <PasswordInput
             placeholder="Password"
             value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="password"
-            textContentType="password"
+            onChangeText={(text) => {
+              setPassword(text);
+              setErrors((prev) => ({ ...prev, password: undefined }));
+            }}
             error={errors.password}
-          />
-
-          <View style={styles.optionsRow}>
-            <View style={styles.rememberMe}>
-              <Checkbox checked={rememberMe} onToggle={() => setRememberMe(!rememberMe)} />
-              <Text style={styles.rememberMeText}>Remember Me</Text>
-            </View>
-            <TouchableOpacity onPress={navigateToForgot}>
-              <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Button title="Login" onPress={handleLogin} loading={loading} />
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Button
-            title="Create Account"
-            onPress={navigateToRegister}
-            variant="outline"
+            testID="login-password"
           />
         </View>
 
-        <View style={styles.footer}>
-          <Icon name="lock" size={16} color={Colors.outline} />
-          <Text style={styles.footerText}>
-            Your information is protected under the Data Privacy Act of 2012.
-          </Text>
+        <View style={styles.optionsRow}>
+          <CheckboxRow checked={rememberMe} onToggle={setRememberMe} testID="login-remember-me">
+            Remember Me
+          </CheckboxRow>
+          <TextButton label="Forgot Password?" onPress={() => navigation.navigate('ForgotPassword')} />
         </View>
+
+        {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
+        <GradientButton
+          label="Login"
+          onPress={handleLogin}
+          loading={isSubmitting}
+          style={styles.loginButton}
+          testID="login-submit"
+        />
+
+        <OrDivider />
+
+        <SecondaryButton
+          label="Create Account"
+          icon="person-add-outline"
+          onPress={() => navigation.navigate('CreateAccount')}
+          testID="login-create-account"
+        />
       </View>
-    </KeyboardAvoidingView>
+
+      <View style={styles.footer}>
+        <PrivacyNotice />
+      </View>
+    </ScreenContainer>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  backButton: {
-    padding: 16,
-    marginTop: 8,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.marginMobile,
-    paddingBottom: Spacing.sectionPadding,
-  },
-  title: {
-    ...Typography.headlineLG_mobile,
-    color: Colors.primary,
-    marginBottom: 4,
-  },
-  subtitle: {
-    ...Typography.bodyMD,
-    color: Colors.onSurfaceVariant,
-    marginBottom: Spacing.stackLG,
-  },
-  form: {
-    gap: Spacing.stackMD,
-  },
+  header: { alignItems: 'center', marginTop: spacing.stackLg, marginBottom: spacing.sectionPadding },
+  title: { ...typography.headlineLg, fontSize: 28, color: colors.primary, marginBottom: 8 },
+  subtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  form: { flex: 1 },
+  fieldSpacing: { marginTop: spacing.stackMd },
   optionsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.stackSM,
+    marginTop: spacing.stackMd,
   },
-  rememberMe: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rememberMeText: {
-    ...Typography.bodySM,
-    color: Colors.onSurfaceVariant,
-  },
-  forgotText: {
-    ...Typography.labelSM,
-    color: Colors.primary,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: Spacing.stackMD,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.outlineVariant,
-  },
-  dividerText: {
-    ...Typography.labelSM,
-    color: Colors.outlineVariant,
-    paddingHorizontal: 16,
-    textTransform: 'uppercase',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 'auto',
-    paddingTop: Spacing.stackLG,
-  },
-  footerText: {
-    ...Typography.labelSM,
-    color: Colors.outline,
-    textAlign: 'center',
-  },
+  formError: { ...typography.bodySm, color: colors.error, marginTop: spacing.stackMd, textAlign: 'center' },
+  loginButton: { marginTop: spacing.stackLg },
+  footer: { paddingVertical: spacing.stackLg },
 });
-
-export default LoginScreen;

@@ -1,145 +1,104 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import PasswordStrengthIndicator from '../../components/common/PasswordStrengthIndicator';
-import { useAuth } from '../../hooks/useAuth';
-import { validatePassword } from '../../utils/validation';
-import { Colors, Typography, Spacing } from '../../utils/theme';
-import { MaterialIcons as Icon } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ScreenContainer } from '../../components/auth/ScreenContainer';
+import { BackButton } from '../../components/auth/BackButton';
+import { PasswordInput } from '../../components/auth/PasswordInput';
+import { PasswordStrengthMeter } from '../../components/auth/PasswordStrengthMeter';
+import { GradientButton } from '../../components/auth/GradientButton';
+import { PrivacyNotice } from '../../components/auth/PrivacyNotice';
+import { colors, spacing, typography } from '../../constants/theme';
+import { updatePassword } from '../../services/authService';
+import { validateResetPasswordForm, hasErrors, type FieldErrors } from '../../utils/validation';
+import type { AuthStackParamList } from '../../navigation/types';
 
-const ResetPasswordScreen = () => {
-  // The recovery link already established a session (see AuthContext +
-  // services/authDeepLink.ts) — there's no token to read from route params
-  // here, just a new password to collect.
-  const { updatePassword, clearPasswordRecovery } = useAuth();
+type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
+
+export function ResetPasswordScreen({ navigation }: Props) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ newPassword: '', confirmPassword: '' });
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const validate = () => {
-    let valid = true;
-    const newErrors = { newPassword: '', confirmPassword: '' };
-    if (!newPassword) {
-      newErrors.newPassword = 'Password is required';
-      valid = false;
-    } else if (!validatePassword(newPassword)) {
-      newErrors.newPassword = 'Password must be at least 8 characters';
-      valid = false;
-    }
-    if (newPassword !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-      valid = false;
-    }
-    setErrors(newErrors);
-    return valid;
-  };
+  const handleSubmit = async () => {
+    const fieldErrors = validateResetPasswordForm(newPassword, confirmPassword);
+    setErrors(fieldErrors);
+    setFormError(null);
+    if (hasErrors(fieldErrors)) return;
 
-  const handleReset = async () => {
-    if (!validate()) return;
-    setLoading(true);
-    try {
-      await updatePassword(newPassword);
-      Alert.alert(
-        'Password Reset',
-        "Your password has been updated. You're now signed in.",
-        // Clearing the recovery flag hands control back to RootNavigator,
-        // which routes into the app since a real session now exists —
-        // there's no separate Login screen to navigate to from here.
-        [{ text: 'OK', onPress: () => clearPasswordRecovery() }]
-      );
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to reset password');
-    } finally {
-      setLoading(false);
+    setIsSubmitting(true);
+    const result = await updatePassword(newPassword);
+    setIsSubmitting(false);
+
+    if (result.error) {
+      setFormError(result.error);
+      return;
     }
+
+    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.content}>
+    <ScreenContainer>
+      <BackButton onPress={() => navigation.goBack()} />
+
+      <View style={styles.header}>
         <Text style={styles.title}>Reset Password</Text>
         <Text style={styles.subtitle}>Create a new password for your account.</Text>
+      </View>
 
-        <View style={styles.form}>
-          <Input
-            icon="lock"
-            placeholder="New Password"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry
-            autoComplete="password-new"
-            textContentType="newPassword"
-            error={errors.newPassword}
-          />
-          <PasswordStrengthIndicator password={newPassword} />
+      <View style={styles.form}>
+        <PasswordInput
+          placeholder="New Password"
+          value={newPassword}
+          onChangeText={(text) => {
+            setNewPassword(text);
+            setErrors((prev) => ({ ...prev, newPassword: undefined }));
+          }}
+          error={errors.newPassword}
+          testID="reset-password-new"
+        />
+        <PasswordStrengthMeter password={newPassword} />
 
-          <Input
-            icon="lock"
+        <View style={styles.fieldSpacing}>
+          <PasswordInput
             placeholder="Confirm Password"
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            autoComplete="password-new"
-            textContentType="newPassword"
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+            }}
             error={errors.confirmPassword}
+            testID="reset-password-confirm"
           />
-
-          <Button title="Reset Password" onPress={handleReset} loading={loading} />
         </View>
 
-        <View style={styles.footer}>
-          <Icon name="lock" size={16} color={Colors.outline} />
-          <Text style={styles.footerText}>
-            Your information is protected under the Data Privacy Act of 2012.
-          </Text>
-        </View>
+        {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
+        <GradientButton
+          label="Reset Password"
+          onPress={handleSubmit}
+          loading={isSubmitting}
+          style={styles.submitButton}
+          testID="reset-password-submit"
+        />
       </View>
-    </KeyboardAvoidingView>
+
+      <View style={styles.footer}>
+        <PrivacyNotice />
+      </View>
+    </ScreenContainer>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.marginMobile,
-    paddingTop: Spacing.sectionPadding,
-    paddingBottom: Spacing.sectionPadding,
-  },
-  title: {
-    ...Typography.headlineLG_mobile,
-    color: Colors.primary,
-    marginBottom: 4,
-  },
-  subtitle: {
-    ...Typography.bodyMD,
-    color: Colors.onSurfaceVariant,
-    marginBottom: Spacing.stackLG,
-  },
-  form: {
-    gap: Spacing.stackMD,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 'auto',
-    paddingTop: Spacing.stackLG,
-  },
-  footerText: {
-    ...Typography.labelSM,
-    color: Colors.outline,
-    textAlign: 'center',
-  },
+  header: { alignItems: 'center', marginTop: spacing.stackLg, marginBottom: spacing.sectionPadding },
+  title: { ...typography.headlineLg, fontSize: 26, color: colors.primary, marginBottom: spacing.stackSm },
+  subtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant, textAlign: 'center' },
+  form: {},
+  fieldSpacing: { marginTop: spacing.stackMd },
+  formError: { ...typography.bodySm, color: colors.error, marginTop: spacing.stackMd, textAlign: 'center' },
+  submitButton: { marginTop: spacing.stackLg },
+  footer: { marginTop: 'auto', paddingVertical: spacing.stackLg },
 });
-
-export default ResetPasswordScreen;
