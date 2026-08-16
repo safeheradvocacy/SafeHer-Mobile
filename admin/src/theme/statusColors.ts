@@ -1,0 +1,18 @@
+export const STATUS_COLORS: Record<string, string> = {
+  Pending: '#C98A3B',
+  'Under Review': '#4C7EA8',
+  Assigned: '#6C5CA6',
+  'In Progress': '#4C7EA8',
+  Referred: '#B79CED',
+  Resolved: '#4A8C6F',
+  Closed: '#6E6577',
+  Low: '#4A8C6F',
+  Medium: '#C98A3B',
+  High: '#C4485B',
+  Critical: '#9C2F41',
+  Triggered: '#C4485B',
+  Responding: '#C98A3B',
+  Accepted: '#4A8C6F',
+  Declined: '#6E6577',
+  Completed: '#4A8C6F',
+};

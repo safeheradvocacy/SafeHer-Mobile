@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "SafeHer",
+    "slug": "safeher-mobile",
+    "scheme": "safeher",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": false, "bundleIdentifier": "ph.pswdo.safeher" },
+    "android": {
+      "package": "ph.pswdo.safeher",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SafeHer uses your location to send it with an SOS alert and to find shelters near you."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SafeHer uses your photos to attach evidence to an incident report."
+        }
+      ]
+    ]
+  }
+}
