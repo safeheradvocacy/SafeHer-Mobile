@@ -30,8 +30,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (contains the project's own Supabase/Maps keys —
+# templates for these live in .env.example instead)
+.env
 .env*.local
+!.env.example
 
 # typescript
 *.tsbuildinfo
