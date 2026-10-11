@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
@@ -16,14 +17,126 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing } from 'react-native-reanimated';
 import { colors, radius, shadows, spacing, statusColors, typography } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 export type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+/** True once we know the OS reduce-motion preference; defaults to false
+ * (full animation) until the async check resolves, which on real devices
+ * happens well before the first paint that would use it. */
+export function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => mounted && setReduced(v));
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReduced);
+    return () => {
+      mounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduced;
+}
+
+/** Fade + slight upward rise, staggered by `delay` — the shared entrance
+ * effect used across auth screens so a sequence reads as one
+ * choreographed reveal rather than several different animations. */
+export function FadeInUp({
+  delay = 0,
+  duration = 380,
+  distance = 14,
+  reduced,
+  style,
+  children,
+}: {
+  delay?: number;
+  duration?: number;
+  distance?: number;
+  reduced: boolean;
+  style?: object;
+  children: React.ReactNode;
+}) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    // Reduce Motion removes the rise (translateY below is gated on
+    // `reduced` too) but still gets a quick plain fade rather than an
+    // instant snap-into-place — a fade carries no directional/spatial
+    // motion, so it stays within what Reduce Motion asks for while still
+    // keeping the entrance from feeling abrupt.
+    if (reduced) {
+      progress.value = withDelay(delay, withTiming(1, { duration: 180 }));
+      return;
+    }
+    progress.value = withDelay(delay, withTiming(1, { duration, easing: Easing.out(Easing.cubic) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: reduced ? 0 : (1 - progress.value) * distance }],
+  }));
+  return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
+}
+
+/**
+ * Shared 1.00 -> 0.97 press-scale feedback for any tappable element —
+ * quick action cards, the SOS card, header icon buttons, "View all" links,
+ * case cards. Wraps a single child in a Pressable + Animated.View so
+ * callers don't each hand-roll their own shared value.
+ */
+export function PressableScale({
+  onPress,
+  style,
+  children,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityRole = 'button',
+  disabled,
+  hitSlop,
+  pressScale = 0.97,
+}: {
+  onPress: () => void;
+  style?: object;
+  children: React.ReactNode;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: React.ComponentProps<typeof Pressable>['accessibilityRole'];
+  disabled?: boolean;
+  hitSlop?: number;
+  /** How far the element compresses on press (1 = no shrink). Default
+   * 0.97 suits most controls; more tactile "clay" controls (e.g. the
+   * onboarding header's circular buttons) use a more pronounced ~0.94. */
+  pressScale?: number;
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={hitSlop}
+      onPressIn={() => {
+        scale.value = withTiming(pressScale, { duration: 100 });
+      }}
+      onPressOut={() => {
+        scale.value = withTiming(1, { duration: 120 });
+      }}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+    >
+      <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
 export function Screen({ children, scroll = true }: { children: React.ReactNode; scroll?: boolean }) {
+  const { palette } = useTheme();
   const Wrapper = scroll ? ScrollView : View;
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: palette.background }]}>
       <KeyboardAvoidingView style={styles.flexFill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Wrapper
           contentContainerStyle={scroll ? styles.scrollContent : styles.flexFill}
@@ -38,50 +151,158 @@ export function Screen({ children, scroll = true }: { children: React.ReactNode;
 }
 
 export function Card({ children, style }: { children: React.ReactNode; style?: object }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  const { palette } = useTheme();
+  return <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }, style]}>{children}</View>;
+}
+
+/**
+ * Press feedback for the primary (gradient) button specifically: a slight
+ * scale-down plus the elevation shadow softening, rather than just an
+ * opacity dip — reads as "this surface is being pressed" instead of
+ * "this is fading out". Kept separate from PressableScale because the
+ * shadow lives on the OUTER Pressable (styles.buttonShadow) while the
+ * gradient fill is a child, so both need to animate together.
+ */
+function PrimaryPressable({
+  onPress,
+  disabled,
+  loading,
+  label,
+  shadowStyle,
+  fillStyle,
+  reduced = false,
+  children,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  label: string;
+  /** Overrides for the "large/clay" CTA variant — layered after the base
+   * styles so callers only need to specify what differs (radius/height),
+   * not redeclare the whole shadow/gradient setup. */
+  shadowStyle?: object;
+  fillStyle?: object;
+  /** Under Reduce Motion, skip the scale/translateY "physical push" but
+   * keep the shadow-softening — a non-spatial cue so the button still
+   * visibly responds to touch instead of giving no feedback at all. */
+  reduced?: boolean;
+  children: React.ReactNode;
+}) {
+  const { palette } = useTheme();
+  const scale = useSharedValue(1);
+  const translateY = useSharedValue(0);
+  const shadowOpacity = useSharedValue(0.28);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { translateY: translateY.value }],
+    shadowOpacity: shadowOpacity.value,
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled, busy: loading }}
+      onPressIn={() => {
+        if (!reduced) {
+          scale.value = withTiming(0.97, { duration: 120 });
+          translateY.value = withTiming(2, { duration: 120 });
+        }
+        shadowOpacity.value = withTiming(0.14, { duration: reduced ? 80 : 120 });
+      }}
+      onPressOut={() => {
+        if (!reduced) {
+          scale.value = withTiming(1, { duration: 200 });
+          translateY.value = withTiming(0, { duration: 200 });
+        }
+        shadowOpacity.value = withTiming(0.28, { duration: reduced ? 120 : 200 });
+      }}
+    >
+      <Animated.View style={[styles.buttonShadow, { shadowColor: palette.primaryDark }, shadowStyle, animatedStyle, disabled ? { opacity: 0.5 } : null]}>
+        <LinearGradient colors={[palette.primary, palette.primaryDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.button, fillStyle]}>
+          {/* Soft upper-portion sheen — the "gentle highlight" that reads
+              as a physical, slightly convex surface rather than a flat
+              gradient fill. */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 0.85 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          {children}
+        </LinearGradient>
+      </Animated.View>
+    </Pressable>
+  );
 }
 
 export function PrimaryButton({
   title,
+  loadingTitle,
   onPress,
   loading,
   disabled,
   variant = 'primary',
   icon,
+  size = 'md',
+  reduced = false,
 }: {
   title: string;
+  /** Shown alongside the spinner while `loading` is true (e.g. "Logging
+   * in..."). Falls back to `title` if omitted. */
+  loadingTitle?: string;
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'danger' | 'outline' | 'tertiary';
   icon?: IoniconName;
+  /** 'lg' is the hero-CTA treatment (bigger, more rounded, more
+   * pronounced clay shadow) — currently used by onboarding's Next/Get
+   * Started. 'md' (default) is unchanged from before. Only affects the
+   * primary variant. */
+  size?: 'md' | 'lg';
+  /** Reduce Motion: skips the primary variant's scale/translateY press
+   * feedback (keeps the shadow-softening). Defaults to false so existing
+   * callers that don't track a reduced-motion preference are unaffected. */
+  reduced?: boolean;
 }) {
-  const textColor = variant === 'outline' || variant === 'tertiary' ? colors.primary : colors.white;
+  const { palette } = useTheme();
+  // Only used by the 'tertiary' branch below, but declared unconditionally
+  // per the rules of hooks — a plain opacity dim read as "fading out"
+  // rather than "being pressed", so Log in (and any other tertiary
+  // action) now gets the same very-subtle-scale tactile language as
+  // every other interactive element, without becoming a raised button.
+  const tertiaryScale = useSharedValue(1);
+  const tertiaryAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: tertiaryScale.value }] }));
+
+  const textColor = variant === 'outline' || variant === 'tertiary' ? palette.primary : palette.white;
   const content = loading ? (
-    <ActivityIndicator color={textColor} />
+    <View style={styles.buttonContent}>
+      <ActivityIndicator color={textColor} style={{ marginRight: spacing.xs }} />
+      <Text style={[typography.button, size === 'lg' ? styles.buttonTextLg : null, { color: textColor }]}>{loadingTitle ?? title}</Text>
+    </View>
   ) : (
     <View style={styles.buttonContent}>
       {icon ? <Ionicons name={icon} size={18} color={textColor} style={{ marginRight: spacing.xs }} /> : null}
-      <Text style={[typography.button, { color: textColor }]}>{title}</Text>
+      <Text style={[typography.button, size === 'lg' ? styles.buttonTextLg : null, { color: textColor }]}>{title}</Text>
     </View>
   );
 
   if (variant === 'primary') {
     return (
-      <Pressable
+      <PrimaryPressable
         onPress={onPress}
         disabled={disabled || loading}
-        style={({ pressed }) => [styles.buttonShadow, { opacity: pressed ? 0.9 : disabled ? 0.5 : 1 }]}
+        loading={loading}
+        label={title}
+        shadowStyle={size === 'lg' ? styles.buttonShadowLg : undefined}
+        fillStyle={size === 'lg' ? styles.buttonLg : undefined}
+        reduced={reduced}
       >
-        <LinearGradient
-          colors={[colors.primary, colors.primaryDark]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.button}
-        >
-          {content}
-        </LinearGradient>
-      </Pressable>
+        {content}
+      </PrimaryPressable>
     );
   }
 
@@ -91,22 +312,34 @@ export function PrimaryButton({
         onPress={onPress}
         disabled={disabled || loading}
         hitSlop={8}
-        style={({ pressed }) => [styles.buttonTertiary, { opacity: pressed ? 0.6 : disabled ? 0.4 : 1 }]}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled: disabled || loading, busy: loading }}
+        onPressIn={() => {
+          if (!reduced) tertiaryScale.value = withTiming(0.97, { duration: 100 });
+        }}
+        onPressOut={() => {
+          if (!reduced) tertiaryScale.value = withTiming(1, { duration: 160 });
+        }}
+        style={({ pressed }) => [styles.buttonTertiary, { opacity: pressed ? 0.7 : disabled ? 0.4 : 1 }]}
       >
-        {content}
+        <Animated.View style={tertiaryAnimatedStyle}>{content}</Animated.View>
       </Pressable>
     );
   }
 
-  const bg = variant === 'danger' ? colors.danger : 'transparent';
+  const bg = variant === 'danger' ? palette.danger : 'transparent';
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: bg, marginTop: spacing.sm, opacity: pressed ? 0.85 : disabled ? 0.5 : 1 },
-        variant === 'outline' && styles.buttonOutline,
+        variant === 'outline' ? [styles.buttonOutline, { borderColor: palette.primary }] : null,
       ]}
     >
       {content}
@@ -117,7 +350,7 @@ export function PrimaryButton({
 export function IconContainer({
   icon,
   size = 56,
-  tint = colors.primary,
+  tint,
   tone = 'soft',
 }: {
   icon: IoniconName;
@@ -125,6 +358,8 @@ export function IconContainer({
   tint?: string;
   tone?: 'soft' | 'solid';
 }) {
+  const { palette } = useTheme();
+  const resolvedTint = tint ?? palette.primary;
   return (
     <View
       style={{
@@ -133,10 +368,10 @@ export function IconContainer({
         borderRadius: size / 2,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: tone === 'solid' ? tint : tint + '1F',
+        backgroundColor: tone === 'solid' ? resolvedTint : resolvedTint + '1F',
       }}
     >
-      <Ionicons name={icon} size={size * 0.42} color={tone === 'solid' ? colors.white : tint} />
+      <Ionicons name={icon} size={size * 0.42} color={tone === 'solid' ? palette.white : resolvedTint} />
     </View>
   );
 }
@@ -144,28 +379,27 @@ export function IconContainer({
 export function Input(
   props: TextInputProps & { label?: string; error?: string; icon?: IoniconName; rightElement?: React.ReactNode }
 ) {
+  const { palette } = useTheme();
   const { label, error, icon, rightElement, style, onFocus, onBlur, ...rest } = props;
   const [focused, setFocused] = useState(false);
   return (
     <View style={{ marginBottom: spacing.md }}>
-      {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
+      {label ? <Text style={[styles.inputLabel, { color: palette.text }]}>{label}</Text> : null}
       <View style={styles.inputRow}>
         {icon ? (
-          <Ionicons
-            name={icon}
-            size={18}
-            color={focused ? colors.primary : colors.textMuted}
-            style={styles.inputIconLeft}
-          />
+          <View style={styles.inputIconLeft} pointerEvents="none">
+            <Ionicons name={icon} size={18} color={focused ? palette.primary : palette.textMuted} />
+          </View>
         ) : null}
         <TextInput
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={palette.textMuted}
           style={[
             styles.input,
+            { borderColor: palette.border, color: palette.text, backgroundColor: palette.surface },
             icon ? styles.inputPaddedLeft : null,
             rightElement ? styles.inputPaddedRight : null,
-            focused ? styles.inputFocused : null,
-            error ? { borderColor: colors.danger } : null,
+            focused ? [styles.inputFocused, { borderColor: palette.primary, shadowColor: palette.primary }] : null,
+            error ? { borderColor: palette.danger } : null,
             style,
           ]}
           onFocus={(e) => {
@@ -180,8 +414,50 @@ export function Input(
         />
         {rightElement ? <View style={styles.inputIconRight}>{rightElement}</View> : null}
       </View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
     </View>
+  );
+}
+
+/** Eye / eye-off crossfade rather than an instant icon swap — both icons
+ * are stacked in the same spot and cross-dissolve with a slight scale, so
+ * the toggle reads as one control changing state rather than a flicker.
+ * Same Ionicons "outline" family and size as the field's own lock icon
+ * for visual consistency; padded to a real ~44px touch target. */
+function PasswordVisibilityToggle({ visible, onToggle }: { visible: boolean; onToggle: () => void }) {
+  const { palette } = useTheme();
+  // progress: 0 = password hidden (show the slashed "eye-off" icon),
+  // 1 = password visible (show the open "eye" icon). Both icons are
+  // driven off this one value derived directly from `visible` — the same
+  // boolean that controls secureTextEntry on the field itself — so the
+  // icon can never drift out of sync with the actual masking state.
+  const progress = useSharedValue(visible ? 1 : 0);
+  React.useEffect(() => {
+    progress.value = withTiming(visible ? 1 : 0, { duration: 180 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+  // Open eye fades in as the password becomes visible (progress -> 1).
+  const eyeOpenStyle = useAnimatedStyle(() => ({ opacity: progress.value, transform: [{ scale: 0.88 + progress.value * 0.12 }] }));
+  // Slashed eye fades in as the password becomes hidden (progress -> 0).
+  const eyeOffStyle = useAnimatedStyle(() => ({ opacity: 1 - progress.value, transform: [{ scale: 1 - progress.value * 0.12 }] }));
+
+  return (
+    <Pressable
+      onPress={onToggle}
+      hitSlop={10}
+      style={styles.passwordToggle}
+      accessibilityRole="button"
+      accessibilityLabel={visible ? 'Hide password' : 'Show password'}
+    >
+      <View style={styles.passwordToggleIconBox}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.passwordToggleIcon, eyeOffStyle]}>
+          <Ionicons name="eye-off-outline" size={18} color={palette.textMuted} />
+        </Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.passwordToggleIcon, eyeOpenStyle]}>
+          <Ionicons name="eye-outline" size={18} color={palette.textMuted} />
+        </Animated.View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -195,11 +471,7 @@ export function PasswordInput(props: TextInputProps & { label?: string; error?: 
         value={value}
         secureTextEntry={!visible}
         icon="lock-closed-outline"
-        rightElement={
-          <Pressable onPress={() => setVisible((v) => !v)} hitSlop={8} style={styles.passwordToggle}>
-            <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
-          </Pressable>
-        }
+        rightElement={<PasswordVisibilityToggle visible={visible} onToggle={() => setVisible((v) => !v)} />}
       />
       {showStrength ? <PasswordStrengthMeter password={typeof value === 'string' ? value : ''} /> : null}
     </View>
@@ -213,7 +485,6 @@ const PASSWORD_RULES: { label: string; test: (pw: string) => boolean }[] = [
 ];
 
 const STRENGTH_LABELS = ['Too weak', 'Weak', 'Fair', 'Good', 'Strong'];
-const STRENGTH_COLORS = [colors.danger, colors.danger, colors.warning, colors.info, colors.success];
 
 function scorePassword(pw: string) {
   if (!pw) return 0;
@@ -223,13 +494,15 @@ function scorePassword(pw: string) {
 }
 
 export function PasswordStrengthMeter({ password }: { password: string }) {
+  const { palette } = useTheme();
   const score = scorePassword(password);
-  const tint = STRENGTH_COLORS[score];
+  const strengthColors = [palette.danger, palette.danger, palette.warning, palette.info, palette.success];
+  const tint = strengthColors[score];
   return (
     <View style={styles.strengthWrap}>
       <View style={styles.strengthBar}>
         {[0, 1, 2, 3].map((i) => (
-          <View key={i} style={[styles.strengthSegment, { backgroundColor: i < score ? tint : colors.border }]} />
+          <View key={i} style={[styles.strengthSegment, { backgroundColor: i < score ? tint : palette.border }]} />
         ))}
       </View>
       {password ? <Text style={[styles.strengthLabel, { color: tint }]}>{STRENGTH_LABELS[score]}</Text> : null}
@@ -241,9 +514,9 @@ export function PasswordStrengthMeter({ password }: { password: string }) {
               <Ionicons
                 name={met ? 'checkmark-circle' : 'ellipse-outline'}
                 size={14}
-                color={met ? colors.success : colors.textMuted}
+                color={met ? palette.success : palette.textMuted}
               />
-              <Text style={[styles.requirementText, met ? styles.requirementTextMet : null]}>{rule.label}</Text>
+              <Text style={[styles.requirementText, { color: palette.textMuted }, met ? { color: palette.text } : null]}>{rule.label}</Text>
             </View>
           );
         })}
@@ -269,32 +542,34 @@ export function DropdownInput({
   error?: string;
   disabled?: boolean;
 }) {
+  const { palette } = useTheme();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
   return (
     <View style={{ marginBottom: spacing.md }}>
-      {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
+      {label ? <Text style={[styles.inputLabel, { color: palette.text }]}>{label}</Text> : null}
       <Pressable
         onPress={() => !disabled && setOpen(true)}
         style={[
           styles.input,
           styles.dropdownTrigger,
-          error ? { borderColor: colors.danger } : null,
+          { borderColor: palette.border, backgroundColor: palette.surface },
+          error ? { borderColor: palette.danger } : null,
           disabled ? { opacity: 0.5 } : null,
         ]}
       >
-        <Text style={selected ? styles.dropdownValue : styles.dropdownPlaceholder} numberOfLines={1}>
+        <Text style={[selected ? styles.dropdownValue : styles.dropdownPlaceholder, { color: selected ? palette.text : palette.textMuted }]} numberOfLines={1}>
           {selected ? selected.label : placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+        <Ionicons name="chevron-down" size={18} color={palette.textMuted} />
       </Pressable>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>{label ?? 'Select an option'}</Text>
+          <View style={[styles.modalSheet, { backgroundColor: palette.surface }]}>
+            <Text style={[styles.modalTitle, { color: palette.text }]}>{label ?? 'Select an option'}</Text>
             <FlatList
               data={options}
               keyExtractor={(o) => o.value}
@@ -307,10 +582,10 @@ export function DropdownInput({
                   }}
                   style={styles.modalOption}
                 >
-                  <Text style={[styles.modalOptionText, item.value === value && styles.modalOptionTextActive]}>
+                  <Text style={[styles.modalOptionText, { color: item.value === value ? palette.primary : palette.text }]}>
                     {item.label}
                   </Text>
-                  {item.value === value ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                  {item.value === value ? <Ionicons name="checkmark" size={18} color={palette.primary} /> : null}
                 </Pressable>
               )}
             />
@@ -327,18 +602,20 @@ export function AlertMessage({
   message,
   onRetry,
 }: {
-  variant?: 'error' | 'info';
+  variant?: 'error' | 'info' | 'success';
   title: string;
   message?: string;
   onRetry?: () => void;
 }) {
-  const tint = variant === 'error' ? colors.danger : colors.info;
+  const { palette } = useTheme();
+  const tint = variant === 'error' ? palette.danger : variant === 'success' ? palette.success : palette.info;
+  const iconName = variant === 'error' ? 'alert-circle' : variant === 'success' ? 'checkmark-circle' : 'information-circle';
   return (
     <View style={[styles.alert, { borderColor: tint, backgroundColor: tint + '11' }]}>
-      <Ionicons name={variant === 'error' ? 'alert-circle' : 'information-circle'} size={20} color={tint} />
+      <Ionicons name={iconName} size={20} color={tint} />
       <View style={{ flex: 1, marginLeft: spacing.sm }}>
         <Text style={[styles.alertTitle, { color: tint }]}>{title}</Text>
-        {message ? <Text style={styles.alertMessage}>{message}</Text> : null}
+        {message ? <Text style={[styles.alertMessage, { color: palette.textMuted }]}>{message}</Text> : null}
         {onRetry ? (
           <Pressable onPress={onRetry} hitSlop={8} style={{ marginTop: spacing.xs }}>
             <Text style={[styles.alertRetry, { color: tint }]}>Retry</Text>
@@ -350,14 +627,15 @@ export function AlertMessage({
 }
 
 export function PrivacyNotice({ heading, text }: { heading?: string; text?: string }) {
+  const { palette } = useTheme();
   return (
-    <View style={styles.privacyCard}>
-      <IconContainer icon="lock-closed" size={36} tint={colors.primary} />
+    <View style={[styles.privacyCard, { backgroundColor: palette.primaryLight, shadowColor: palette.primaryDark }]}>
+      <IconContainer icon="lock-closed" size={36} tint={palette.primary} />
       <View style={{ flex: 1, marginLeft: spacing.sm }}>
-        {heading ? <Text style={styles.privacyCardHeading}>{heading}</Text> : null}
-        <Text style={styles.privacyCardText}>
+        {heading ? <Text style={[styles.privacyCardHeading, { color: palette.primaryDark }]}>{heading}</Text> : null}
+        <Text style={[styles.privacyCardText, { color: palette.text }]}>
           {text ??
-            'Your information is encrypted and only visible to authorized SafeHer staff in your municipality.'}
+            'Your information is encrypted and only visible to authorized SafeSpace staff in your municipality.'}
         </Text>
       </View>
     </View>
@@ -368,42 +646,51 @@ export function FeatureCard({
   icon,
   title,
   description,
-  tint = colors.primary,
+  tint,
 }: {
   icon: IoniconName;
   title: string;
   description: string;
   tint?: string;
 }) {
+  const { palette } = useTheme();
   return (
-    <View style={styles.featureCard}>
-      <IconContainer icon={icon} size={40} tint={tint} />
-      <Text style={styles.featureTitle}>{title}</Text>
-      <Text style={styles.featureDescription}>{description}</Text>
+    <View style={[styles.featureCard, { backgroundColor: palette.surface }]}>
+      <IconContainer icon={icon} size={40} tint={tint ?? palette.primary} />
+      <Text style={[styles.featureTitle, { color: palette.text }]}>{title}</Text>
+      <Text style={[styles.featureDescription, { color: palette.textMuted }]}>{description}</Text>
     </View>
   );
 }
 
-export function StatusBadge({ label }: { label: string }) {
-  const bg = statusColors[label] ?? colors.textMuted;
+// `icon` is optional so every existing call site keeps working
+// unchanged, but new callers (account/phone/identity verification
+// states) pass one deliberately — status must never be conveyed by
+// color alone, per SafeHer's accessibility requirement.
+export function StatusBadge({ label, icon }: { label: string; icon?: IoniconName }) {
+  const { palette } = useTheme();
+  const bg = statusColors[label] ?? palette.textMuted;
   return (
     <View style={[styles.badge, { backgroundColor: bg + '22', borderColor: bg }]}>
+      {icon ? <Ionicons name={icon} size={13} color={bg} style={{ marginRight: 4 }} /> : null}
       <Text style={[styles.badgeText, { color: bg }]}>{label}</Text>
     </View>
   );
 }
 
 export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { palette } = useTheme();
   return (
     <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.emptySubtitle}>{subtitle}</Text> : null}
+      <Text style={[styles.emptyTitle, { color: palette.text }]}>{title}</Text>
+      {subtitle ? <Text style={[styles.emptySubtitle, { color: palette.textMuted }]}>{subtitle}</Text> : null}
     </View>
   );
 }
 
 export function SectionHeader({ title }: { title: string }) {
-  return <Text style={styles.sectionHeader}>{title}</Text>;
+  const { palette } = useTheme();
+  return <Text style={[styles.sectionHeader, { color: palette.text }]}>{title}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -421,13 +708,13 @@ const styles = StyleSheet.create({
   },
   button: {
     paddingVertical: 14,
-    borderRadius: radius.pill,
+    borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonContent: { flexDirection: 'row', alignItems: 'center' },
   buttonShadow: {
-    borderRadius: radius.pill,
+    borderRadius: radius.button,
     marginTop: spacing.sm,
     shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 6 },
@@ -435,6 +722,18 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  // "Hero CTA" clay variant — taller, more rounded, a softer/broader
+  // shadow than the standard button so it reads as the single most
+  // tactile control on the screen (onboarding's Next/Get Started).
+  buttonLg: { paddingVertical: 19, borderRadius: 20 },
+  buttonShadowLg: {
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  buttonTextLg: { fontSize: 18 },
   buttonOutline: { borderWidth: 1.5, borderColor: colors.primary },
   buttonTertiary: { paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   inputLabel: { ...typography.bodyMedium, color: colors.text, marginBottom: spacing.xs },
@@ -449,12 +748,26 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surface,
   },
-  inputFocused: { borderColor: colors.primary, borderWidth: 1.5 },
+  inputFocused: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   inputPaddedLeft: { paddingLeft: 44 },
   inputPaddedRight: { paddingRight: 44 },
-  inputIconLeft: { position: 'absolute', left: spacing.md, zIndex: 1 },
-  inputIconRight: { position: 'absolute', right: spacing.sm, zIndex: 1 },
-  passwordToggle: { padding: 4 },
+  // Spans the full input height and centers its content via flex rather
+  // than a fixed pixel offset — stays correctly centered regardless of
+  // the exact rendered height of the icon/toggle inside it.
+  inputIconLeft: { position: 'absolute', left: spacing.md, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
+  inputIconRight: { position: 'absolute', right: spacing.xs, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
+  // 44x44 real touch target (18px icon + 13px padding on each side).
+  passwordToggle: { padding: 13, alignItems: 'center', justifyContent: 'center' },
+  passwordToggleIconBox: { width: 18, height: 18 },
+  passwordToggleIcon: { alignItems: 'center', justifyContent: 'center' },
   strengthWrap: { marginTop: -spacing.sm, marginBottom: spacing.md },
   strengthBar: { flexDirection: 'row', gap: 4 },
   strengthSegment: { flex: 1, height: 4, borderRadius: 2 },
@@ -505,6 +818,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginTop: spacing.sm,
     marginBottom: spacing.md,
+    ...shadows.sm,
   },
   privacyCardHeading: { ...typography.bodyMedium, color: colors.primaryDark, marginBottom: 2 },
   privacyCardText: { ...typography.caption, color: colors.text, flex: 1, lineHeight: 18 },
@@ -520,6 +834,8 @@ const styles = StyleSheet.create({
   featureTitle: { ...typography.bodyMedium, color: colors.text, marginTop: spacing.sm, marginBottom: 2 },
   featureDescription: { ...typography.caption, color: colors.textMuted, lineHeight: 16 },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,

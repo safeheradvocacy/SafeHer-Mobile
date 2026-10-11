@@ -1,0 +1,711 @@
+<title>SafeHer — System Documentation Report</title>
+<style>
+  :root {
+    --paper: #F6F4F1;
+    --paper-raised: #FFFFFF;
+    --ink: #221F2B;
+    --ink-soft: #4A4555;
+    --muted: #726C82;
+    --line: #DEDAE9;
+    --line-strong: #C7C1D9;
+    --violet: #7563B5;
+    --violet-deep: #4A3E7A;
+    --violet-tint: #EEEAF8;
+    --good: #3F7A5D;
+    --good-tint: #E4F1E9;
+    --warn: #A46A1F;
+    --warn-tint: #F6ECDC;
+    --bad: #A23B4E;
+    --bad-tint: #F5E4E8;
+    --shadow: 0 1px 2px rgba(34,31,43,0.04), 0 8px 24px -12px rgba(34,31,43,0.14);
+    --serif: Iowan Old Style, Palatino Linotype, Palatino, Book Antiqua, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica Neue, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #17151E;
+      --paper-raised: #201D2A;
+      --ink: #ECE9F4;
+      --ink-soft: #C6C0D6;
+      --muted: #948EA8;
+      --line: #332C46;
+      --line-strong: #453B5E;
+      --violet: #9C8FE0;
+      --violet-deep: #C7BEF0;
+      --violet-tint: #2A2440;
+      --good: #7DC8A2;
+      --good-tint: #1E3229;
+      --warn: #E0B067;
+      --warn-tint: #382C1A;
+      --bad: #E28A9A;
+      --bad-tint: #3A222A;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #17151E;
+    --paper-raised: #201D2A;
+    --ink: #ECE9F4;
+    --ink-soft: #C6C0D6;
+    --muted: #948EA8;
+    --line: #332C46;
+    --line-strong: #453B5E;
+    --violet: #9C8FE0;
+    --violet-deep: #C7BEF0;
+    --violet-tint: #2A2440;
+    --good: #7DC8A2;
+    --good-tint: #1E3229;
+    --warn: #E0B067;
+    --warn-tint: #382C1A;
+    --bad: #E28A9A;
+    --bad-tint: #3A222A;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 { font-family: var(--serif); font-weight: 600; color: var(--ink); text-wrap: balance; margin: 0; }
+  p { margin: 0 0 1em; max-width: 66ch; }
+  a { color: var(--violet-deep); }
+  a:focus-visible, button:focus-visible, .toc a:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 2px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--violet-deep);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--violet); flex-shrink: 0; }
+
+  /* ---------- Cover ---------- */
+  .cover {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 72px 32px 56px;
+    border-bottom: 1px solid var(--line);
+  }
+  .cover-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+  .mark { flex-shrink: 0; color: var(--violet); }
+  .cover-meta {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .cover h1 {
+    font-size: clamp(32px, 4.6vw, 50px);
+    line-height: 1.12;
+    margin: 18px 0 20px;
+    max-width: 18ch;
+  }
+  .cover .dek {
+    font-size: 18px;
+    color: var(--ink-soft);
+    max-width: 56ch;
+    margin-bottom: 8px;
+  }
+  .cover .prepared-for {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 20px;
+  }
+  .cover .prepared-for strong { color: var(--ink-soft); font-weight: 600; }
+
+  .researchers { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); max-width: 56ch; }
+  .researchers-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 12px;
+  }
+  .researchers ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(190px, 1fr));
+    gap: 7px 28px;
+  }
+  .researchers li { font-family: var(--serif); font-size: 15.5px; color: var(--ink-soft); }
+  @media (max-width: 520px) { .researchers ul { grid-template-columns: 1fr; } }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-top: 40px;
+  }
+  .stat {
+    background: var(--paper-raised);
+    padding: 16px 14px;
+  }
+  .stat b {
+    display: block;
+    font-family: var(--serif);
+    font-size: 26px;
+    font-variant-numeric: tabular-nums;
+    color: var(--violet-deep);
+    line-height: 1.1;
+  }
+  .stat span { font-size: 11.5px; color: var(--muted); line-height: 1.4; display: block; margin-top: 4px; }
+
+  /* ---------- Shell: spine nav + content ---------- */
+  .shell {
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 168px 1fr;
+    gap: 48px;
+    padding: 0 32px;
+  }
+  @media (max-width: 780px) {
+    .shell { grid-template-columns: 1fr; }
+  }
+
+  .toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    padding: 40px 0;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  @media (max-width: 780px) {
+    .toc {
+      position: static;
+      padding: 28px 0 8px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 8px;
+    }
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: flex;
+    gap: 10px;
+    padding: 7px 4px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    line-height: 1.35;
+  }
+  .toc a:hover { color: var(--ink-soft); }
+  .toc a b { font-family: var(--mono); font-weight: 500; color: var(--violet); flex-shrink: 0; }
+
+  main { min-width: 0; padding-bottom: 64px; }
+
+  section.report-section {
+    padding: 56px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  section.report-section:last-child { border-bottom: none; }
+  section.report-section h2 {
+    font-size: 28px;
+    margin: 10px 0 6px;
+  }
+  .section-lede {
+    font-size: 15px;
+    color: var(--muted);
+    max-width: 58ch;
+    margin-bottom: 32px;
+  }
+  h3 { font-size: 18px; margin: 36px 0 10px; }
+  h3:first-child { margin-top: 0; }
+  h4 { font-family: var(--sans); font-size: 13px; letter-spacing: 0.02em; color: var(--ink-soft); margin: 22px 0 8px; }
+
+  .callout {
+    background: var(--violet-tint);
+    border-left: 3px solid var(--violet);
+    padding: 16px 20px;
+    margin: 20px 0;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+  }
+  .callout strong { color: var(--violet-deep); }
+
+  ol.numbered, ul.plain { margin: 0 0 1em; padding: 0; max-width: 62ch; }
+  ol.numbered { counter-reset: item; list-style: none; }
+  ol.numbered > li {
+    counter-increment: item;
+    display: flex;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14.5px;
+  }
+  ol.numbered > li:first-child { border-top: none; }
+  ol.numbered > li::before {
+    content: counter(item);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--violet);
+    flex-shrink: 0;
+    width: 18px;
+    padding-top: 1px;
+  }
+  ul.plain { list-style: none; }
+  ul.plain > li { position: relative; padding-left: 16px; font-size: 14.5px; margin-bottom: 6px; }
+  ul.plain > li::before { content: "–"; position: absolute; left: 0; color: var(--muted); }
+
+  /* ---------- Tables ---------- */
+  .table-wrap { overflow-x: auto; margin: 18px 0 28px; border: 1px solid var(--line); background: var(--paper-raised); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 560px; }
+  caption { text-align: left; font-size: 12px; color: var(--muted); padding: 10px 14px 0; caption-side: top; }
+  th, td { text-align: left; padding: 9px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-top: none;
+    background: var(--paper);
+  }
+  tbody tr:hover { background: var(--violet-tint); }
+  td.num, th.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
+  td code, p code { font-family: var(--mono); font-size: 0.86em; background: var(--violet-tint); color: var(--violet-deep); padding: 1px 5px; border-radius: 3px; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .pill.pass { background: var(--good-tint); color: var(--good); }
+  .pill.fix  { background: var(--warn-tint); color: var(--warn); }
+  .pill.new  { background: var(--violet-tint); color: var(--violet-deep); }
+
+  /* ---------- Journeys (demonstration) ---------- */
+  .journey { margin: 28px 0 36px; }
+  .journey-steps { display: flex; flex-direction: column; }
+  .jstep {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 14px;
+    position: relative;
+    padding-bottom: 22px;
+  }
+  .jstep:last-child { padding-bottom: 0; }
+  .jstep .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--violet);
+    margin-top: 5px; position: relative; z-index: 1;
+  }
+  .jstep:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 4px; top: 14px; bottom: -8px;
+    width: 1px;
+    background: var(--line-strong);
+  }
+  .jstep .jbody b { font-size: 14.5px; color: var(--ink); }
+  .jstep .jbody p { font-size: 13.5px; color: var(--ink-soft); margin: 3px 0 0; }
+  .jstep .jbody .jmeta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; display: block; }
+
+  /* ---------- Diagram ---------- */
+  figure.diagram { margin: 24px 0 32px; }
+  figure.diagram svg { max-width: 100%; height: auto; display: block; color: var(--ink-soft); }
+  figure.diagram .accent { color: var(--violet); }
+  figure.diagram .bad-accent { color: var(--bad); }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 10px; max-width: 62ch; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+
+  footer.report-footer {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 32px 32px 64px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+</style>
+
+<div class="cover">
+  <div class="cover-top">
+    <svg class="mark" width="46" height="46" viewBox="0 0 46 46" fill="none" role="img" aria-label="SafeHer mark">
+      <path d="M23 3 L41 10 V22 C41 33 33.5 40.5 23 43 C12.5 40.5 5 33 5 22 V10 Z" stroke="currentColor" stroke-width="2" fill="none"/>
+      <path d="M15 23 L20.5 28.5 L32 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <div class="cover-meta">
+      SYSTEM DOCUMENTATION REPORT<br>
+      Prepared 2026-09-11<br>
+      Version 1.0
+    </div>
+  </div>
+
+  <div class="eyebrow">Provincial Social Welfare &amp; Development Office — Aurora Province</div>
+  <h1>SafeHer: A Mobile Platform for Supporting Survivors of Violence Against Women and Children in Aurora</h1>
+  <p class="dek">A mobile app for survivors and a role-differentiated administrative system for barangay, municipal, and provincial responders — built on one shared authorization model so a report, an SOS alert, or a referral is the same governed record from creation through resolution.</p>
+
+  <div class="researchers">
+    <span class="researchers-label">Researchers</span>
+    <ul>
+      <li>Ramirez, Danica Jane B.</li>
+      <li>Oriano, Randolf Jay R.</li>
+      <li>Ayson, Jaymar M.</li>
+      <li>Abaco, Erwin Devonn P.</li>
+    </ul>
+  </div>
+
+  <p class="prepared-for">Deployment target: <strong>ph.pswdo.safeher</strong> · Coverage: <strong>Baler, Casiguran, Dilasag, Dinalungan, Dingalan, Dipaculao, Maria Aurora, San Luis</strong></p>
+
+  <div class="stat-row">
+    <div class="stat"><b>9</b><span>administrative roles, each access-scoped</span></div>
+    <div class="stat"><b>26</b><span>survivor-facing mobile screens</span></div>
+    <div class="stat"><b>18</b><span>schema &amp; security modules</span></div>
+    <div class="stat"><b>5</b><span>server-side (Edge) functions</span></div>
+    <div class="stat"><b>8</b><span>municipalities covered</span></div>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" aria-label="Report sections">
+    <ol>
+      <li><a href="#background"><b>01</b>Background &amp; Problem</a></li>
+      <li><a href="#objectives"><b>02</b>Objectives</a></li>
+      <li><a href="#methodology"><b>03</b>Methodology</a></li>
+      <li><a href="#features"><b>04</b>System Features</a></li>
+      <li><a href="#demonstration"><b>05</b>System Demonstration</a></li>
+      <li><a href="#testing"><b>06</b>Testing &amp; Evaluation</a></li>
+      <li><a href="#conclusion"><b>07</b>Conclusion &amp; Recommendations</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- 01 BACKGROUND -->
+    <section class="report-section" id="background">
+      <div class="eyebrow">01</div>
+      <h2>Background &amp; Problem</h2>
+      <p class="section-lede">Why a case that starts at a barangay desk needs to survive contact with every tier above it.</p>
+
+      <p>Response to Violence Against Women and Children (VAWC) in a province like Aurora runs through a real administrative chain: a <strong>barangay</strong> intake, escalation to the <strong>Municipal Social Welfare and Development Office</strong>, and where needed, coordination with the <strong>Provincial Social Welfare and Development Office (PSWDO)</strong>, shelters, and law enforcement. Each of Aurora's eight municipalities — Baler, Casiguran, Dilasag, Dinalungan, Dingalan, Dipaculao, Maria Aurora, and San Luis — runs its own intake point, and a report that needs to move from one tier to the next has historically depended on that information travelling by phone, paper, or in person without getting lost, delayed, or seen by someone who shouldn't see it.</p>
+
+      <p>That model has three structural weaknesses, independent of how carefully any individual office runs:</p>
+
+      <ol class="numbered">
+        <li><div><b>Fragmented, non-real-time reporting.</b> A report's status lives wherever its paper or spreadsheet currently sits. Neither the survivor nor the next tier can see it move — someone has to remember to forward it.</div></li>
+        <li><div><b>No unified emergency channel.</b> A survivor in immediate danger has no direct, location-aware way to summon a responder; the fallback is a phone call chain that depends on someone being reachable and able to describe where they are.</div></li>
+        <li><div><b>Confidentiality is procedural, not structural.</b> A shared spreadsheet or paper folder has no per-role boundary — what a barangay clerk, a shelter intake worker, or a referred officer can see is governed by discipline and trust, not by a system that enforces it.</div></li>
+      </ol>
+
+      <p>SafeHer was built to replace that chain with one governed system of record: a survivor-facing mobile app and a multi-role administrative web app, sharing a single Postgres database and a single authorization model, so that a report, an SOS alert, or a referral is <em>the same row</em> from the moment it is created through every tier that legitimately needs to act on it — and is structurally, not procedurally, invisible to every tier that does not.</p>
+    </section>
+
+    <!-- 02 OBJECTIVES -->
+    <section class="report-section" id="objectives">
+      <div class="eyebrow">02</div>
+      <h2>Objectives</h2>
+      <p class="section-lede">General objective, then the seven specific objectives each implemented module maps back to.</p>
+
+      <div class="callout">
+        <strong>General objective —</strong> design and implement a confidential, role-differentiated digital platform that lets VAWC survivors in Aurora Province report incidents, request emergency assistance, and track their case, while giving barangay, municipal, and provincial responders — plus shelter staff, law enforcement, and support specialists — a coordinated, access-controlled system of record for that same case.
+      </div>
+
+      <h3>Specific objectives</h3>
+      <ol class="numbered">
+        <li><div><b>Confidential reporting.</b> Give survivors a mobile channel to report an incident — with optional anonymity — attach evidence, and track case status without re-contacting an office.</div></li>
+        <li><div><b>Real-time emergency alerting.</b> Provide an SOS channel, distinct from routine reporting, that carries live location to the correct tier of responder immediately.</div></li>
+        <li><div><b>Enforced, jurisdiction-scoped access.</b> Implement the barangay → municipal → provincial hierarchy, plus shelter, law-enforcement, and support-specialist roles, as database-level authorization — not an interface convention that a direct API call could bypass.</div></li>
+        <li><div><b>Shelter coordination.</b> Support both survivor-initiated shelter requests and admin-initiated referrals against real, live capacity data.</div></li>
+        <li><div><b>Identity verification &amp; walk-in access.</b> Support ID-document verification and a QR-based case-access path for survivors who report in person or without an account yet.</div></li>
+        <li><div><b>AI-assisted first response.</b> Offer guided, safety-boundaried AI assistance with an explicit, auditable handoff to a human support specialist.</div></li>
+        <li><div><b>Auditable administrative oversight.</b> Give administrators activity logs, administrative-data backups, and case-management reporting, scoped to what each role is authorized to see.</div></li>
+      </ol>
+    </section>
+
+    <!-- 03 METHODOLOGY -->
+    <section class="report-section" id="methodology">
+      <div class="eyebrow">03</div>
+      <h2>Methodology</h2>
+      <p class="section-lede">A schema-first, security-first, iteratively verified build — not a single upfront design frozen at day one.</p>
+
+      <h3>Architecture</h3>
+      <p>Two client applications share one backend and one canonical type definition, so the mobile app and the admin dashboard can never silently disagree about a column name, an enum value, or a status transition.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 260" role="img" aria-label="Architecture diagram: the mobile app and admin app both talk to Supabase over REST/RPC calls governed by row-level security, a realtime channel for live updates, Auth for identity, and Storage for files; Edge Functions handle privileged server-side actions using the service role key, which never reaches either client.">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- Mobile -->
+          <rect x="20" y="30" width="170" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="105" y="55" text-anchor="middle" font-size="13" fill="currentColor" font-family="var(--sans)">Mobile app</text>
+          <text x="105" y="72" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.6" font-family="var(--mono)">Expo / React Native</text>
+
+          <!-- Admin -->
+          <rect x="20" y="170" width="170" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="105" y="195" text-anchor="middle" font-size="13" fill="currentColor" font-family="var(--sans)">Admin app</text>
+          <text x="105" y="212" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.6" font-family="var(--mono)">React + Vite, 9 roles</text>
+
+          <!-- Supabase core -->
+          <rect x="330" y="70" width="200" height="120" rx="6" class="accent" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <text x="430" y="98" text-anchor="middle" font-size="13.5" fill="currentColor" class="accent" font-family="var(--sans)">Postgres</text>
+          <text x="430" y="115" text-anchor="middle" font-size="10.5" fill="currentColor" class="accent" opacity="0.75" font-family="var(--mono)">Row-Level Security</text>
+          <line x1="352" y1="126" x2="508" y2="126" stroke="currentColor" class="accent" opacity="0.35"/>
+          <text x="430" y="146" text-anchor="middle" font-size="10.5" fill="currentColor" class="accent" opacity="0.75" font-family="var(--mono)">Auth · Storage</text>
+          <text x="430" y="164" text-anchor="middle" font-size="10.5" fill="currentColor" class="accent" opacity="0.75" font-family="var(--mono)">Realtime publication</text>
+
+          <!-- Edge functions -->
+          <rect x="600" y="70" width="140" height="120" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 3"/>
+          <text x="670" y="98" text-anchor="middle" font-size="12.5" fill="currentColor" font-family="var(--sans)">Edge Functions</text>
+          <text x="670" y="115" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6" font-family="var(--mono)">service-role key</text>
+          <text x="670" y="132" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6" font-family="var(--mono)">never on either</text>
+          <text x="670" y="147" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6" font-family="var(--mono)">client</text>
+
+          <!-- arrows -->
+          <line x1="190" y1="60" x2="326" y2="105" stroke="currentColor" marker-end="url(#arr)"/>
+          <text x="248" y="72" font-size="10" fill="currentColor" font-family="var(--mono)">REST / RPC</text>
+
+          <line x1="326" y1="150" x2="190" y2="196" stroke="currentColor" marker-end="url(#arr)"/>
+          <text x="248" y="210" font-size="10" fill="currentColor" font-family="var(--mono)">REST / RPC</text>
+
+          <line x1="190" y1="45" x2="326" y2="165" stroke="currentColor" class="accent" opacity="0.8" marker-end="url(#arr)"/>
+          <text x="196" y="128" font-size="10" fill="currentColor" class="accent" font-family="var(--mono)">postgres_changes</text>
+
+          <line x1="530" y1="130" x2="596" y2="130" stroke="currentColor" marker-end="url(#arr)" marker-start="url(#arr)"/>
+        </svg>
+        <figcaption>Both apps read and write Postgres directly through PostgREST, with row-level security as the authorization boundary — not a role check inside the client. A realtime channel pushes status changes (SOS alerts, referrals) to subscribed clients. Edge Functions hold the only code paths that need the service-role key (admin-account provisioning, the AI chatbot, push dispatch, backups) — that key never ships to either app.</figcaption>
+      </figure>
+
+      <h3>Build discipline</h3>
+      <p>The backend was built as one baseline schema (<code>00_schema.sql</code>) followed by 17 sequential, additive modules — each introducing one role, one capability, or one fix, with row-level security written alongside the table it protects rather than retrofitted. Four of the eighteen files exist specifically <em>because</em> a live test surfaced a real gap after the fact rather than being planned upfront — module <code>1b</code> (missing PostgREST grants), <code>3b</code> (the service role had no table grants, silently breaking admin provisioning), <code>15</code> (the public registration dropdown was broken for every municipality because <code>barangays</code> had never been granted to <code>anon</code>), and <code>17</code> (the law-enforcement referral fix described in §5–6). That pattern — build, verify against a real client, patch what the verification found — is the actual methodology, not a single upfront design frozen on day one.</p>
+
+      <p>Two conventions recur across the whole schema:</p>
+      <ul class="plain">
+        <li><strong>Two-part migrations for enum changes.</strong> Postgres will not let a newly added enum value be referenced inside the same transaction that added it, so every module that introduces a new role or status value ships as Part A (add the value) / Part B (everything that uses it), run as two separate statements.</li>
+        <li><strong>Live verification block in every module.</strong> Each module file ends with a commented-out set of read-only queries — confirm the policy count, attempt a denied read as an unauthorized role, check for the recursion error Postgres raises if a policy cycle is accidentally introduced — meant to be run against the real project immediately after applying the migration, not taken on faith.</li>
+      </ul>
+
+      <h3>Security model</h3>
+      <p>Authorization is enforced by Postgres row-level security (RLS), scoped to the actual relationship the schema already models — municipality/barangay jurisdiction for the geographic tiers, direct assignment for shelter staff and law enforcement, shelter membership for shelter roles — never a fabricated hierarchy invented to make a feature easier to build. Where a policy needs to check a related table without triggering a recursive-policy error, a narrow <code>SECURITY DEFINER</code> helper function with <code>row_security = off</code> is used, scoped to answer exactly one yes/no question rather than opening a general bypass.</p>
+    </section>
+
+    <!-- 04 FEATURES -->
+    <section class="report-section" id="features">
+      <div class="eyebrow">04</div>
+      <h2>System Features</h2>
+      <p class="section-lede">What each of the three layers — mobile, admin, backend — actually does.</p>
+
+      <h3>Mobile app — survivor-facing (26 screens)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:22%">Area</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Onboarding &amp; auth</td><td>Splash/onboarding carousel, email+password sign-in, multi-step signup with municipality/barangay/map picker, OTP email verification, OTP password recovery.</td></tr>
+            <tr><td>Emergency SOS</td><td>One real-time alert channel, distinct from routine reporting: confirm → cancellable countdown → live <code>Triggered → Responding → Resolved</code> status via Supabase Realtime.</td></tr>
+            <tr><td>Incident reporting</td><td>Full report form — type, priority, description, evidence upload, optional structured incident location (registered address / current location / custom pin), optional anonymity.</td></tr>
+            <tr><td>Case tracking</td><td>List of the survivor's own cases plus any QR-linked cases; per-case status history timeline and shelter referrals.</td></tr>
+            <tr><td>Shelter</td><td>Map + distance-sorted shelter locator; direct shelter request form (urgency, headcount, contact preference).</td></tr>
+            <tr><td>Verification</td><td>Government-ID upload for admin review; phone-number OTP verification.</td></tr>
+            <tr><td>AI assistant</td><td>Chat UI with quick actions and a visible state for "handed off to a human expert," backed by the <code>safeher-chatbot</code> Edge Function.</td></tr>
+            <tr><td>Case access (QR)</td><td>In-app camera QR scan, token redemption with pending/rejected/authorized/invalid states, and a client-safe reduced-field case view for walk-in cases linked after the fact.</td></tr>
+            <tr><td>Profile &amp; notifications</td><td>Profile editing with verification badge, OTP-gated password change, realtime notification inbox with per-type filtering.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Admin app — 9 roles, one codebase</h3>
+      <p>Rather than separate deployed apps per role, SafeHer is one React application with role-gated routing, navigation, and data queries — the same login screen and components for every role, with the sidebar and every query scoping themselves to <code>profile.role</code>. This avoids duplicating the ~70% of code every role shares, while jurisdiction and permission are still fully separated at the data layer.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:20%">Role</th><th style="width:26%">Scope</th><th>Primary responsibility</th></tr></thead>
+          <tbody>
+            <tr><td>Barangay admin</td><td>One barangay</td><td>First-tier intake and case review within the barangay.</td></tr>
+            <tr><td>Municipal admin</td><td>One municipality</td><td>Case management, SOS monitoring, shelter/law-enforcement referral for the municipality.</td></tr>
+            <tr><td>Provincial staff</td><td>Province-wide, operational</td><td>Province-wide case oversight, reporting, FAQ/support-queue management.</td></tr>
+            <tr><td>Provincial admin / Super admin</td><td>Province-wide, technical</td><td>Administrator accounts, audit log, backups, roles &amp; permissions — system administration, not casework.</td></tr>
+            <tr><td>Shelter admin</td><td>One shelter</td><td>Unified inbox of shelter requests and referrals for that shelter; staff assignment.</td></tr>
+            <tr><td>Shelter staff</td><td>One shelter (assigned)</td><td>Works cases assigned to them within one shelter; cannot self-assign.</td></tr>
+            <tr><td>Support expert</td><td>Assigned conversations</td><td>Confidential chat conversations escalated from the AI assistant.</td></tr>
+            <tr><td>Law enforcement</td><td>Assigned referrals only</td><td>SOS and case referrals explicitly assigned to that officer — no shared queue (see §5).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Backend capabilities (Postgres · Auth · Storage · Realtime · 5 Edge Functions)</h3>
+      <ul class="plain">
+        <li><strong>Row-level security everywhere.</strong> Every table a client can reach is governed by policy, scoped to the real jurisdiction/assignment relationship — never <code>using (true)</code> on a sensitive table.</li>
+        <li><strong>Hybrid notification pipeline.</strong> A database-row-first notification, checked for priority, then dispatched as an Expo push notification via an internal Edge Function call — never the reverse.</li>
+        <li><strong>Identity verification queue.</strong> Barangay/municipal review of submitted ID documents, gating incident-report submission.</li>
+        <li><strong>Walk-in &amp; QR case access.</strong> Cases created with no account yet, an opaque hashed QR bearer token (never the raw token stored), and an admin-verified authorization link to a survivor's account after the fact.</li>
+        <li><strong>Administrative-data backup.</strong> Scheduled (<code>pg_cron</code>) and on-demand export of municipalities/barangays/shelters — explicitly <em>not</em> a substitute for full database point-in-time recovery (see §7).</li>
+        <li><strong>AI assistant with a hard safety boundary.</strong> Rule-based safety check → FAQ match → guided intent → LLM fallback, with the LLM never the first responder to a safety-flagged message.</li>
+      </ul>
+    </section>
+
+    <!-- 05 DEMONSTRATION -->
+    <section class="report-section" id="demonstration">
+      <div class="eyebrow">05</div>
+      <h2>System Demonstration</h2>
+      <p class="section-lede">Four real user journeys through the running system, plus a worked example of the SOS → law-enforcement referral pipeline.</p>
+
+      <div class="two-col">
+        <div class="journey">
+          <h4>Journey — routine incident report</h4>
+          <div class="journey-steps">
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Report</b><p>Survivor submits an incident confidentially or anonymously, with optional evidence.</p><span class="jmeta">mobile · ReportIncidentScreen</span></div></div>
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Review</b><p>The barangay or municipal tier authorized over that jurisdiction reviews and triages it.</p><span class="jmeta">admin · CaseListPage / CaseDetailPage</span></div></div>
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Support / referral</b><p>Case is referred onward — shelter, law enforcement, or a higher tier — as the situation requires.</p><span class="jmeta">admin · ShelterReferralPage / referral actions</span></div></div>
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Track</b><p>Survivor watches status and history update on their own case, without recontacting an office.</p><span class="jmeta">mobile · CaseDetailScreen</span></div></div>
+          </div>
+        </div>
+
+        <div class="journey">
+          <h4>Journey — emergency SOS</h4>
+          <div class="journey-steps">
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Trigger</b><p>Confirm-and-countdown SOS, live location attached at trigger time.</p><span class="jmeta">mobile · SosConfirmSheet</span></div></div>
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Monitor</b><p>Authorized admin sees the alert appear with location and accuracy quality.</p><span class="jmeta">admin · SosMonitoringPage</span></div></div>
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Refer &amp; assign</b><p>Admin refers the alert to a specific officer — the referral becomes visible to that officer the moment an officer is assigned.</p><span class="jmeta">admin · law_enforcement_referrals</span></div></div>
+            <div class="jstep"><span class="dot"></span><div class="jbody"><b>Respond &amp; resolve</b><p>Officer accepts, responds, and resolves — status visible back to the referring admin throughout.</p><span class="jmeta">admin · SosReferralsPage</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Worked example: the SOS referral pipeline</h3>
+      <p>This pipeline was the subject of a full inspection-and-fix pass. It is included here as a concrete demonstration because the mechanism — not just the feature — is worth showing: an alert is only ever visible to the specific officer it is assigned to, never a shared queue, and that assignment is what actually gates visibility.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 300" role="img" aria-label="Flow diagram: a survivor triggers an SOS alert; an admin creates a referral row; if assigned_officer_id is left null the row exists but row-level security hides it from every officer, a dead end; once an admin sets assigned_officer_id, the same row-level security check passes and the officer sees it immediately, receives a notification, and can accept, respond, and resolve.">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect x="16" y="118" width="130" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="81" y="148" text-anchor="middle" font-size="12" fill="currentColor" font-family="var(--sans)">SOS alert</text>
+
+          <rect x="200" y="118" width="150" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="275" y="142" text-anchor="middle" font-size="12" fill="currentColor" font-family="var(--sans)">Referral row</text>
+          <text x="275" y="157" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.6" font-family="var(--mono)">assigned_officer_id</text>
+
+          <line x1="146" y1="143" x2="196" y2="143" stroke="currentColor" marker-end="url(#arr2)"/>
+          <text x="171" y="133" text-anchor="middle" font-size="9.5" fill="currentColor" font-family="var(--mono)">refer</text>
+
+          <!-- unassigned dead end -->
+          <path d="M350,135 C420,90 470,60 520,60" fill="none" stroke="currentColor" class="bad-accent" stroke-width="1.4" marker-end="url(#arr2)"/>
+          <text x="430" y="82" text-anchor="middle" font-size="10" fill="currentColor" class="bad-accent" font-family="var(--mono)">left null</text>
+          <rect x="520" y="35" width="200" height="50" rx="6" class="bad-accent" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <text x="620" y="57" text-anchor="middle" font-size="11.5" fill="currentColor" class="bad-accent" font-family="var(--sans)">RLS: no officer</text>
+          <text x="620" y="72" text-anchor="middle" font-size="10" fill="currentColor" class="bad-accent" opacity="0.85" font-family="var(--mono)">visibility — dead end</text>
+
+          <!-- assigned path -->
+          <path d="M350,150 C420,190 470,215 520,215" fill="none" stroke="currentColor" class="accent" stroke-width="1.6" marker-end="url(#arr2)"/>
+          <text x="430" y="205" text-anchor="middle" font-size="10" fill="currentColor" class="accent" font-family="var(--mono)">officer set</text>
+          <rect x="520" y="190" width="200" height="50" rx="6" class="accent" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <text x="620" y="212" text-anchor="middle" font-size="11.5" fill="currentColor" class="accent" font-family="var(--sans)">RLS: visible</text>
+          <text x="620" y="227" text-anchor="middle" font-size="10" fill="currentColor" class="accent" opacity="0.85" font-family="var(--mono)">to that officer only</text>
+
+          <line x1="620" y1="240" x2="620" y2="265" stroke="currentColor" class="accent" marker-end="url(#arr2)"/>
+          <text x="620" y="282" text-anchor="middle" font-size="11" fill="currentColor" font-family="var(--sans)">notify → accept → resolve</text>
+        </svg>
+        <figcaption>Before this fix, "leave unassigned for now" — the easiest default in the referral form — produced a row that row-level security correctly hid from every officer, permanently: nothing in the interface offered a way back. The fix was not a policy change (the policy was already correct by design) but an <b>Assign officer</b> action added to both referral surfaces, plus enabling the realtime publication that had silently never been carrying events for this or any other table in the project.</figcaption>
+      </figure>
+    </section>
+
+    <!-- 06 TESTING -->
+    <section class="report-section" id="testing">
+      <div class="eyebrow">06</div>
+      <h2>Testing &amp; Evaluation</h2>
+      <p class="section-lede">Three layers of verification, applied the same way to every module: static checks, then live security checks against the real project, then a scenario walk-through.</p>
+
+      <h3>Static verification</h3>
+      <p>Both apps type-check clean (<code>tsc --noEmit</code>) and the admin app additionally builds clean (<code>vite build</code>) before any module is considered done — not run once at the end, but re-run after every schema or frontend change in this build.</p>
+
+      <h3>Live security verification</h3>
+      <p>Because row-level security is the actual authorization boundary, it is tested the same way an attacker or a misconfigured client would exercise it: disposable test accounts, real REST calls carrying a real signed-in JWT for each role, run directly against the project — never assumed correct from reading the policy text alone. The table below is the verification run for the SOS/case-referral fix in §5, kept here as a representative example of the method applied throughout the build.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Live verification — SOS &amp; case referral pipeline, run against disposable test accounts, cleaned up after</caption>
+          <thead><tr><th class="num" style="width:8%">#</th><th style="width:40%">Scenario</th><th style="width:20%">Method</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td class="num">A1</td><td>Unassigned SOS referral must be invisible to the intended officer</td><td>Insert referral with <code>assigned_officer_id = null</code>; query as that officer's own JWT</td><td><span class="pill pass">pass</span> 0 rows returned</td></tr>
+            <tr><td class="num">A2</td><td>Assigning an officer makes it immediately visible, notified, and pushed over realtime</td><td>PATCH assignment as the referring admin; observe an open realtime subscription</td><td><span class="pill pass">pass</span> visible + <code>SOS</code> notification + 3 realtime events received</td></tr>
+            <tr><td class="num">A3</td><td>Officer can accept and resolve; referring admin is notified back</td><td>Officer PATCHes status through <code>Pending → Accepted → Completed</code></td><td><span class="pill pass">pass</span> both transitions + referrer notified</td></tr>
+            <tr><td class="num">B1</td><td>A case referral must never appear in the SOS queue, and vice versa</td><td>Create a case referral; query the officer's own SOS-filtered set</td><td><span class="pill pass">pass</span> correctly typed, never cross-listed</td></tr>
+            <tr><td class="num">C1</td><td>An unrelated officer cannot read or tamper with another officer's referral</td><td>Second officer's JWT, direct read + PATCH attempt by referral ID</td><td><span class="pill pass">pass</span> 0 rows, write silently rejected</td></tr>
+            <tr><td class="num">C2</td><td>A survivor has zero visibility into the internal referral table</td><td>Survivor's own JWT, direct table read</td><td><span class="pill pass">pass</span> 0 rows</td></tr>
+            <tr><td class="num">C3</td><td>An unauthenticated request is denied outright</td><td>Anonymous key, direct table read</td><td><span class="pill pass">pass</span> permission denied</td></tr>
+            <tr><td class="num">C4</td><td>A guessed/adjacent referral ID leaks nothing</td><td>Random UUID, direct read</td><td><span class="pill pass">pass</span> empty, no error-based leak</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Every write in the run above was also confirmed in <code>audit_logs</code> — actor, action, table, and timestamp recorded for each insert and status change, with no survivor narrative or token ever present in the logged columns.</p>
+
+      <h3>Scope of evaluation</h3>
+      <p>This verification method — live RLS checks under a real JWT per role, run against the actual project rather than inferred from policy text — is the same discipline every one of the 18 backend modules documents in its own end-of-file verification block: confirm the policy count, attempt a denied read as the wrong role, and check for the specific Postgres error a recursive policy would raise. It is thorough for what it covers, but it is manual and scenario-driven rather than an automated regression suite — see the recommendation in §7.</p>
+    </section>
+
+    <!-- 07 CONCLUSION -->
+    <section class="report-section" id="conclusion">
+      <div class="eyebrow">07</div>
+      <h2>Conclusion &amp; Recommendations</h2>
+      <p class="section-lede">What the system achieves, and where its own documentation already flags the honest limits.</p>
+
+      <p>SafeHer replaces a paper-and-phone-call coordination chain with one governed system of record spanning eight municipalities and nine distinct responder roles. Reporting, SOS emergency alerting, shelter coordination, identity verification, and law-enforcement referral all run through the same row-level-security model rather than nine independent access conventions — the property that made the §5–6 fix possible to verify with confidence rather than guesswork: the policy was provably correct, and the gap was provably a missing interface action, not a security hole.</p>
+
+      <h3>Recommendations</h3>
+      <ol class="numbered">
+        <li><div><b>Enable full database point-in-time recovery.</b> The current backup module intentionally covers administrative reference data only (municipalities, barangays, shelters) and documents, explicitly, that Supabase PITR is not yet enabled on the project. Case, SOS, and verification data currently have no equivalent disaster-recovery path.</div></li>
+        <li><div><b>Move live RLS verification into an automated suite.</b> The scenario-based, disposable-account method in §6 is sound but manual. Converting the recurring scenarios (unassigned-record denial, cross-role denial, unauthenticated denial) into a scripted regression suite would let every future module reuse them instead of re-deriving the checks by hand.</div></li>
+        <li><div><b>Revisit the law-enforcement access model if the province formalizes a police organizational unit.</b> Access is currently per-referral assignment rather than by precinct or unit, a deliberate choice made because no such organizational concept exists yet in the schema or the province's own structure. If one is formalized, the referral model — not the RLS pattern — is what should be extended.</div></li>
+        <li><div><b>Plan an offline/SMS fallback for low-connectivity areas.</b> SOS and reporting currently assume a data connection; this was scoped out deliberately rather than overlooked, and is worth a dedicated feasibility pass given Aurora's geography.</div></li>
+        <li><div><b>Keep the single-admin-app decision, but watch its bundle size.</b> One role-gated app avoids duplicating shared code across nine roles; the production build already warns on chunk size, which is worth addressing with route-level code-splitting before it affects load time on slower connections.</div></li>
+      </ol>
+    </section>
+
+  </main>
+</div>
+
+<footer class="report-footer">
+  <span>SafeHer System Documentation Report — v1.0</span>
+  <span>PSWDO Aurora Province · <code>ph.pswdo.safeher</code></span>
+</footer>

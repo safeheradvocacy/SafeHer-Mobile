@@ -2,22 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Linking, Pressable } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
-import { Card, EmptyState } from '../../components/ui';
-import { colors, radius, spacing, typography } from '../../theme/theme';
+import { Card, EmptyState, PrimaryButton } from '../../components/ui';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { FirstVisitTip } from '../../components/FirstVisitTip';
+import { useTheme } from '../../contexts/ThemeContext';
+import { radius, spacing, typography } from '../../theme/theme';
+import { AppStackParamList, AppTabParamList } from '../../navigation/types';
+import { distanceKm } from '../../lib/geo';
+import { MapErrorBoundary } from '../../components/MapErrorBoundary';
 import type { Shelter } from '../../types/database.types';
 
-function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+type Nav = CompositeNavigationProp<BottomTabNavigationProp<AppTabParamList, 'SheltersTab'>, NativeStackNavigationProp<AppStackParamList>>;
 
 export function ShelterLocatorScreen() {
+  const { palette } = useTheme();
+  const navigation = useNavigation<Nav>();
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,10 +31,18 @@ export function ShelterLocatorScreen() {
       const { data } = await supabase.from('shelters').select('*').eq('is_active', true);
       setShelters(data ?? []);
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const pos = await Location.getCurrentPositionAsync({});
-        setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      // Foreground location is purely an optional convenience for
+      // nearest-first sorting — denying it (or it failing) never blocks
+      // shelter discovery, matching the brief's "search without requiring
+      // precise location sharing" requirement.
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({});
+          setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        }
+      } catch {
+        // Location unavailable — shelters still show, just unsorted by distance.
       }
       setLoading(false);
     })();
@@ -45,28 +57,36 @@ export function ShelterLocatorScreen() {
     : shelters;
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.mapWrap}>
-        <MapView
-          style={StyleSheet.absoluteFill}
-          initialRegion={{
-            latitude: userLocation?.latitude ?? 15.75,
-            longitude: userLocation?.longitude ?? 121.55,
-            latitudeDelta: 0.5,
-            longitudeDelta: 0.5,
-          }}
-        >
-          {shelters
-            .filter((s) => s.latitude && s.longitude)
-            .map((s) => (
-              <Marker
-                key={s.shelter_id}
-                coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-                title={s.shelter_name}
-                description={s.address}
-              />
-            ))}
-        </MapView>
+    <View style={[styles.screen, { backgroundColor: palette.background }]}>
+      <ScreenHeader title="Shelters" />
+      <FirstVisitTip
+        id="shelters"
+        title="Find available shelter support"
+        body="Explore shelter information and available services."
+      />
+      <View style={[styles.mapWrap, { borderColor: palette.border }]}>
+        <MapErrorBoundary palette={palette} fallbackMessage="Map unavailable — shelters are still listed below.">
+          <MapView
+            style={StyleSheet.absoluteFill}
+            initialRegion={{
+              latitude: userLocation?.latitude ?? 15.75,
+              longitude: userLocation?.longitude ?? 121.55,
+              latitudeDelta: 0.5,
+              longitudeDelta: 0.5,
+            }}
+          >
+            {shelters
+              .filter((s) => s.latitude && s.longitude)
+              .map((s) => (
+                <Marker
+                  key={s.shelter_id}
+                  coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
+                  title={s.shelter_name}
+                  description={s.address}
+                />
+              ))}
+          </MapView>
+        </MapErrorBoundary>
       </View>
 
       <FlatList
@@ -76,22 +96,37 @@ export function ShelterLocatorScreen() {
         keyExtractor={(s) => s.shelter_id}
         ListEmptyComponent={!loading ? <EmptyState title="No shelters found" /> : null}
         renderItem={({ item }) => (
-          <Card>
-            <Text style={styles.name}>{item.shelter_name}</Text>
-            <Text style={styles.address}>{item.address}</Text>
+          <Card style={{ marginBottom: spacing.md }}>
+            <Text style={[styles.name, { color: palette.text }]}>{item.shelter_name}</Text>
+            <Text style={[styles.address, { color: palette.textMuted }]}>{item.address}</Text>
             {userLocation && item.latitude && item.longitude && (
-              <Text style={styles.distance}>
+              <Text style={[styles.distance, { color: palette.primary }]}>
                 {distanceKm(userLocation.latitude, userLocation.longitude, item.latitude, item.longitude).toFixed(1)} km away
               </Text>
             )}
-            <Text style={styles.capacity}>
-              Capacity: {item.current_occupancy}/{item.capacity}
+            <Text style={[styles.capacity, { color: palette.textMuted }]}>
+              Capacity: {item.current_occupancy}/{item.capacity ?? '—'}
             </Text>
-            {item.contact_number && (
-              <Pressable onPress={() => Linking.openURL(`tel:${item.contact_number}`)}>
-                <Text style={styles.call}>Call {item.contact_number}</Text>
-              </Pressable>
-            )}
+            {item.services_available ? (
+              <Text style={[styles.capacity, { color: palette.textMuted }]}>Services: {item.services_available}</Text>
+            ) : null}
+
+            <View style={styles.actionsRow}>
+              {item.contact_number && (
+                <Pressable onPress={() => Linking.openURL(`tel:${item.contact_number}`)}>
+                  <Text style={[styles.call, { color: palette.primary }]}>Call</Text>
+                </Pressable>
+              )}
+              {item.latitude != null && item.longitude != null && (
+                <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${item.latitude},${item.longitude}`)}>
+                  <Text style={[styles.call, { color: palette.primary }]}>Directions</Text>
+                </Pressable>
+              )}
+            </View>
+
+            <View style={{ marginTop: spacing.sm }}>
+              <PrimaryButton title="Request this shelter" size="md" onPress={() => navigation.navigate('RequestShelter', { shelterId: item.shelter_id })} />
+            </View>
           </Card>
         )}
       />
@@ -100,12 +135,13 @@ export function ShelterLocatorScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  mapWrap: { height: 220, borderBottomWidth: 1, borderBottomColor: colors.border },
-  name: { ...typography.subheading, color: colors.text },
-  address: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
-  distance: { ...typography.caption, color: colors.primary, marginTop: spacing.xs },
-  capacity: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
-  call: { ...typography.bodyMedium, color: colors.primary, marginTop: spacing.xs },
+  screen: { flex: 1 },
+  mapWrap: { height: 200, borderRadius: radius.md, borderWidth: 1, overflow: 'hidden', margin: spacing.lg, marginBottom: spacing.sm },
+  name: { ...typography.subheading },
+  address: { ...typography.caption, marginTop: 2 },
+  distance: { ...typography.caption, marginTop: spacing.xs },
+  capacity: { ...typography.caption, marginTop: spacing.xs },
+  actionsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
+  call: { ...typography.bodyMedium },
   radiusHelper: { borderRadius: radius.sm },
 });

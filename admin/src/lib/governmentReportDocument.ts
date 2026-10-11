@@ -1,0 +1,375 @@
+import jsPDF from 'jspdf';
+import autoTable, { type RowInput } from 'jspdf-autotable';
+import { BRAND_PRIMARY, TEXT_BODY, TEXT_MUTED, BORDER, HEADER_FILL_LIGHT } from './reportDocument';
+import { SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE, CICL_NOT_AVAILABLE_NOTE } from './governmentReportMapping';
+import { SERVICE_TYPE_LABELS } from './serviceTypes';
+import type { GovernmentReportRow } from './governmentReportRows';
+import type { ServiceType } from '../types/database.types';
+
+/**
+ * Official WEDC/VAW, CNSP, and CICL/CAR "Consolidated Cases" report
+ * PDFs, laid out to match the supplied government templates — merged
+ * group headers, service-code columns, a Source of Data split, a
+ * Total row, and a Prepared by / Certified Correct / Noted by
+ * certification block. Landscape A4 (the templates are far wider than
+ * a portrait page can hold).
+ *
+ * Reuses the same jsPDF + jspdf-autotable setup, brand colors, and logo
+ * loading already established in reportDocument.ts — this file adds
+ * three NEW generators for the three NEW official formats; it does not
+ * touch or replace generateReportPdf (the existing, PII-free Case
+ * Management Report).
+ *
+ * CERTIFICATION — a generated PDF is a PREPARED report, not an
+ * officially certified one. The Prepared by / Certified Correct /
+ * Noted by lines print whatever signatory names the preparer typed in
+ * (see ReportsPage.tsx) with a signature line for an actual physical
+ * signature — nothing here claims those approvals already happened.
+ */
+
+const PAGE_WIDTH = 297; // A4 landscape, mm
+const PAGE_HEIGHT = 210;
+const MARGIN = 10;
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+const FOOTER_RESERVE = 14;
+
+export interface Signatories {
+  preparedBy: string; // Secretariat/Social Worker
+  certifiedCorrectBy: string; // MSWDO
+  notedBy: string; // PNP-WCPD / Chairperson
+}
+
+export interface GovernmentReportParams {
+  jurisdictionLabel: string; // "MUNICIPALITY OF BALER" or "AURORA PROVINCE (ALL MUNICIPALITIES)"
+  periodLabel: string; // "January 1-31, 2026"
+  rows: GovernmentReportRow[];
+  signatories: Signatories;
+  logoDataUrl: string | null;
+  generatedByName: string;
+  generatedByRole: string;
+}
+
+function drawHeader(doc: jsPDF, title: string, params: GovernmentReportParams): number {
+  let y = MARGIN;
+  if (params.logoDataUrl) {
+    try {
+      doc.addImage(params.logoDataUrl, 'PNG', MARGIN, y, 12, 12 * (381 / 482));
+    } catch {
+      // enhancement only
+    }
+  }
+  const textX = PAGE_WIDTH / 2;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(TEXT_BODY);
+  doc.text('Republic of the Philippines', textX, y + 4, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(params.jurisdictionLabel, textX, y + 9, { align: 'center' });
+
+  y += 16;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(BRAND_PRIMARY);
+  doc.text(title, textX, y, { align: 'center' });
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(TEXT_BODY);
+  doc.text(`PERIOD COVERED: ${params.periodLabel}`, textX, y, { align: 'center' });
+  y += 7;
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7);
+  doc.setTextColor(TEXT_MUTED);
+  doc.text(
+    `Generated via SafeSpace by ${params.generatedByName} (${params.generatedByRole}) — a prepared report; official certification requires the physical signatures below.`,
+    PAGE_WIDTH - MARGIN,
+    MARGIN,
+    { align: 'right' }
+  );
+
+  return y + 2;
+}
+
+function drawTotalRow(doc: jsPDF, y: number, label: string, total: number): number {
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    body: [[label, String(total)]],
+    theme: 'plain',
+    styles: { fontSize: 9, cellPadding: 1.5, fillColor: '#FCE9B0', textColor: TEXT_BODY, fontStyle: 'bold' },
+    columnStyles: { 0: { cellWidth: CONTENT_WIDTH - 20 }, 1: { halign: 'center', cellWidth: 20 } },
+  });
+  return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+}
+
+function drawCertificationAndFooter(doc: jsPDF, y: number, params: GovernmentReportParams, extraNotes: string[], serviceCodes: ServiceType[]) {
+  y += 4;
+  if (y + 40 > PAGE_HEIGHT - FOOTER_RESERVE) {
+    doc.addPage('a4', 'landscape');
+    y = MARGIN;
+  }
+
+  const colWidth = CONTENT_WIDTH / 3;
+  const cols: [string, string][] = [
+    ['Prepared by:', params.signatories.preparedBy],
+    ['Certified Correct:', params.signatories.certifiedCorrectBy],
+    ['Noted by:', params.signatories.notedBy],
+  ];
+  const roleLabels = ['Secretariat/Social Worker', 'MSWDO', 'PNP-WCPD / Chairperson'];
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(TEXT_BODY);
+  cols.forEach(([label], i) => {
+    doc.text(label, MARGIN + colWidth * i, y);
+  });
+  y += 14;
+  cols.forEach(([, name], i) => {
+    const x = MARGIN + colWidth * i;
+    doc.setDrawColor(BORDER);
+    doc.line(x, y, x + colWidth - 10, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text(name || '[Authorized signatory]', x, y + 4);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(TEXT_MUTED);
+    doc.text(roleLabels[i], x, y + 8);
+    doc.setTextColor(TEXT_BODY);
+  });
+  y += 14;
+
+  // Services Provided legend
+  if (serviceCodes.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(BRAND_PRIMARY);
+    doc.text('Services Provided:', MARGIN, y);
+    y += 4;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(TEXT_BODY);
+    serviceCodes.forEach((code) => {
+      doc.text(`${code} - ${SERVICE_TYPE_LABELS[code]}`, MARGIN, y);
+      y += 3.6;
+    });
+    y += 2;
+  }
+
+  // Documented methodology / data-limitation notes — never silent.
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(6.8);
+  doc.setTextColor(TEXT_MUTED);
+  extraNotes.forEach((note) => {
+    const wrapped = doc.splitTextToSize(note, CONTENT_WIDTH);
+    doc.text(wrapped, MARGIN, y);
+    y += wrapped.length * 3 + 2;
+  });
+}
+
+function finalizePages(doc: jsPDF, footerTitle: string) {
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(BORDER);
+    doc.line(MARGIN, PAGE_HEIGHT - 10, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(TEXT_MUTED);
+    doc.text(`SafeSpace — ${footerTitle} · Confidential — For Authorized Use Only`, MARGIN, PAGE_HEIGHT - 6);
+    doc.text(`Page ${i} of ${pageCount}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 6, { align: 'right' });
+  }
+}
+
+type AbuseCell = { psych: boolean; physical: boolean; economic: boolean; stalking: boolean; other: boolean };
+function abuseCells(row: GovernmentReportRow): AbuseCell {
+  return {
+    psych: row.templateColumn === 'Psychological Violence',
+    physical: row.templateColumn === 'Physical Abuse',
+    economic: row.templateColumn === 'Economic Abuse',
+    stalking: row.templateColumn === 'Stalking',
+    other: row.templateColumn === 'Other Cases',
+  };
+}
+function mark(v: boolean): string {
+  return v ? '✓' : '';
+}
+const SEXUAL_SUBTYPES = ['Rape', 'AOL', 'Incest', 'AR', 'Seduction', 'Others'] as const;
+function sexualCell(row: GovernmentReportRow, subtype: string): string {
+  return row.templateColumn === 'Sexual Abuse' && row.sexualAbuseSubtype === subtype ? '✓' : '';
+}
+// Only a case_services row whose status is 'Provided' ever lands in
+// row.providedServices (see governmentReportRows.ts) — a referral,
+// request, or in-progress service renders blank here, never guessed.
+function serviceCell(row: GovernmentReportRow, type: ServiceType): string {
+  return row.providedServices.has(type) ? '✓' : '';
+}
+
+/** WEDC/VAW — no demographic columns (Birthdate/Age/Sex/Educational
+ * Attainment) in the official template; has PPO/TPO/BPO in services. */
+export function generateWedcReportPdf(params: GovernmentReportParams): jsPDF {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  let y = drawHeader(doc, 'CONSOLIDATED CASES of WEDC/VAW', params);
+
+  const head: RowInput[] = [
+    [
+      { content: 'Name/Alias', rowSpan: 2 },
+      { content: 'Address', rowSpan: 2 },
+      { content: '', colSpan: 5 },
+      { content: 'Sexually Abuse', colSpan: 6 },
+      { content: 'SERVICES PROVIDED', colSpan: 9 },
+      { content: 'Status/Remarks', rowSpan: 2 },
+      { content: 'Source of Data', colSpan: 2 },
+    ],
+    [
+      'Psych.', 'Physical', 'Economic', 'Stalking', 'Other',
+      'Rape', 'AOL', 'Incest', 'AR', 'Seduction', 'Others',
+      'CS', 'LS', 'PPO', 'TPO', 'BPO', 'LA', 'FA', 'MA', 'TA',
+      'MSWDO', 'PNP',
+    ],
+  ];
+
+  const body = params.rows.map((r) => {
+    const a = abuseCells(r);
+    return [
+      r.nameOrAlias,
+      r.address,
+      mark(a.psych), mark(a.physical), mark(a.economic), mark(a.stalking), mark(a.other),
+      sexualCell(r, 'Rape'), sexualCell(r, 'AOL'), sexualCell(r, 'Incest'), sexualCell(r, 'AR'), sexualCell(r, 'Seduction'), sexualCell(r, 'Others'),
+      serviceCell(r, 'CS'), serviceCell(r, 'LS'), serviceCell(r, 'PPO'), serviceCell(r, 'TPO'), serviceCell(r, 'BPO'), serviceCell(r, 'LA'), serviceCell(r, 'FA'), serviceCell(r, 'MA'), serviceCell(r, 'TA'),
+      r.statusRemarks,
+      '✓', '',
+    ];
+  });
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN, bottom: FOOTER_RESERVE },
+    head,
+    body,
+    theme: 'grid',
+    styles: { fontSize: 6.3, cellPadding: 1, textColor: TEXT_BODY, lineColor: BORDER, lineWidth: 0.1, halign: 'center', overflow: 'linebreak' },
+    headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 6, valign: 'middle' },
+    columnStyles: { 0: { halign: 'left', cellWidth: 32 }, 1: { halign: 'left', cellWidth: 32 }, 22: { cellWidth: 26 } },
+    showHead: 'everyPage',
+  });
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+  y = drawTotalRow(doc, y, 'TOTAL', params.rows.length);
+
+  drawCertificationAndFooter(doc, y, params, [SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE], ['CS', 'LS', 'PPO', 'TPO', 'BPO', 'LA', 'FA', 'MA', 'TA']);
+  finalizePages(doc, 'Consolidated Cases of WEDC/VAW');
+  return doc;
+}
+
+/** CNSP — same abuse taxonomy as WEDC, plus demographics (Birthdate/
+ * Age/Sex/Educational Attainment); services use EA not PPO/TPO/BPO. */
+export function generateCnspReportPdf(params: GovernmentReportParams): jsPDF {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  let y = drawHeader(doc, 'CONSOLIDATED CASES of CNSP', params);
+
+  const head: RowInput[] = [
+    [
+      { content: 'Name/Alias', rowSpan: 2 },
+      { content: 'Address', rowSpan: 2 },
+      { content: 'Birthdate', rowSpan: 2 },
+      { content: 'Age', rowSpan: 2 },
+      { content: 'Sex', rowSpan: 2 },
+      { content: 'Educational Attainment', rowSpan: 2 },
+      { content: 'Type of Violence/Case', colSpan: 5 },
+      { content: 'Sexually Abuse', colSpan: 6 },
+      { content: 'SERVICES PROVIDED', colSpan: 7 },
+      { content: 'Status/Remarks', rowSpan: 2 },
+      { content: 'Source of Data', colSpan: 2 },
+    ],
+    [
+      'Psych.', 'Physical', 'Economic', 'Stalking', 'Other',
+      'Rape', 'AOL', 'Incest', 'AR', 'Seduction', 'Others',
+      'CS', 'LS', 'EA', 'LA', 'FA', 'MA', 'TA',
+      'MSWDO', 'PNP',
+    ],
+  ];
+
+  const body = params.rows.map((r) => {
+    const a = abuseCells(r);
+    return [
+      r.nameOrAlias,
+      r.address,
+      r.birthdateDisplay,
+      r.age ?? '—',
+      r.sex,
+      r.educationalAttainment,
+      mark(a.psych), mark(a.physical), mark(a.economic), mark(a.stalking), mark(a.other),
+      sexualCell(r, 'Rape'), sexualCell(r, 'AOL'), sexualCell(r, 'Incest'), sexualCell(r, 'AR'), sexualCell(r, 'Seduction'), sexualCell(r, 'Others'),
+      serviceCell(r, 'CS'), serviceCell(r, 'LS'), serviceCell(r, 'EA'), serviceCell(r, 'LA'), serviceCell(r, 'FA'), serviceCell(r, 'MA'), serviceCell(r, 'TA'),
+      r.statusRemarks,
+      '✓', '',
+    ];
+  });
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN, bottom: FOOTER_RESERVE },
+    head,
+    body,
+    theme: 'grid',
+    styles: { fontSize: 6, cellPadding: 1, textColor: TEXT_BODY, lineColor: BORDER, lineWidth: 0.1, halign: 'center', overflow: 'linebreak' },
+    headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 5.8, valign: 'middle' },
+    columnStyles: { 0: { halign: 'left', cellWidth: 24 }, 1: { halign: 'left', cellWidth: 24 }, 5: { cellWidth: 18 } },
+    showHead: 'everyPage',
+  });
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+  y = drawTotalRow(doc, y, 'TOTAL', params.rows.length);
+
+  drawCertificationAndFooter(doc, y, params, [SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE], ['CS', 'LS', 'EA', 'LA', 'FA', 'MA', 'TA']);
+  finalizePages(doc, 'Consolidated Cases of CNSP');
+  return doc;
+}
+
+/** CICL/CAR — a Type of Offense + Discernment (With/Without) structure
+ * instead of the abuse taxonomy. Always rendered with zero data rows
+ * today — see CICL_NOT_AVAILABLE_NOTE / governmentReportMapping.ts's
+ * file header for exactly why, rather than silently showing an empty
+ * table with no explanation. */
+export function generateCiclReportPdf(params: GovernmentReportParams): jsPDF {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  let y = drawHeader(doc, 'CONSOLIDATED CASES of CICL/CAR', params);
+
+  const head: RowInput[] = [
+    [
+      { content: 'Name/Alias', rowSpan: 2 },
+      { content: 'Address', rowSpan: 2 },
+      { content: 'Birthdate', rowSpan: 2 },
+      { content: 'Age', rowSpan: 2 },
+      { content: 'Sex', rowSpan: 2 },
+      { content: 'Educational Attainment', rowSpan: 2 },
+      { content: 'Type of Offense', rowSpan: 2 },
+      { content: 'Discernment', colSpan: 2 },
+      { content: 'SERVICES PROVIDED', colSpan: 7 },
+      { content: 'Status/Remarks', rowSpan: 2 },
+      { content: 'Source of Data', colSpan: 2 },
+    ],
+    ['With', 'Without', 'CS', 'LS', 'EA', 'LA', 'FA', 'MA', 'TA', 'MSWDO', 'PNP'],
+  ];
+
+  // Always empty — see function header comment.
+  const body: RowInput[] = [];
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN, bottom: FOOTER_RESERVE },
+    head,
+    body,
+    theme: 'grid',
+    styles: { fontSize: 6.3, cellPadding: 1, textColor: TEXT_BODY, lineColor: BORDER, lineWidth: 0.1, halign: 'center' },
+    headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 6, valign: 'middle' },
+    columnStyles: { 0: { halign: 'left', cellWidth: 30 }, 1: { halign: 'left', cellWidth: 30 } },
+    showHead: 'everyPage',
+  });
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+  y = drawTotalRow(doc, y, 'TOTAL', 0);
+
+  drawCertificationAndFooter(doc, y, params, [CICL_NOT_AVAILABLE_NOTE, SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE], ['CS', 'LS', 'EA', 'LA', 'FA', 'MA', 'TA']);
+  finalizePages(doc, 'Consolidated Cases of CICL/CAR');
+  return doc;
+}

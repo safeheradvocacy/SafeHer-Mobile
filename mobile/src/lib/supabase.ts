@@ -19,6 +19,16 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
+    // There's no browser address bar in React Native to parse a session
+    // out of — email confirmation / password recovery links are handled
+    // manually via lib/deepLinks.ts (Linking + exchangeCodeForSession)
+    // instead of Supabase's own URL auto-detection.
     detectSessionInUrl: false,
+    // PKCE over the older implicit flow: the email link carries a single
+    // opaque `code` that's exchanged for a session using a verifier this
+    // device already holds, rather than the access/refresh tokens
+    // themselves riding in the URL where they could end up in device
+    // logs or be replayed by anything else that can open safeher:// links.
+    flowType: 'pkce',
   },
 });

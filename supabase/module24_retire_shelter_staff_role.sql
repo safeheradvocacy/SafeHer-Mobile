@@ -1,0 +1,136 @@
+-- =========================================================
+-- SafeHer — Module 24: Retire shelter_staff, consolidate onto
+-- shelter_admin (Role consolidation)
+--
+-- Run in the Supabase SQL editor AFTER every prior module, in
+-- particular module4_shelter_admin.sql and module7_shelter_staff.sql.
+-- Single-part file — unlike module3/4/6/7, this adds no new enum
+-- value, so there is no "run Part A, come back, run Part B" split.
+--
+-- OBJECTIVE — shelter_admin becomes the single official shelter role.
+-- shelter_staff is retired: existing shelter_staff accounts are
+-- migrated to shelter_admin (same shelter_id, same profile_id,
+-- same auth credentials — nothing about the account is dropped or
+-- recreated), and no new shelter_staff account can be created going
+-- forward (enforced in supabase/functions/create-admin-user/index.ts,
+-- updated alongside this file).
+--
+-- WHY shelter_admin NEEDS NO NEW GRANTS — audited before writing this
+-- migration (admin/src/pages/dashboard/ShelterStaffDashboard.tsx vs
+-- ShelterAdminDashboard.tsx, plus every RLS policy module7 added).
+-- module7's own header already states shelter_staff was deliberately
+-- "scoped to one shelter's day-to-day request handling, with strictly
+-- less privilege than shelter_admin" — confirmed line-by-line:
+--   * shelter_requests / shelter_referrals: shelter_staff could SELECT
+--     shelter-wide (same as shelter_admin) and UPDATE only rows where
+--     assigned_staff_id = their own profile_id. shelter_admin's
+--     existing SELECT/UPDATE branch
+--     (current_role() = 'shelter_admin' and shelter_id =
+--     current_shelter_id()) already covers every row shelter_staff
+--     could reach, with no assigned-to-me restriction.
+--   * shelters: shelter_staff had no UPDATE branch at all (module7
+--     never added one) — shelter_admin already can.
+--   * user_profiles / shelter management / staff creation: explicitly
+--     NOT available to shelter_staff per module7's own restriction
+--     list ("no shelter management, no capacity/services edits, no
+--     staff creation") — shelter_admin already can.
+-- So shelter_admin is already a strict superset of shelter_staff's
+-- access. This migration intentionally changes NO RLS policy, helper
+-- function, or grant — there is no gap to close.
+--
+-- WHY THE ENUM VALUE IS NOT DROPPED — Postgres has no
+-- `ALTER TYPE ... DROP VALUE`; removing a single label from an
+-- existing enum requires rebuilding the type (create a new type,
+-- migrate every column/function/policy that references the old one,
+-- then drop it) — a substantially larger, higher-risk operation than
+-- this role consolidation calls for, and unnecessary: once this
+-- migration runs, no row anywhere in user_profiles has role =
+-- 'shelter_staff', so the dangling enum label is permanently inert.
+-- This mirrors the exact precedent already established for
+-- 'super_admin' in this codebase (see the comment above
+-- creatableRoles() in admin/src/pages/users/UserManagementPage.tsx):
+-- kept in the enum and in every existing check, permanently, purely
+-- for backward compatibility — an intentionally non-destructive
+-- retirement, not a schema change.
+--
+-- WHAT IS DELIBERATELY LEFT IN PLACE, UNTOUCHED, AND WHY —
+--   * public.is_shelter_staff() (module7) — grep-confirmed to have no
+--     other caller anywhere in supabase/. Left defined (never
+--     dropped, per this project's "don't drop a helper until every
+--     dependency is confirmed gone AND tested" rule) — it simply
+--     always returns false after this migration runs, forever.
+--   * assigned_staff_id on shelter_requests/shelter_referrals, its
+--     indexes, its validation triggers
+--     (validate_shelter_request_update / validate_shelter_referral_
+--     update), and its assignment-notification triggers (module7
+--     sections 3-4) — these are schema/trigger objects, not RLS
+--     grants, and retiring a role is not a reason to drop columns or
+--     historical assignment data. They go dormant (no caller can ever
+--     be 'shelter_staff' again, so the shelter_staff branch in each
+--     trigger is simply unreachable from here on) rather than being
+--     removed. The admin/src frontend change accompanying this
+--     migration removes the UI that read/wrote assigned_staff_id
+--     (ShelterAdminDashboard's staff-assignment feature existed only
+--     to delegate work to shelter_staff members, who no longer
+--     exist as a role) — existing historical values on old rows are
+--     left exactly as they are.
+--   * The 'shelter_staff' value in the user_role enum itself (see
+--     above).
+--
+-- ACCOUNT MIGRATION — preserves profile_id, auth_user_id, shelter_id,
+-- name, phone, is_active, and every other column untouched; only
+-- `role` changes. trg_audit_user_profiles (module3_barangay_
+-- hierarchy.sql) fires automatically on this UPDATE and records an
+-- old_values/new_values pair per migrated row in audit_logs — no
+-- separate manual audit insert is needed here.
+-- =========================================================
+
+-- ---------------------------------------------------------
+-- 0. Pre-flight visibility — read-only, run first so you know what
+--    this is about to touch before it touches it.
+-- ---------------------------------------------------------
+-- select profile_id, first_name, last_name, shelter_id, is_active
+-- from public.user_profiles
+-- where role = 'shelter_staff'
+-- order by first_name;
+
+-- ---------------------------------------------------------
+-- 1. The actual migration — convert every existing shelter_staff
+--    account to shelter_admin, same shelter, same everything else.
+-- ---------------------------------------------------------
+update public.user_profiles
+set role = 'shelter_admin'
+where role = 'shelter_staff';
+
+
+-- =========================================================
+-- VERIFICATION — run these separately, after the update above, to
+-- confirm it applied correctly. All read-only.
+-- =========================================================
+
+-- 0. Confirm zero accounts remain on the retired role:
+--   select count(*) from public.user_profiles where role = 'shelter_staff';
+--   Expect 0.
+
+-- 1. Confirm every migrated account kept its shelter_id (spot-check
+--    against the pre-flight list from step 0 above):
+--   select profile_id, first_name, last_name, shelter_id, is_active
+--   from public.user_profiles
+--   where role = 'shelter_admin'
+--   order by first_name;
+
+-- 2. Confirm the audit trail captured the role change automatically:
+--   select record_id, old_values ->> 'role' as old_role, new_values ->> 'role' as new_role, created_at
+--   from public.audit_logs
+--   where table_name = 'user_profiles' and new_values ->> 'role' = 'shelter_admin' and old_values ->> 'role' = 'shelter_staff'
+--   order by created_at desc;
+
+-- 3. Confirm the enum label still exists (expected — intentionally
+--    never dropped, see header) but is now unused:
+--   select enumlabel from pg_enum where enumtypid = 'user_role'::regtype order by enumsortorder;
+
+-- 4. Shelter isolation smoke test — as a migrated account (now
+--    shelter_admin), confirm they still only see their OWN shelter's
+--    data (unchanged RLS, nothing about this migration touches it):
+--   select * from shelter_requests; -- expect only their shelter's rows
+--   select * from shelters where shelter_id <> '<their own shelter_id>'; -- expect 0 rows

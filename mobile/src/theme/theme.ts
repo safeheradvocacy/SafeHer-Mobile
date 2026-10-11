@@ -1,43 +1,58 @@
-// SafeHer mobile design tokens — "Serene Sanctuary" system
-// (violet/cream palette, trauma-informed, calm-first)
+// SafeSpace mobile design tokens — government-blue system, matching the
+// admin portal's palette (admin/src/theme/theme.css) so both apps read
+// as one product. Calm-first intent is preserved from the prior
+// "Serene Sanctuary" system — only the hue family changed, not the
+// restraint principles (muted semantic colors, no neon/saturated fills).
 
 export const colors = {
-  background: '#FBF9F6',
+  background: '#F5F7FA',
   surface: '#FFFFFF',
-  surfaceMuted: '#F3EFE9',
-  primary: '#6C5CA6', // violet
-  primaryDark: '#514080',
-  primaryLight: '#E7E1F5',
-  accent: '#B79CED',
-  text: '#2B2530',
-  textMuted: '#6E6577',
-  border: '#E4DFD6',
-  danger: '#C4485B', // used sparingly — SOS only
-  dangerDark: '#9C2F41',
-  warning: '#C98A3B',
-  success: '#4A8C6F',
-  info: '#4C7EA8',
+  surfaceMuted: '#F5F9FD',
+  primary: '#1456A0',
+  primaryDark: '#0B3A82',
+  primaryLight: '#EAF3FB',
+  accent: '#2F80C9',
+  pinkAccent: '#C95B91', // same hex as the admin web app's --color-accent-pink, for cross-platform consistency
+  text: '#172033',
+  textMuted: '#526070',
+  border: '#D9E2EC',
+  danger: '#D94B63', // used sparingly — SOS only
+  dangerDark: '#AD3549',
+  warning: '#D98A24',
+  success: '#4D9272',
+  info: '#4C82B3',
   white: '#FFFFFF',
 } as const;
 
 export const statusColors: Record<string, string> = {
-  Pending: '#C98A3B',
-  'Under Review': '#4C7EA8',
-  Assigned: '#6C5CA6',
-  'In Progress': '#4C7EA8',
-  Referred: '#B79CED',
-  Resolved: '#4A8C6F',
-  Closed: '#6E6577',
-  Low: '#4A8C6F',
-  Medium: '#C98A3B',
-  High: '#C4485B',
-  Critical: '#9C2F41',
-  Triggered: '#C4485B',
-  Responding: '#C98A3B',
-  Pending_referral: '#C98A3B',
-  Accepted: '#4A8C6F',
-  Declined: '#6E6577',
-  Completed: '#4A8C6F',
+  Pending: '#D98A24',
+  'Under Review': '#4C82B3',
+  Assigned: '#1456A0',
+  'In Progress': '#4C82B3',
+  Referred: '#2F80C9',
+  Resolved: '#4D9272',
+  Closed: '#526070',
+  // case_services statuses (module22) — only 'Provided' is success-green;
+  // everything else before it reads as pending/in-progress, not done.
+  Requested: '#D98A24',
+  Scheduled: '#4C82B3',
+  Provided: '#4D9272',
+  Cancelled: '#526070',
+  'Unable to Provide': '#D94B63',
+  Low: '#4D9272',
+  Medium: '#D98A24',
+  High: '#D94B63',
+  Critical: '#AD3549',
+  Triggered: '#D94B63',
+  Responding: '#D98A24',
+  Pending_referral: '#D98A24',
+  Accepted: '#4D9272',
+  Declined: '#526070',
+  Completed: '#4D9272',
+  Verified: '#4D9272',
+  'Pending Review': '#D98A24',
+  'Not Verified': '#526070',
+  Rejected: '#D94B63',
 };
 
 export const typography = {
@@ -52,30 +67,39 @@ export const typography = {
 
 export const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 } as const;
 
-export const radius = { sm: 8, md: 14, lg: 20, pill: 999 } as const;
+// `button` is deliberately NOT `pill` — a fully stadium-shaped button on
+// every screen reads as generic/AI-templated. Moderate rounding (roughly
+// a quarter of the button's height) still feels friendly and tappable
+// without every control on the app looking identical in silhouette.
+// `pill` stays available for things that should genuinely be pill-shaped
+// (badges, dots).
+export const radius = { sm: 8, md: 14, lg: 20, button: 14, pill: 999 } as const;
 
 // Consistent elevation — three tiers used across every card/button/sheet
-// so depth reads the same everywhere instead of being hand-tuned per screen.
+// so depth reads the same everywhere instead of being hand-tuned per
+// screen. Intensities trimmed ~25% from the prior system for a flatter,
+// more institutional feel ("refined, not heavily 3D") — same tiers, same
+// call sites, just less shadow.
 export const shadows = {
   sm: {
     shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
     elevation: 2,
   },
   md: {
     shadowColor: colors.primaryDark,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.11,
+    shadowRadius: 12,
+    elevation: 4,
   },
   lg: {
     shadowColor: colors.primaryDark,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    elevation: 9,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.17,
+    shadowRadius: 18,
+    elevation: 7,
   },
 } as const;

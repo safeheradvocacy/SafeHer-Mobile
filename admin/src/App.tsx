@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import { AppLayout } from './layout/AppLayout';
 import { LandingPage } from './pages/public/LandingPage';
@@ -10,14 +12,31 @@ import { CaseListPage } from './pages/cases/CaseListPage';
 import { CaseDetailPage } from './pages/cases/CaseDetailPage';
 import { SosMonitoringPage } from './pages/sos/SosMonitoringPage';
 import { ShelterReferralPage } from './pages/shelters/ShelterReferralPage';
+import { ShelterInformationPage } from './pages/shelters/ShelterInformationPage';
+import { ShelterOccupancyPage } from './pages/shelters/ShelterOccupancyPage';
+import { ShelterRequestsReferralsPage } from './pages/shelters/ShelterRequestsReferralsPage';
+import { ShelterManagementPage } from './pages/shelters/ShelterManagementPage';
 import { MunicipalityManagementPage } from './pages/municipalities/MunicipalityManagementPage';
-import { ReportsPage } from './pages/reports/ReportsPage';
+import { BarangayManagementPage } from './pages/barangays/BarangayManagementPage';
+import { ReportsRouter } from './pages/reports/ReportsRouter';
+import { AnalyticsRouter } from './pages/reports/AnalyticsRouter';
 import { UserManagementPage } from './pages/users/UserManagementPage';
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
+import { FaqManagementPage } from './pages/faq/FaqManagementPage';
+import { SupportQueuePage } from './pages/support/SupportQueuePage';
+import { VerificationQueuePage } from './pages/verifications/VerificationQueuePage';
+import { CaseAccessQueuePage } from './pages/verifications/CaseAccessQueuePage';
+import { SosReferralsPage } from './pages/lawEnforcement/SosReferralsPage';
+import { CaseReferralsPage } from './pages/lawEnforcement/CaseReferralsPage';
+import { AuditLogPage } from './pages/audit/AuditLogPage';
+import { BackupRestorePage } from './pages/backups/BackupRestorePage';
+import { RolesPermissionsPage } from './pages/roles/RolesPermissionsPage';
 
 export default function App() {
   return (
+    <ThemeProvider>
+    <ToastProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -37,20 +56,236 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DashboardRouter />} />
-            <Route path="cases" element={<CaseListPage />} />
-            <Route path="cases/:caseId" element={<CaseDetailPage />} />
-            <Route path="sos" element={<SosMonitoringPage />} />
-            <Route path="shelters" element={<ShelterReferralPage />} />
+            {/* RBAC split (module11): every route below that used to list
+                'provincial_admin'/'super_admin' as an OPERATIONAL role now
+                lists 'provincial_staff' instead — provincial_admin is
+                redefined as technical/system administration only and no
+                longer reaches these routes (nav no longer links to them
+                either, but the route guard is the real enforcement layer —
+                see ProtectedRoute.tsx). Underlying database RLS access is
+                unchanged for provincial_admin (see module11's own header);
+                this is a frontend route-guard/nav scope decision only. */}
+            <Route
+              path="cases"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                  <CaseListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="cases/:caseId"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                  <CaseDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="sos"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                  <SosMonitoringPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="shelters"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                  <ShelterReferralPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="verifications"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                  <VerificationQueuePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="case-access"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                  <CaseAccessQueuePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="shelter-management"
+              element={
+                <ProtectedRoute requireRole={['provincial_staff', 'municipal_admin']}>
+                  <ShelterManagementPage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="municipalities"
               element={
-                <ProtectedRoute requireRole={['provincial_admin', 'super_admin']}>
+                <ProtectedRoute requireRole={['provincial_staff']}>
                   <MunicipalityManagementPage />
                 </ProtectedRoute>
               }
             />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="users" element={<UserManagementPage />} />
+            <Route
+              path="barangays"
+              element={
+                <ProtectedRoute requireRole={['provincial_staff', 'municipal_admin']}>
+                  <BarangayManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="support-queue"
+              element={
+                <ProtectedRoute requireRole={['provincial_staff']}>
+                  <SupportQueuePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="faqs"
+              element={
+                <ProtectedRoute requireRole={['provincial_staff']}>
+                  <FaqManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* module24/25 — Reports & Analytics, expanded to every active
+                role and split into two independently-routed pages
+                (Phase 2: "independently accessible, rather than being
+                one page with two unrelated sections hidden together").
+                ReportsRouter/AnalyticsRouter each pick the role-
+                appropriate page; the shared case-wide ReportsPage/
+                AnalyticsPage are unchanged in content for the four
+                roles below, and provincial_admin/super_admin now see
+                them too (identical underlying RLS access to
+                provincial_staff's — see permissions.ts). The four new
+                roles each get their own assignment/shelter-scoped
+                Reports (PDF/CSV) and Analytics (charts/KPIs) pages. */}
+            <Route
+              path="reports"
+              element={
+                <ProtectedRoute
+                  requireRole={[
+                    'municipal_admin',
+                    'provincial_staff',
+                    'barangay_admin',
+                    'provincial_admin',
+                    'super_admin',
+                    'law_enforcement',
+                    'shelter_admin',
+                    'shelter_staff',
+                    'support_expert',
+                  ]}
+                >
+                  <ReportsRouter />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="analytics"
+              element={
+                <ProtectedRoute
+                  requireRole={[
+                    'municipal_admin',
+                    'provincial_staff',
+                    'barangay_admin',
+                    'provincial_admin',
+                    'super_admin',
+                    'law_enforcement',
+                    'shelter_admin',
+                    'shelter_staff',
+                    'support_expert',
+                  ]}
+                >
+                  <AnalyticsRouter />
+                </ProtectedRoute>
+              }
+            />
+            {/* Administrator Management stays technical-admin-only (plus the
+                existing municipal_admin self-service scope) — provincial_staff
+                is deliberately NOT added here, matching its confirmed nav scope. */}
+            <Route
+              path="users"
+              element={
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_admin', 'super_admin']}>
+                  <UserManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="audit-log"
+              element={
+                <ProtectedRoute requireRole={['provincial_admin', 'super_admin']}>
+                  <AuditLogPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="backups"
+              element={
+                <ProtectedRoute requireRole={['provincial_admin', 'super_admin']}>
+                  <BackupRestorePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="roles-permissions"
+              element={
+                <ProtectedRoute requireRole={['provincial_admin', 'super_admin']}>
+                  <RolesPermissionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="law-enforcement/sos-referrals"
+              element={
+                <ProtectedRoute requireRole={['law_enforcement']}>
+                  <SosReferralsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="law-enforcement/case-referrals"
+              element={
+                <ProtectedRoute requireRole={['law_enforcement']}>
+                  <CaseReferralsPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* shelter_admin's own dedicated pages (master prompt: "Separate
+                SafeSpace Shelter Administrator Functions into Dedicated
+                Navigation Pages") — role-guarded the same way as
+                law-enforcement's own sub-routes just above. Frontend route
+                guard only; the real boundary is still RLS
+                (module4_shelter_admin.sql), scoped to profile.shelter_id. */}
+            <Route
+              path="shelter/information"
+              element={
+                <ProtectedRoute requireRole={['shelter_admin']}>
+                  <ShelterInformationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="shelter/occupancy"
+              element={
+                <ProtectedRoute requireRole={['shelter_admin']}>
+                  <ShelterOccupancyPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="shelter/requests"
+              element={
+                <ProtectedRoute requireRole={['shelter_admin']}>
+                  <ShelterRequestsReferralsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
@@ -59,5 +294,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ToastProvider>
+    </ThemeProvider>
   );
 }

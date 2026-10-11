@@ -1,44 +1,30 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../theme/theme';
+import { Text } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
- * Single integration point for the official SafeHer logo. Every branded
- * screen (Splash, Welcome, Login, Register) renders through this component
- * instead of drawing its own badge — so once the real asset is in place at
- * src/assets/branding/safeher-logo.png, swapping the placeholder below for
- *   <Image source={require('../../assets/branding/safeher-logo.png')} style={{ width: dimension, height: dimension }} resizeMode="contain" />
- * updates the whole app in one place. Do not redraw the mark elsewhere.
+ * The SafeSpace brand mark. No official logo graphic exists — the
+ * previous "LogoMark" rendered the old SafeHer shield/mother-child
+ * image (a purple-to-pink gradient PNG tied to the retired brand), which
+ * has been removed outright rather than recolored or varied. Per the
+ * brief: do not invent a replacement icon. This renders plain
+ * typography instead — every former call site (Splash, Welcome, Home
+ * header, Login, Email Verification, App Lock) still imports this same
+ * component, just laid out without the circular badge/shadow wrapper
+ * that used to frame the image (a wordmark needs no such frame).
  */
+const SIZES = { sm: 16, md: 20, lg: 28 } as const;
 
-const SIZES = { sm: 40, md: 56, lg: 88 } as const;
-
-export function LogoMark({
-  size = 'md',
-  tone = 'onLight',
-}: {
-  size?: keyof typeof SIZES | number;
-  tone?: 'onLight' | 'onDark';
-}) {
-  const dimension = typeof size === 'number' ? size : SIZES[size];
+export function LogoMark({ size = 'md' }: { size?: keyof typeof SIZES | number }) {
+  const { palette } = useTheme();
+  const fontSize = typeof size === 'number' ? size : SIZES[size];
   return (
-    <View
-      style={[
-        styles.mark,
-        {
-          width: dimension,
-          height: dimension,
-          borderRadius: dimension / 2,
-          backgroundColor: tone === 'onDark' ? colors.white : colors.primaryLight,
-        },
-      ]}
+    <Text
+      style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize, color: palette.primaryDark, letterSpacing: 0.2, textAlign: 'center' }}
+      accessibilityRole="text"
+      accessibilityLabel="SafeSpace"
     >
-      <Ionicons name="shield-checkmark" size={dimension * 0.46} color={colors.primary} />
-    </View>
+      SafeSpace
+    </Text>
   );
 }
-
-const styles = StyleSheet.create({
-  mark: { alignItems: 'center', justifyContent: 'center' },
-});

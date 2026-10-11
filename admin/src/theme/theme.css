@@ -1,18 +1,33 @@
 :root {
-  --color-bg: #FBF9F6;
+  /* SafeHer government-service palette (v2 — "government blue"). Deep
+     Blue is the dominant brand anchor (sidebar background, headings-
+     emphasis, active-nav text-on-light-chip); Government Blue is the
+     workhorse accent (default button/link/icon fill); Secondary Blue is
+     the hover-lift shade (one step brighter than default, used for
+     hover states instead of jumping straight to the darkest tone);
+     Accent Blue is the highlight/indicator shade (sidebar active bar,
+     KPI/chart accents, icon-chip highlights); Light Blue is the tint
+     (active-state backgrounds, icon chips). Semantic status colors are
+     reserved for Pending/Active/Resolved/SOS and never reused as
+     decoration — SOS/emergency red in particular is never used to
+     theme the whole interface, only to flag an actual urgent state. */
+  --color-bg: #F5F7FA;
   --color-surface: #FFFFFF;
-  --color-surface-muted: #F3EFE9;
-  --color-primary: #6C5CA6;
-  --color-primary-dark: #514080;
-  --color-primary-light: #E7E1F5;
-  --color-text: #2B2530;
-  --color-text-muted: #6E6577;
-  --color-border: #E4DFD6;
-  --color-danger: #C4485B;
-  --color-danger-dark: #9C2F41;
-  --color-warning: #C98A3B;
-  --color-success: #4A8C6F;
-  --color-info: #4C7EA8;
+  --color-surface-muted: #EAF0F7;
+  --color-primary: #1456A0;
+  --color-primary-hover: #1E6BB8;
+  --color-primary-dark: #0B3A82;
+  --color-primary-accent: #2F80C9;
+  --color-primary-light: #EAF3FB;
+  --color-text: #172033;
+  --color-text-muted: #526070;
+  --color-text-subtle: #6B7280;
+  --color-border: #D9E2EC;
+  --color-danger: #D94B63;
+  --color-danger-dark: #AD3549;
+  --color-warning: #D98A24;
+  --color-success: #4D9272;
+  --color-info: #4C82B3;
 
   --font-display: 'Plus Jakarta Sans', sans-serif;
   --font-body: 'Inter', sans-serif;
@@ -20,7 +35,165 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --sidebar-width: 240px;
+  --sidebar-width: 264px;
+  --sidebar-width-collapsed: 72px;
+
+  /* Deep-blue sidebar — deliberately separate from --color-surface/
+     --color-border (used by every other panel/card in the app, which
+     stay white/minimal) so the sidebar can be the one structural,
+     deep-blue "government" anchor without darkening cards, modals, or
+     tables. --sidebar-active-* keeps the existing "colored left bar +
+     tinted surface" active-item convention also used by KPI cards,
+     just recolored for a light-on-dark context. */
+  --sidebar-bg: #0B3A82;
+  --sidebar-bg-raised: #0F4591;
+  --sidebar-border: rgba(255,255,255,0.12);
+  --sidebar-text: #C9DCF2;
+  --sidebar-text-muted: #9FC0E8;
+  --sidebar-icon: #A9C6EC;
+  --sidebar-hover-bg: rgba(255,255,255,0.09);
+  --sidebar-hover-text: #FFFFFF;
+  --sidebar-active-bg: #FFFFFF;
+  --sidebar-active-text: #0B3A82;
+  --sidebar-active-accent: #2F80C9;
+
+  /* 8px-based spacing scale used by the admin dashboard */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --color-accent-pink: #C95B91;
+  --color-accent-pink-light: #F8E9F0;
+
+  /* Soft ~10%-alpha tints of the semantic colors above, as real CSS
+     variables rather than the "hex + '1A'" string-concat trick used
+     elsewhere (StatusBadge) — needed anywhere the tint has to also
+     flip correctly under dark mode, since a literal hex string baked
+     into a JS style object can't respond to a theme change. */
+  --color-primary-tint: rgba(20,86,160,0.1);
+  --color-warning-tint: rgba(217,138,36,0.1);
+  --color-success-tint: rgba(77,146,114,0.1);
+  --color-info-tint: rgba(76,130,179,0.1);
+  --color-danger-tint: rgba(217,75,99,0.1);
+  --color-pink-tint: rgba(201,91,145,0.1);
+
+  /* KPI-card-only tints — deliberately separate from the *-tint set
+     above (which is shared by alerts, badges, toasts elsewhere) so
+     tuning "how colorful is a stat card" can never leak into unrelated
+     UI. Card wash sits at ~9% (danger a touch stronger, ~13%, for its
+     "this is an emergency metric" emphasis); the icon chip one step up
+     from its own card so the icon still reads as a distinct layer. */
+  --kpi-tint-primary: rgba(20,86,160,0.08);
+  --kpi-tint-warning: rgba(217,138,36,0.09);
+  --kpi-tint-info: rgba(76,130,179,0.09);
+  --kpi-tint-success: rgba(77,146,114,0.09);
+  --kpi-tint-danger: rgba(217,75,99,0.13);
+  --kpi-icon-primary: rgba(20,86,160,0.14);
+  --kpi-icon-warning: rgba(217,138,36,0.16);
+  --kpi-icon-info: rgba(76,130,179,0.16);
+  --kpi-icon-success: rgba(77,146,114,0.16);
+  --kpi-icon-danger: rgba(217,75,99,0.2);
+  --kpi-border-danger: rgba(217,75,99,0.3);
+
+  /* Depth scale — subtle, layered (a tight edge shadow + a broad soft
+     one) rather than one heavy blur, used across cards/buttons/menus.
+     A faint navy cast (vs. flat black) keeps shadows cohesive with the
+     blue system without reading as "colored". */
+  --shadow-xs: 0 1px 2px rgba(10,26,48,0.05);
+  --shadow-sm: 0 1px 2px rgba(10,26,48,0.05), 0 4px 10px rgba(10,26,48,0.06);
+  --shadow-md: 0 2px 6px rgba(10,26,48,0.06), 0 10px 24px rgba(10,26,48,0.09);
+  --shadow-lg: 0 4px 10px rgba(10,26,48,0.08), 0 18px 40px rgba(10,26,48,0.14);
+
+  /* Centralized motion tokens — see "GOVERNMENT-FRIENDLY MOTION" note
+     below: every duration/easing in this file should trace back to one
+     of these rather than a one-off ms value, so the whole system moves
+     at a small, consistent set of speeds. */
+  --duration-micro: 150ms;    /* hover/press feedback, toggles */
+  --duration-standard: 200ms; /* dropdowns, tabs, toasts, badges */
+  --duration-panel: 240ms;    /* modals, sidebar collapse */
+  --duration-page: 220ms;     /* route/page transitions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* =========================================================
+   Dark theme — deep charcoal-purple, not pure black. Redefines the same
+   token set as :root so every existing component built on var(--color-*)
+   (cards, buttons, sidebar, dashboard, settings, modals, dropdowns,
+   tables) repaints automatically with no per-component dark-mode CSS
+   needed. Applied via [data-theme="dark"] on <html> (see ThemeContext).
+   Semantic colors (danger/warning/success/info/pink) are lightened
+   slightly versus their light-mode values purely for contrast against a
+   dark background — same hues, same meaning. ========================= */
+[data-theme="dark"] {
+  /* --sidebar-* is deliberately NOT redefined here — the deep-blue
+     sidebar stays visually constant across the light/dark toggle (it's
+     already a dark, structural anchor in light mode too), rather than
+     flipping to a second dark treatment that would make the one fixed
+     landmark in the UI shift under the user. */
+  --color-bg: #0E1726;
+  --color-surface: #16233A;
+  --color-surface-muted: #1C2C48;
+  --color-primary: #5B9BD5;
+  --color-primary-hover: #7BB3E3;
+  --color-primary-dark: #9FCBEF;
+  --color-primary-accent: #4FA3E0;
+  --color-primary-light: #1E3A5C;
+  --color-text: #EAF1FA;
+  --color-text-muted: #AEC3DA;
+  --color-text-subtle: #8CA3BE;
+  --color-border: #2A3B55;
+  --color-danger: #E27A8D;
+  --color-danger-dark: #F2A5B3;
+  --color-warning: #E0A85C;
+  --color-success: #6FBF9C;
+  --color-info: #7BA8D6;
+  --color-accent-pink: #E08AB8;
+  --color-accent-pink-light: #3A2A38;
+
+  --color-primary-tint: rgba(91,155,213,0.16);
+  --color-warning-tint: rgba(224,168,92,0.14);
+  --color-success-tint: rgba(111,191,156,0.14);
+  --color-info-tint: rgba(123,168,214,0.14);
+  --color-danger-tint: rgba(226,122,141,0.14);
+  --color-pink-tint: rgba(224,138,184,0.14);
+
+  --kpi-tint-primary: rgba(91,155,213,0.14);
+  --kpi-tint-warning: rgba(224,168,92,0.12);
+  --kpi-tint-info: rgba(123,168,214,0.12);
+  --kpi-tint-success: rgba(111,191,156,0.12);
+  --kpi-tint-danger: rgba(226,122,141,0.17);
+  --kpi-icon-primary: rgba(91,155,213,0.24);
+  --kpi-icon-warning: rgba(224,168,92,0.22);
+  --kpi-icon-info: rgba(123,168,214,0.22);
+  --kpi-icon-success: rgba(111,191,156,0.22);
+  --kpi-icon-danger: rgba(226,122,141,0.28);
+  --kpi-border-danger: rgba(226,122,141,0.4);
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.24);
+  --shadow-md: 0 2px 6px rgba(0,0,0,0.24), 0 10px 24px rgba(0,0,0,0.32);
+  --shadow-lg: 0 4px 10px rgba(0,0,0,0.28), 0 18px 40px rgba(0,0,0,0.44);
+}
+
+/* Smooth cross-fade when switching themes — kept on the handful of
+   surface-level properties that actually change, not a blanket
+   `transition: all`, so nothing unrelated (layout, hover transforms)
+   is accidentally slowed down. */
+body, .card, .app-sidebar, .admin-split-form-inner, .modal, .confirm-modal, .dash-dropdown,
+.dash-kpi-card, .stat-card, .input, select.input, textarea.input {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  body, .card, .app-sidebar, .admin-split-form-inner, .modal, .confirm-modal, .dash-dropdown,
+  .dash-kpi-card, .stat-card, .input, select.input, textarea.input {
+    transition: none !important;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -43,8 +216,15 @@ button { font-family: var(--font-body); cursor: pointer; }
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 20px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+  /* Grid/flex items default to min-width:auto, which lets a wide chart
+     canvas (sized by Chart.js off the card's own clientWidth) force its
+     grid track — and the whole row — wider than the viewport. min-width:0
+     lets the card shrink to its track's actual size instead. No effect
+     where .card isn't a grid/flex child. */
+  min-width: 0;
 }
 
 .btn {
@@ -57,12 +237,70 @@ button { font-family: var(--font-body); cursor: pointer; }
   align-items: center;
   gap: 8px;
 }
-.btn-primary { background: var(--color-primary); color: #fff; }
-.btn-primary:hover { background: var(--color-primary-dark); }
-.btn-outline { background: transparent; border: 1.5px solid var(--color-primary); color: var(--color-primary); }
-.btn-danger { background: var(--color-danger); color: #fff; }
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+/* Refined tactile depth: a restrained layered shadow (tight edge + soft
+   ambient lift) and a faint top sheen — reads as a solid, slightly
+   raised surface rather than a glossy bevel. Hover lifts by one
+   deliberately small step and brightens one shade (default -> hover,
+   never straight to the darkest tone); pressing drops the button below
+   its resting position, deepens to the anchor shade, and flattens the
+   shadow — depth and color move together so the press reads as
+   physical, not decorative. */
+.btn-primary {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 46%), var(--color-primary);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    0 1px 2px rgba(8,28,58,0.14),
+    0 3px 8px rgba(8,28,58,0.16);
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease, background var(--duration-micro) ease;
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 46%), var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    0 2px 4px rgba(8,28,58,0.16),
+    0 6px 14px rgba(8,28,58,0.2);
+}
+.btn-primary:active {
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 46%), var(--color-primary-dark);
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 1px 2px rgba(8,28,58,0.16);
+}
+.btn-outline {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-primary);
+  color: var(--color-primary);
+  box-shadow: 0 1px 2px rgba(20,86,160,0.05), 0 2px 6px rgba(20,86,160,0.07);
+  transition: background var(--duration-micro) ease, color var(--duration-micro) ease, transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease;
+}
+.btn-outline:hover {
+  background: var(--color-primary);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(20,86,160,0.1), 0 6px 14px rgba(20,86,160,0.18);
+}
+.btn-outline:active { background: var(--color-primary-dark); border-color: var(--color-primary-dark); transform: translateY(1px); box-shadow: 0 1px 2px rgba(20,86,160,0.1); }
+.btn-danger {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 46%), var(--color-danger);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 2px rgba(156,47,65,0.16), 0 3px 8px rgba(156,47,65,0.18);
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease, filter var(--duration-micro) ease;
+}
+.btn-danger:hover { transform: translateY(-1px); filter: brightness(1.03); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 4px rgba(156,47,65,0.2), 0 6px 14px rgba(156,47,65,0.22); }
+.btn-danger:active { transform: translateY(1px); filter: brightness(0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 1px 2px rgba(156,47,65,0.16); }
 .btn-sm { padding: 6px 14px; font-size: 13px; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; filter: none !important; }
+
+/* Module23 — a brief, single-purpose loading spinner (backup validation
+   in progress). Deliberately the only animated-icon use in this file —
+   "minimal animation" per the design brief, not a general utility. */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
 .input, select.input, textarea.input {
   width: 100%;
@@ -80,9 +318,13 @@ button { font-family: var(--font-body); cursor: pointer; }
 .error-text { color: var(--color-danger); font-size: 13px; margin-top: 6px; }
 
 table { width: 100%; border-collapse: collapse; }
-th { text-align: left; font-size: 12px; text-transform: uppercase; color: var(--color-text-muted); padding: 10px 12px; border-bottom: 1px solid var(--color-border); }
-td { padding: 12px; border-bottom: 1px solid var(--color-border); font-size: 14px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; color: var(--color-text-muted); padding: 10px 12px; border-bottom: 1px solid var(--color-border); vertical-align: middle; letter-spacing: 0.03em; }
+td { padding: 14px 12px; border-bottom: 1px solid var(--color-border); font-size: 14px; vertical-align: middle; }
 tr:hover td { background: var(--color-surface-muted); }
+/* Applied to the header/table-data cell that holds row action buttons, so
+   they line up on the far right instead of hugging whichever column width
+   the buttons happen to produce. */
+.table-actions-cell { text-align: right; }
 
 .badge {
   display: inline-flex;
@@ -94,17 +336,1080 @@ tr:hover td { background: var(--color-surface-muted); }
   border: 1px solid transparent;
 }
 
-.stat-card { display: flex; flex-direction: column; gap: 4px; }
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease;
+}
+.stat-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .stat-value { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
 .stat-label { color: var(--color-text-muted); font-size: 13px; }
 
+/* The modal box itself is capped to calc(100vh - 48px) (see .modal below),
+   so it always fits inside this centered, non-scrolling backdrop — only
+   .modal-body scrolls internally. Body scroll is separately locked via
+   Modal's useEffect (document.body.style.overflow) while a modal is open. */
 .modal-backdrop {
-  position: fixed; inset: 0; background: rgba(43,37,48,0.45);
+  position: fixed; inset: 0; background: rgba(10,20,38,0.5);
   display: flex; align-items: center; justify-content: center; z-index: 50;
+  padding: 24px;
+  animation: modal-backdrop-in var(--duration-standard) ease;
 }
-.modal { background: #fff; border-radius: var(--radius-lg); padding: 24px; width: 480px; max-width: 92vw; max-height: 86vh; overflow-y: auto; }
+/* Flex column with overflow:hidden on the outer box + overflow-y:auto only
+   on .modal-body keeps the header and footer pinned in view no matter how
+   tall the form content is or how far the user has scrolled/tabbed
+   through it. Width scales down through tablet/mobile via the media
+   queries below. */
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 640px;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-pop-in var(--duration-panel) var(--ease-out);
+}
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 20px 28px; flex-shrink: 0; border-bottom: 1px solid var(--color-border);
+}
+.modal-header h3 { font-size: 18px; }
+.modal-close-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex-shrink: 0;
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  background: var(--color-surface); color: var(--color-text-muted);
+  cursor: pointer; transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.modal-close-btn:hover { background: var(--color-surface-muted); color: var(--color-text); border-color: var(--color-text-muted); }
+.modal-close-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+/* min-height:0 overrides the flex default of min-height:auto — without it,
+   a flex child refuses to shrink below its content's natural height, so
+   the modal grows past max-height instead of this element scrolling. */
+.modal-body { padding: 24px 28px; overflow-y: auto; min-height: 0; }
+.modal-footer {
+  display: flex; justify-content: flex-end; align-items: center; gap: 12px;
+  padding: 16px 28px; flex-shrink: 0; border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+.modal-footer .btn { min-width: 100px; justify-content: center; }
+
+@keyframes modal-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+/* ---- PDF viewer modal (module25) — near-fullscreen, unlike the fixed
+   640px .modal, so a real multi-page A4 document is actually readable. ---- */
+.pdf-viewer-modal {
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-lg);
+  width: min(96vw, 1040px);
+  height: calc(100vh - 48px);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: modal-pop-in var(--duration-standard) ease;
+  overflow: hidden;
+}
+.pdf-viewer-body { flex: 1; min-height: 0; background: #525659; }
+.pdf-viewer-frame { width: 100%; height: 100%; border: 0; display: block; }
+.pdf-viewer-state {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; font-size: 13.5px; text-align: center; padding: 24px;
+}
+@media (max-width: 760px) {
+  .pdf-viewer-modal { width: 100%; height: 100%; border-radius: 0; }
+}
+
+@media (max-width: 760px) {
+  .modal { width: 100%; }
+}
+@media (max-width: 520px) {
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .modal { width: 100%; max-width: 100%; max-height: 92vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; animation-name: modal-slide-up; }
+  .modal-header, .modal-body, .modal-footer { padding-left: 20px; padding-right: 20px; }
+  .modal-footer { flex-direction: column-reverse; align-items: stretch; }
+  .modal-footer .btn { width: 100%; }
+}
+@keyframes modal-slide-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal { animation: none; }
+}
 
 .empty-state { text-align: center; padding: 48px 24px; color: var(--color-text-muted); }
+
+/* Wrap any wide table/chart in this so it scrolls horizontally inside its
+   own box on narrow viewports instead of blowing out the page width. */
+.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* =========================================================
+   Admin dashboard — shared building blocks for the sidebar,
+   header utility row, KPI cards, widgets, dropdowns, skeleton
+   loading, and route transitions. Scoped by class name (dash-*,
+   sidebar-*, tooltip, skeleton-*) rather than a wrapper selector
+   so these compose freely with the base .card/.btn system above.
+   ========================================================= */
+
+/* ---- Generic icon-button tooltip (collapsed sidebar items, icon-only
+   header buttons). CSS-only, no JS positioning — reuses the same
+   data-tooltip technique already established for the landing page's
+   floating chips. ---- */
+.tooltip-anchor { position: relative; }
+.tooltip-anchor::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translate(8px, -50%) scale(0.96);
+  background: var(--color-text);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: 60;
+}
+.tooltip-anchor:hover::after,
+.tooltip-anchor:focus-visible::after {
+  opacity: 1;
+  transform: translate(12px, -50%) scale(1);
+  transition-delay: 250ms;
+}
+
+/* ---- Skeleton loading — a soft shimmer sweep rather than a static gray
+   block, so the dashboard reads as "loading" rather than "broken/empty"
+   while data is in flight. ---- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-sm);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent);
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton-text { height: 12px; border-radius: 4px; }
+.skeleton-circle { border-radius: 50%; }
+
+/* ---- Sidebar ---- */
+.app-sidebar {
+  transition: width 220ms cubic-bezier(0.2,0.8,0.2,1);
+}
+.app-sidebar.collapsed { width: var(--sidebar-width-collapsed) !important; }
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--sidebar-border);
+  background: transparent;
+  color: var(--sidebar-icon);
+  transition: background var(--duration-micro) ease, color var(--duration-micro) ease, transform var(--duration-micro) ease;
+}
+.sidebar-collapse-btn:hover { background: var(--sidebar-hover-bg); color: var(--sidebar-hover-text); }
+.sidebar-collapse-btn:active { transform: scale(0.94); }
+
+/* ---- Sidebar nav items — stable/authoritative by design: a one-step
+   hover tint and a one-step horizontal nudge (never a bounce), and an
+   active state that reads instantly (solid light surface + accent bar)
+   rather than via motion. ---- */
+.sidebar-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sidebar-text);
+  transition: background var(--duration-standard) ease, color var(--duration-standard) ease, transform var(--duration-micro) var(--ease-standard);
+}
+.sidebar-nav-item svg { flex-shrink: 0; color: var(--sidebar-icon); transition: color var(--duration-standard) ease; }
+.sidebar-nav-item:hover {
+  background: var(--sidebar-hover-bg);
+  color: var(--sidebar-hover-text);
+  transform: translateX(1px);
+}
+.sidebar-nav-item:hover svg { color: var(--sidebar-hover-text); }
+.sidebar-nav-item.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.sidebar-nav-item.active svg { color: var(--sidebar-active-accent); }
+.sidebar-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 0 3px 3px 0;
+  background: var(--sidebar-active-accent);
+}
+.app-sidebar.collapsed .sidebar-nav-item { justify-content: center; padding: 10px; }
+.app-sidebar.collapsed .sidebar-nav-item.active::before { left: 0; }
+
+/* ---- Nav scroll area — the actual structural fix. This is the ONE part
+   of the sidebar that's allowed to grow/scroll; `min-height: 0` is what
+   makes a flex child honor `overflow-y: auto` instead of just expanding
+   past its parent (the classic flexbox bug — without it this list would
+   push the footer below, and past, the sidebar's own height, which is
+   what the clipped/low-contrast/"outside the blue background" symptoms
+   actually were). The sidebar's own `overflow: hidden` (inline, AppLayout)
+   is the second half of the fix — nothing can escape the blue box even if
+   something here miscalculates. A minimal, light scrollbar rather than
+   the browser default; Firefox first since `scrollbar-color` degrades
+   safely, WebKit's pseudo-elements second. ---- */
+.sidebar-nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.22) transparent;
+}
+.sidebar-nav-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-nav-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+.sidebar-nav-group + .sidebar-nav-group { margin-top: 4px; }
+
+/* Small-caps section label — only rendered when a role actually has more
+   than one real navigation group (see groupedNav in AppLayout.tsx), so a
+   role with just Dashboard + Notifications/Settings never gets a lone
+   "Overview" label floating over a single link. */
+.sidebar-group-label {
+  padding: 14px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sidebar-text-muted);
+  opacity: 0.75;
+}
+.sidebar-nav-group:first-child .sidebar-group-label { padding-top: 4px; }
+
+/* Notifications/Settings sit below this instead of a text label — they
+   apply to every role regardless of permissions, so a category heading
+   ("System"/"Administration") would misrepresent them as one more
+   permission-gated section rather than universal utility links. */
+.sidebar-nav-divider {
+  height: 1px;
+  background: var(--sidebar-border);
+  margin: 10px 0;
+}
+
+.sidebar-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+/* Small restrained count badge (real unread counts only — see AppLayout's
+   unreadCount fetch; never a fabricated number). Neutral on the active
+   item (which already has its own strong white surface), accent blue
+   otherwise — never a large alarming red circle, since an unread count on
+   its own isn't an emergency. */
+.sidebar-nav-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.sidebar-nav-item.active .sidebar-nav-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+/* Collapsed-sidebar account control — compact initials avatar replacing
+   the full name/coverage footer, same tooltip mechanism as the collapsed
+   nav items so the identity info isn't simply dropped. */
+.sidebar-account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Dashboard header utility row (notification / refresh / profile) ---- */
+/* module27 — explicit margin-left: auto (on top of PageHeader's own
+   justify-content: space-between, which already right-aligns the whole
+   actions slot against the title) so this exact five-component group
+   (Search -> Live -> Refresh -> Bell -> Profile, see
+   DashboardHeaderActions.tsx) self-rights even on the handful of pages
+   that place a page-specific control (e.g. "+ New Walk-In Case") in the
+   same actions row ahead of it — that button stays put on the left of
+   the row, this group still lands flush against the right edge. */
+.dash-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
+.dash-icon-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-xs);
+  transition: transform 180ms cubic-bezier(0.2,0.8,0.2,1), box-shadow 180ms ease, background 150ms ease, color 150ms ease;
+}
+.dash-icon-btn:hover { background: var(--color-primary-light); color: var(--color-primary-dark); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.dash-icon-btn:active { transform: translateY(1px); box-shadow: var(--shadow-xs); }
+.dash-icon-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.icon-spin { animation: dash-icon-spin 800ms linear infinite; }
+@keyframes dash-icon-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.dash-notif-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-danger);
+  border: 1.5px solid var(--color-surface);
+}
+.dash-notif-dot.urgent { animation: dash-pulse 1.8s ease-in-out infinite; }
+@keyframes dash-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217,75,99,0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(217,75,99,0); }
+}
+
+/* ---- "● Live · Updated Xm ago" indicator (DashboardHeaderActions) ----
+   A slow, decorative pulse — communicates "this can change under you,"
+   not urgency, so it's deliberately slower/softer than the SOS pulse
+   above. Fully static under prefers-reduced-motion (see that block
+   further down). */
+.dash-live-indicator {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.dash-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-success);
+  flex-shrink: 0;
+  animation: dash-live-pulse 2.6s ease-in-out infinite;
+}
+@keyframes dash-live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(77,146,114,0.35); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(77,146,114,0); }
+}
+
+/* Dropdown panel shared by notifications + profile menu */
+.dash-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-width: 90vw;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 70;
+  overflow: hidden;
+  animation: dash-dropdown-in 180ms cubic-bezier(0.16,1,0.3,1) both;
+  transform-origin: top right;
+}
+@keyframes dash-dropdown-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.dash-dropdown-header { padding: 14px 16px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: space-between; }
+.dash-dropdown-header h4 { font-size: 14px; font-weight: 700; }
+.dash-dropdown-list { max-height: 320px; overflow-y: auto; }
+.dash-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 150ms ease;
+}
+.dash-dropdown-item:last-child { border-bottom: none; }
+.dash-dropdown-item:hover { background: var(--color-surface-muted); }
+.dash-dropdown-item.unread { background: var(--color-primary-light); }
+.dash-dropdown-empty { padding: 28px 16px; text-align: center; color: var(--color-text-muted); font-size: 13px; }
+.dash-profile-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  transition: background 150ms ease;
+}
+.dash-profile-item:hover { background: var(--color-surface-muted); }
+.dash-profile-item.danger { color: var(--color-danger); }
+.dash-profile-item.danger:hover { background: rgba(196,72,91,0.08); }
+
+/* ---- KPI cards ---- */
+.dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.dash-kpi-card {
+  position: relative;
+  /* --kpi-accent/--kpi-tint are set per-instance inline (see
+     DashboardStatCard) — the card itself stays a generic, reusable
+     shell that just consumes whatever category it's given. */
+  background: var(--kpi-tint, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5) var(--space-4) 22px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 110px;
+  overflow: hidden;
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease;
+}
+/* Left-edge category accent — same visual language as the sidebar's
+   active-nav-item indicator, for a consistent "colored bar = category"
+   convention across the app. */
+.dash-kpi-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--kpi-accent, var(--color-primary));
+  transition: width 180ms ease;
+}
+.dash-kpi-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.dash-kpi-card:hover::before { width: 5px; }
+.dash-kpi-card:hover .dash-kpi-icon { filter: brightness(0.97); }
+.dash-kpi-card:active { transform: translateY(1px); box-shadow: var(--shadow-xs); }
+.dash-kpi-card--clickable { cursor: pointer; user-select: none; }
+.dash-kpi-card--clickable:focus-visible {
+  outline: 2px solid var(--kpi-accent, var(--color-primary));
+  outline-offset: 2px;
+}
+/* Active SOS — the one emergency metric in the row gets a touch more
+   presence via a tinted border, not motion/flashing. */
+.dash-kpi-card--emphasis { border-color: var(--kpi-border-danger); }
+.dash-kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 150ms ease;
+}
+.dash-kpi-label { font-size: 12.5px; color: var(--color-text-muted); font-weight: 500; }
+.dash-kpi-value { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--color-text); line-height: 1.1; }
+.dash-kpi-context { font-size: 11.5px; color: var(--color-text-muted); }
+
+/* ---- Global search bar (dashboard header) ---- */
+.dash-search-wrap { position: relative; flex: 1 1 240px; max-width: 340px; min-width: 160px; }
+.dash-search-input {
+  width: 100%;
+  padding: 9px 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13.5px;
+  font-family: var(--font-body);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow 180ms ease, border-color 180ms ease;
+}
+.dash-search-input::placeholder { color: var(--color-text-subtle); }
+.dash-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-tint);
+}
+.dash-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none; }
+.dash-search-kbd {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--color-text-subtle);
+  background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 5px;
+  padding: 2px 6px; pointer-events: none;
+}
+.dash-search-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-muted); background: none; border: none; padding: 3px; border-radius: 50%;
+  transition: background 150ms ease, color 150ms ease;
+}
+.dash-search-clear:hover { background: var(--color-surface-muted); color: var(--color-text); }
+
+/* ---- Live search results dropdown (module26) — same dropdown chrome
+   as .dash-dropdown (notifications/profile), but left-anchored under
+   the search field instead of right-anchored under an icon button,
+   and wide enough to read a case number + status/type comfortably. ---- */
+.dash-search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 360px;
+  max-width: min(90vw, 420px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 70;
+  overflow: hidden;
+  animation: dash-dropdown-in 180ms cubic-bezier(0.16,1,0.3,1) both;
+}
+.dash-search-state { padding: 18px 16px; text-align: center; color: var(--color-text-muted); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.dash-search-item {
+  display: block; width: 100%; text-align: left; padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border); transition: background 150ms ease;
+}
+.dash-search-item:last-of-type { border-bottom: none; }
+.dash-search-item:hover, .dash-search-item:focus-visible { background: var(--color-surface-muted); }
+.dash-search-seeall {
+  display: block; width: 100%; text-align: center; padding: 10px 16px; font-size: 12.5px;
+  font-weight: 600; color: var(--color-primary); border-top: 1px solid var(--color-border);
+}
+.dash-search-seeall:hover { background: var(--color-surface-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .dash-search-results { animation: none; }
+}
+
+/* ---- "View all →" navigational link, used under widget/table cards ---- */
+.dash-view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-primary);
+  transition: color 150ms ease, gap 150ms ease;
+}
+.dash-view-all:hover { color: var(--color-primary-dark); gap: 6px; }
+.dash-view-all svg { transition: transform 150ms ease; }
+.dash-view-all:hover svg { transform: translateX(1px); }
+
+/* ---- Chart range filter (native select, compact) ---- */
+.dash-chart-filter { width: auto; padding: 7px 30px 7px 12px; font-size: 12.5px; box-shadow: none; }
+
+/* ---- SOS pulse — only on a genuinely TRIGGERED alert row, never the
+   whole card, and only while unacknowledged (this list only ever shows
+   the current live status, so once a triggered alert is acknowledged/
+   resolved it naturally drops out of the pulsing state). ---- */
+.dash-sos-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  flex-shrink: 0;
+  animation: dash-pulse 1.8s ease-in-out infinite;
+}
+
+/* ---- Chart card + empty state ---- */
+.dash-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--color-text-muted);
+}
+.dash-chart-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.dash-chart-empty h4 { font-size: 15px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
+.dash-chart-empty p { font-size: 13px; max-width: 340px; }
+
+/* Shared sizing convention for every Chart.js canvas in the portal: an
+   explicitly-heighted, position:relative box (height set per chart via
+   inline style, since that varies by chart type/context) paired with
+   maintainAspectRatio:false (chartBaseOptions() in chartSetup.ts) — the
+   two together are what Chart.js actually needs to respect the card's
+   real size instead of deriving its own from width alone. min-width:0
+   lets it shrink inside a grid/flex track instead of forcing the track
+   (and the row) wider than the viewport. */
+.chart-box {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Multi-chart rows used to set grid-template-columns as a plain inline
+   style, which no @media rule can ever override (inline style always
+   wins over a class selector short of !important) — unlike .dash-kpi-grid
+   below, these never collapsed on tablet/mobile. Routing them through
+   these classes instead lets the breakpoints actually take effect; the
+   960/640 pair matches the breakpoints already used elsewhere in this
+   file for similar card rows. */
+.dash-chart-row { display: grid; gap: 16px; }
+.dash-chart-row-2 { grid-template-columns: repeat(2, 1fr); }
+.dash-chart-row-2-wide { grid-template-columns: 2fr 1fr; }
+.dash-chart-row-3 { grid-template-columns: repeat(3, 1fr); }
+/* A single number+icon summary next to a chart (e.g. SOS / Emergency
+   Analytics) doesn't need — or fill — an equal-width column; a wide 1fr
+   column just left it stranded in a mostly-empty box next to a chart
+   that then read as oversized by comparison. Cap the metric to its
+   actual content width and let the chart take the rest. */
+.dash-chart-row-metric { grid-template-columns: minmax(150px, 220px) 1fr; }
+@media (max-width: 960px) {
+  .dash-chart-row-3 { grid-template-columns: repeat(2, 1fr); }
+  .dash-chart-row-metric { grid-template-columns: minmax(130px, 180px) 1fr; }
+}
+@media (max-width: 640px) {
+  .dash-chart-row-2,
+  .dash-chart-row-2-wide,
+  .dash-chart-row-3,
+  .dash-chart-row-metric {
+    grid-template-columns: 1fr;
+  }
+}
+/* Text-only count + label (no icon) — vertically centered against the
+   chart's full height instead of sitting pinned to the top of a taller
+   grid cell (the visible "excessive whitespace" to one side of the SOS
+   card); left-aligned, stacked tight since .dash-kpi-value/-label are
+   already sized to read as one compact block without extra gap. */
+.dash-sos-metric { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+
+/* Restrained entrance for chart/KPI cards — opacity + a very small lift,
+   once, on first mount. Not a replacement for correct chart sizing, just
+   polish (master prompt module: chart animations). Reduced-motion users
+   get the final state immediately via the override below. */
+@keyframes dash-card-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card, .dash-kpi-card {
+  animation: dash-card-in 220ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .dash-kpi-card { animation: none; }
+}
+
+/* ---- Widgets (Recent Cases / SOS / Shelters) ---- */
+.dash-widget-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+.dash-widget-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.dash-widget-row:last-child { border-bottom: none; }
+.dash-widget-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dash-widget-row-title { font-size: 13.5px; font-weight: 600; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-widget-row-sub { font-size: 12px; color: var(--color-text-muted); }
+
+/* A row that just newly appeared this refresh (e.g. a freshly-triggered
+   SOS alert) — a brief, one-shot fade+slide+highlight, not a repeating
+   pulse. The highlight tint uses currentColor's own --kpi-accent-style
+   approach isn't needed here; a flat tint is enough since it only shows
+   for ~1.6s then settles to the row's normal background. */
+.dash-widget-row--new {
+  animation: dash-row-new 1.6s ease-out;
+  border-radius: var(--radius-sm);
+}
+@keyframes dash-row-new {
+  0% { background: var(--kpi-tint-danger); transform: translateX(-6px); opacity: 0; }
+  30% { background: var(--kpi-tint-danger); transform: translateX(0); opacity: 1; }
+  100% { background: transparent; }
+}
+
+/* ---- Error state ---- */
+.dash-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--color-text-muted);
+}
+.dash-error-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(196,72,91,0.1);
+  color: var(--color-danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+/* ---- Generic confirmation modal (logout, etc.) — same fade+scale+blur
+   language as the login screen's confirmation dialog, generalized with a
+   neutral icon slot instead of always being the shield mark. ---- */
+.confirm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,20,38,0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 200;
+  animation: auth-confirm-backdrop-in 200ms ease-out both;
+}
+.confirm-modal {
+  position: relative;
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px 26px 24px;
+  width: 360px;
+  max-width: 100%;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  animation: auth-confirm-modal-in 220ms cubic-bezier(0.16,1,0.3,1) both;
+}
+.confirm-modal-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.confirm-modal-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 6px; }
+.confirm-modal-desc { font-size: 13.5px; line-height: 1.6; color: var(--color-text-muted); margin: 0 0 22px; }
+.confirm-modal-actions { display: flex; gap: 10px; }
+.confirm-modal-actions .btn { flex: 1; justify-content: center; }
+
+/* ---- Route transitions — fade + a small rise, keyed by pathname. Kept
+   brief and small on purpose: the user should feel the interface
+   responded, not watch a transition. ---- */
+.page-transition { animation: page-fade-up var(--duration-page) var(--ease-out) both; }
+@keyframes page-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1200px) {
+  .dash-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  .dash-widget-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .dash-header-actions { flex-wrap: wrap; row-gap: 8px; }
+  .dash-search-wrap { order: 10; flex-basis: 100%; max-width: none; }
+}
+@media (max-width: 720px) {
+  .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+  .dash-widget-grid { grid-template-columns: 1fr; }
+  .app-sidebar.collapsed { width: var(--sidebar-width) !important; }
+  .tooltip-anchor::after { display: none; }
+  .dash-live-indicator { display: none; }
+  .dash-search-kbd { display: none; }
+  .dash-dropdown { position: fixed; top: 64px; left: 12px; right: 12px; width: auto; }
+}
+@media (max-width: 420px) {
+  .dash-kpi-grid { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none !important; }
+  .icon-spin { animation-duration: 1.2s; }
+  .dash-notif-dot.urgent { animation: none !important; }
+  .dash-sos-pulse { animation: none !important; }
+  .dash-live-dot { animation: none !important; }
+  .dash-widget-row--new { animation: none !important; }
+  .dash-view-all:hover { gap: 3px; }
+  .dash-view-all:hover svg { transform: none; }
+  .dash-dropdown { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .confirm-modal-backdrop, .confirm-modal { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .page-transition { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .sidebar-nav-item:hover { transform: none; }
+  .dash-kpi-card:hover, .stat-card:hover, .dash-icon-btn:hover { transform: none; }
+  .dash-kpi-card:hover::before { width: 4px; }
+  .app-sidebar { transition: none !important; }
+  .btn-primary:hover, .btn-primary:active,
+  .btn-outline:hover, .btn-outline:active,
+  .btn-danger:hover, .btn-danger:active,
+  .theme-option-card:hover { transform: none !important; }
+}
+
+/* =========================================================
+   Settings Center — section nav + content, security status,
+   toggles, session cards, danger zone, activity log, toasts.
+   ========================================================= */
+
+.settings-layout { display: grid; grid-template-columns: 240px 1fr; gap: var(--space-6); align-items: start; }
+.settings-nav { position: sticky; top: var(--space-6); display: flex; flex-direction: column; gap: 2px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-2); box-shadow: var(--shadow-xs); }
+.settings-nav button.sidebar-nav-item { width: 100%; background: none; border: none; text-align: left; font-family: var(--font-body); cursor: pointer; }
+.settings-mobile-nav { display: none; }
+
+.settings-section { animation: page-fade-up 200ms ease-out both; }
+.settings-section-header { margin-bottom: var(--space-5); }
+.settings-section-header h3 { font-size: 18px; margin-bottom: 4px; }
+.settings-section-header p { color: var(--color-text-muted); font-size: 13px; }
+
+/* ---- Security status ---- */
+.security-status-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-6);
+}
+.security-status-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: var(--space-4); }
+.security-status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+.security-status-badge.good { background: var(--color-success-tint); color: var(--color-success); }
+.security-status-badge.attention { background: var(--color-warning-tint); color: var(--color-warning); }
+.security-check-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.security-check-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.security-check-row:last-child { border-bottom: none; }
+.security-check-row .check-icon { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+.security-check-row.ok .check-icon { background: var(--color-success-tint); color: var(--color-success); }
+.security-check-row.warn .check-icon { background: var(--color-warning-tint); color: var(--color-warning); }
+
+/* ---- Toggle switch ---- */
+.toggle-switch { position: relative; display: inline-flex; align-items: center; width: 42px; height: 24px; flex-shrink: 0; }
+.toggle-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.toggle-switch input:disabled { cursor: not-allowed; }
+.toggle-track {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--color-border);
+  transition: background 180ms ease;
+}
+.toggle-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: transform 180ms cubic-bezier(0.2,0.8,0.2,1);
+}
+.toggle-switch input:checked ~ .toggle-track { background: var(--color-primary); }
+.toggle-switch input:checked ~ .toggle-track::after { transform: translateX(18px); }
+.toggle-switch input:focus-visible ~ .toggle-track { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.toggle-switch input:disabled ~ .toggle-track { opacity: 0.5; }
+
+.settings-toggle-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+.settings-toggle-row:last-child { border-bottom: none; }
+.settings-toggle-row-label { font-size: 13.5px; font-weight: 600; color: var(--color-text); }
+.settings-toggle-row-desc { font-size: 12.5px; color: var(--color-text-muted); margin-top: 2px; }
+.settings-toggle-row.locked .settings-toggle-row-label { display: flex; align-items: center; gap: 6px; }
+
+/* ---- Password strength ---- */
+.pw-strength-track { display: flex; gap: 4px; margin-top: 8px; margin-bottom: 6px; }
+.pw-strength-seg { flex: 1; height: 5px; border-radius: 3px; background: var(--color-border); transition: background 200ms ease; }
+.pw-strength-label { font-size: 12px; font-weight: 600; }
+.pw-requirements { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 10px; }
+.pw-requirement { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--color-text-muted); transition: color 150ms ease; }
+.pw-requirement.met { color: var(--color-success); }
+.pw-requirement svg { flex-shrink: 0; }
+
+/* ---- Theme option cards ---- */
+.theme-option-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); max-width: 460px; }
+.theme-option-card {
+  position: relative;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 180ms ease, transform 180ms cubic-bezier(0.2,0.8,0.2,1), box-shadow 180ms ease;
+}
+.theme-option-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.theme-option-card.selected { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-tint); }
+.theme-option-preview { height: 52px; border-radius: 8px; margin-bottom: 10px; overflow: hidden; display: flex; border: 1px solid var(--color-border); }
+.theme-option-label { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; }
+
+/* ---- Session / device card ---- */
+.session-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+.session-card:last-child { border-bottom: none; }
+.session-icon { width: 38px; height: 38px; border-radius: 10px; background: var(--color-primary-tint); color: var(--color-primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.session-meta { flex: 1; min-width: 0; }
+.session-meta-title { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.session-meta-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.session-current-badge { font-size: 11px; font-weight: 700; color: var(--color-success); background: var(--color-success-tint); padding: 2px 8px; border-radius: 999px; }
+
+/* ---- Access & permissions ---- */
+.permission-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13.5px; border-bottom: 1px solid var(--color-border); }
+.permission-row:last-child { border-bottom: none; }
+.permission-row svg { color: var(--color-success); flex-shrink: 0; }
+
+/* ---- Activity log ---- */
+.activity-filter-row { display: flex; gap: 6px; margin-bottom: var(--space-4); flex-wrap: wrap; }
+.activity-filter-pill {
+  padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.activity-filter-pill.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.activity-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+.activity-row:last-child { border-bottom: none; }
+.activity-row-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.activity-row-main { flex: 1; min-width: 0; }
+.activity-row-title { font-size: 13.5px; font-weight: 600; }
+.activity-row-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+
+/* ---- Danger zone ---- */
+.danger-zone {
+  border: 1px solid rgba(196,72,91,0.28);
+  background: var(--color-danger-tint);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+.danger-zone-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid rgba(196,72,91,0.18); flex-wrap: wrap; }
+.danger-zone-row:last-child { border-bottom: none; }
+.danger-zone-row-title { font-size: 13.5px; font-weight: 700; color: var(--color-text); }
+.danger-zone-row-desc { font-size: 12.5px; color: var(--color-text-muted); margin-top: 2px; max-width: 440px; }
+
+/* ---- Unsaved-changes indicator + sticky save bar ---- */
+.unsaved-badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+  color: var(--color-warning); background: var(--color-warning-tint); padding: 4px 10px; border-radius: 999px;
+}
+.settings-save-bar {
+  position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+  background: var(--color-surface); border-top: 1px solid var(--color-border); padding: var(--space-3) var(--space-4);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg); margin-top: var(--space-4);
+}
+
+/* ---- Type-to-confirm (danger zone) ---- */
+.type-confirm-wrap { text-align: left; margin-top: 4px; margin-bottom: 4px; }
+.type-confirm-wrap label { font-size: 12px; font-weight: 600; color: var(--color-text-muted); display: block; margin-bottom: 6px; }
+.type-confirm-wrap code { background: var(--color-surface-muted); padding: 2px 6px; border-radius: 4px; color: var(--color-danger); }
+
+/* ---- Toasts ---- */
+.toast-viewport {
+  position: fixed; bottom: 20px; right: 20px; z-index: 300;
+  display: flex; flex-direction: column-reverse; gap: 10px;
+  max-width: 360px;
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: 12px 14px; box-shadow: var(--shadow-lg);
+  animation: toast-in 220ms cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-icon { flex-shrink: 0; margin-top: 1px; }
+.toast-success .toast-icon { color: var(--color-success); }
+.toast-warning .toast-icon { color: var(--color-warning); }
+.toast-error .toast-icon { color: var(--color-danger); }
+.toast-info .toast-icon { color: var(--color-info); }
+.toast-message { flex: 1; font-size: 13px; color: var(--color-text); line-height: 1.5; }
+.toast-close { flex-shrink: 0; color: var(--color-text-muted); background: none; border: none; padding: 2px; display: flex; transition: color 150ms ease; }
+.toast-close:hover { color: var(--color-text); }
+
+@media (max-width: 960px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-nav { display: none; }
+  .settings-mobile-nav {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: var(--space-4);
+    -webkit-overflow-scrolling: touch;
+  }
+  .settings-mobile-nav button {
+    flex-shrink: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted);
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+  .settings-mobile-nav button.active { background: var(--color-primary-light); color: var(--color-primary-dark); border-color: var(--color-primary); }
+  .pw-requirements { grid-template-columns: 1fr; }
+  .theme-option-grid { grid-template-columns: 1fr; max-width: none; }
+  .toast-viewport { left: 12px; right: 12px; max-width: none; bottom: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-section { animation: none !important; opacity: 1 !important; }
+  .toast { animation: none !important; }
+  .toggle-track, .toggle-track::after, .theme-option-card, .pw-strength-seg { transition: none !important; }
+}
+
+/* ---- Case Management Reports & Analytics (module13) ---- */
+.report-tab-row { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--color-border); }
+.report-tab {
+  padding: 10px 16px; font-size: 13.5px; font-weight: 600; color: var(--color-text-muted);
+  background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
+  margin-bottom: -1px; transition: color 150ms ease, border-color 150ms ease;
+}
+.report-tab:hover { color: var(--color-text); }
+.report-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+.report-filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.report-filter-field label { display: block; font-size: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: 4px; }
+.report-filter-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.report-applied-summary { font-size: 12.5px; color: var(--color-text-muted); margin-top: 10px; }
+
+.report-scope-note {
+  display: flex; align-items: flex-start; gap: 8px; background: var(--color-surface-muted);
+  border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--color-text-muted); margin-bottom: 16px;
+}
+
+@media print {
+  .app-sidebar, .mobile-topbar, .dash-header-actions, .report-tab-row,
+  .report-filters-card, .report-actions-row, .page-transition > div > .btn,
+  .report-no-print { display: none !important; }
+  .app-main { max-width: none !important; }
+  main { padding: 0 !important; }
+  body, .admin-shell { background: #fff !important; }
+  .card { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; }
+}
 
 /* ---- Public site layout utilities ---- */
 .container { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
@@ -120,13 +1425,351 @@ tr:hover td { background: var(--color-surface-muted); }
 }
 .skip-link:focus { left: 0; }
 
-.how-it-works-connector { display: block; }
+/* How It Works — a guided case journey (Report → Review → Support/Referral
+   → Case Tracking). The 4 steps + connector are always laid out and
+   visible as soon as the row's own entrance settles (see .how-it-works-row
+   below) — the sequence that follows is a left-to-right *activation*
+   overlay on top of that already-visible structure (icon pulse+glow,
+   connector fill, small text emphasis), not a reveal-from-invisible.
+   That's deliberate: it's what lets the reduced-motion fallback just be
+   "show the final layout, skip the overlay" (see the RM block at the
+   bottom of this section) instead of needing a whole separate static
+   composition.
+
+   TIMELINE — a continuous 10.25s loop matching the "How SafeHer Helps"
+   section above beat-for-beat (same travel/pause/return rhythm, same
+   duration), not a one-shot sequence. Only ONE step is ever active at a
+   time — a small glowing dot (riding the leading edge of
+   .hiw-connector-fill, see further below) travels the path and hands
+   off activation from icon to icon rather than every step accumulating
+   and staying lit:
+
+     0ms     row fade + rise (one-shot)         450ms
+     0ms     Report icon active                 0-1000ms (pause)
+     1000ms  Report→Review connector + dot      travels 1000-2750ms
+     2750ms  Review icon active                 2750-3750ms (pause)
+     3750ms  Review→Support connector + dot     travels 3750-5500ms
+     5500ms  Support icon active                5500-6500ms (pause)
+     6500ms  Support→Case connector + dot       travels 6500-8250ms
+     8250ms  Case Tracking icon active           8250-9250ms (pause)
+     9250ms  everything quietly resets           9250-10250ms, loop restarts
+
+   Hover safety: an infinite animation never "finishes" and hand back
+   control the way a one-shot `backwards`-filled one does — it keeps
+   winning over a :hover transition for the same property indefinitely.
+   So :hover explicitly sets `animation: none` (see below) to fully
+   remove the loop's grip on the property while a step is being hovered. */
+.how-it-works-row {
+  display: flex;
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 450ms var(--ease-premium), transform 450ms var(--ease-premium);
+}
+.lp-scroll-reveal.is-visible .how-it-works-row {
+  opacity: 1;
+  transform: translateY(0);
+}
+.how-it-works-step-wrap { flex: 1 1 0; min-width: 0; }
+
+/* Icon circle — base state is the section's original always-on purple
+   ring (border moved here from an inline style so it can be part of this
+   rule). Each icon eases from plain resting to a bright lavender "active"
+   tint + glow + scale-up for its ~1s pause, then eases back to fully
+   neutral as the dot moves on to the next one — only ONE icon is ever
+   active at a time (see the file-level timeline above). Four dedicated
+   keyframes (delay:0 on all of them, staggering baked into each one's
+   own percentages) rather than one shared shape + delay, since the three
+   1750ms travels plus the ~1000ms return aren't equal-length gaps, so
+   the four windows can't be expressed as even phase-shifted copies of
+   one animation — same reasoning as the Features cards above. */
+.how-it-works-icon {
+  background-color: var(--lp-bg-card);
+  border: 1.5px solid var(--lp-purple);
+  box-shadow: 0 0 0 0 rgba(20,86,160,0);
+  transition: transform 300ms var(--ease-premium), box-shadow 300ms var(--ease-premium), border-color 300ms var(--ease-premium);
+}
+@keyframes hiw-icon-active-0 {
+  0% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+  2% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  9.76% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  12%, 100% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+}
+@keyframes hiw-icon-active-1 {
+  0%, 26.83% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+  28.29% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  36.59% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  39.02%, 100% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+}
+@keyframes hiw-icon-active-2 {
+  0%, 53.66% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+  55.12% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  63.41% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  65.85%, 100% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+}
+@keyframes hiw-icon-active-3 {
+  0%, 80.49% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+  81.95% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  90.24% { transform: scale(1.1); background-color: var(--lp-lavender-pale); box-shadow: 0 0 0 8px rgba(20,86,160,0.16), 0 0 24px rgba(20,86,160,0.32); }
+  92.68%, 100% { transform: scale(1); background-color: var(--lp-bg-card); box-shadow: 0 0 0 0 rgba(20,86,160,0); }
+}
+.lp-scroll-reveal.is-visible .hiw-step-0 .how-it-works-icon { animation: hiw-icon-active-0 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-1 .how-it-works-icon { animation: hiw-icon-active-1 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-2 .how-it-works-icon { animation: hiw-icon-active-2 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-3 .how-it-works-icon { animation: hiw-icon-active-3 10250ms linear infinite; }
+
+/* Title/description "emphasis", synced to the exact same windows as the
+   icon above — a few px of upward nudge, not a fade (the text is already
+   visible from the row's own one-shot entrance), so activation reads as
+   focus shifting onto this step. Description lags the title by ~80ms. */
+@keyframes hiw-text-active-0 {
+  0% { transform: translateY(0); }
+  2% { transform: translateY(-3px); }
+  9.76% { transform: translateY(-3px); }
+  12%, 100% { transform: translateY(0); }
+}
+@keyframes hiw-text-active-1 {
+  0%, 26.83% { transform: translateY(0); }
+  28.29% { transform: translateY(-3px); }
+  36.59% { transform: translateY(-3px); }
+  39.02%, 100% { transform: translateY(0); }
+}
+@keyframes hiw-text-active-2 {
+  0%, 53.66% { transform: translateY(0); }
+  55.12% { transform: translateY(-3px); }
+  63.41% { transform: translateY(-3px); }
+  65.85%, 100% { transform: translateY(0); }
+}
+@keyframes hiw-text-active-3 {
+  0%, 80.49% { transform: translateY(0); }
+  81.95% { transform: translateY(-3px); }
+  90.24% { transform: translateY(-3px); }
+  92.68%, 100% { transform: translateY(0); }
+}
+.lp-scroll-reveal.is-visible .hiw-step-0 .hiw-step-title { animation: hiw-text-active-0 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-0 .hiw-step-desc { animation: hiw-text-active-0 10250ms linear 80ms infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-1 .hiw-step-title { animation: hiw-text-active-1 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-1 .hiw-step-desc { animation: hiw-text-active-1 10250ms linear 80ms infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-2 .hiw-step-title { animation: hiw-text-active-2 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-2 .hiw-step-desc { animation: hiw-text-active-2 10250ms linear 80ms infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-3 .hiw-step-title { animation: hiw-text-active-3 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-step-3 .hiw-step-desc { animation: hiw-text-active-3 10250ms linear 80ms infinite; }
+
+/* Hover — available at any point, including mid-loop: `animation: none`
+   fully releases the icon/title from the loop so the hover style below
+   can apply immediately instead of being silently overridden by whatever
+   phase the loop happened to be in. `!important` is required here, not
+   optional — the loop's own animation-assigning selectors (e.g.
+   `.lp-scroll-reveal.is-visible .hiw-step-0 .how-it-works-icon`) chain 4
+   classes and out-specificity a plain `:hover` rule, so without it the
+   loop keeps running (and winning) right through the hover. Enlarge
+   instead of a lift, a soft glow ring, and the title picks up the accent
+   color — same treatment on all 4 steps, no per-step variation. */
+.how-it-works-step:hover .how-it-works-icon {
+  animation: none !important;
+  transform: scale(1.08);
+  box-shadow: 0 0 0 6px rgba(20,86,160,0.14), 0 10px 22px rgba(8,28,58,0.16);
+}
+.how-it-works-step:hover .hiw-step-title { animation: none !important; color: var(--lp-purple); transition: color 250ms var(--ease-premium); }
+@media (prefers-reduced-motion: reduce) {
+  .how-it-works-row,
+  .lp-scroll-reveal.is-visible .how-it-works-row {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  /* Fully neutral, not just "instant" — background-color is forced back
+     to the un-activated value rather than snapping to the "completed"
+     tint, so the whole diagram (icons + connector below) reads as one
+     coherent static illustration rather than a mix of "some steps look
+     done, nothing actually animated." */
+  .lp-scroll-reveal.is-visible .how-it-works-icon,
+  .lp-scroll-reveal.is-visible .hiw-step-title,
+  .lp-scroll-reveal.is-visible .hiw-step-desc {
+    animation: none !important;
+    transition: none !important;
+    background-color: var(--lp-bg-card) !important;
+  }
+  .how-it-works-step:hover .how-it-works-icon { transform: none; }
+}
+
+/* Connector — steps + connectors are flex siblings (not absolutely
+   positioned) so the row reflows naturally instead of being hand-tuned to
+   a fixed column width; connector height matches the 52px icon so the
+   line/arrow sit at its vertical center for free. .connector-line is the
+   always-visible muted track; .hiw-connector-fill is a purple overlay
+   that sweeps in to fill the gap exactly while the dot is travelling
+   through it, then sweeps back out once the next icon takes over — a
+   brief "handoff" flash rather than a trail that stays lit, matching the
+   "only one step active at a time" behavior above. A small glowing dot
+   (::after on .hiw-connector-fill, further below) rides its trailing
+   edge, so it visibly travels across the gap for free as the fill's own
+   width animates, with no separate position keyframes needed. */
+.how-it-works-connector {
+  position: relative;
+  flex: 0 0 32px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lp-lavender);
+}
+/* Chevron uses currentColor, so animating this container's color in step
+   with its .hiw-connector-fill sibling below carries the arrow itself
+   along the same sweep-in/sweep-out arc, not just the line beneath it.
+   Three separate keyframes (not one shared + per-segment delay) since
+   each segment's travel window sits at a different point in the cycle,
+   not just a phase-shifted copy of the same shape. */
+@keyframes hiw-connector-color-0 {
+  0%, 9.76% { color: var(--lp-lavender); }
+  26.83% { color: var(--lp-purple); }
+  28.29%, 100% { color: var(--lp-lavender); }
+}
+@keyframes hiw-connector-color-1 {
+  0%, 36.59% { color: var(--lp-lavender); }
+  53.66% { color: var(--lp-purple); }
+  55.12%, 100% { color: var(--lp-lavender); }
+}
+@keyframes hiw-connector-color-2 {
+  0%, 63.41% { color: var(--lp-lavender); }
+  80.49% { color: var(--lp-purple); }
+  81.95%, 100% { color: var(--lp-lavender); }
+}
+.lp-scroll-reveal.is-visible .hiw-connector-0 { animation: hiw-connector-color-0 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-connector-1 { animation: hiw-connector-color-1 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-connector-2 { animation: hiw-connector-color-2 10250ms linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .lp-scroll-reveal.is-visible .hiw-connector-0,
+  .lp-scroll-reveal.is-visible .hiw-connector-1,
+  .lp-scroll-reveal.is-visible .hiw-connector-2 {
+    animation: none !important;
+    color: var(--lp-lavender) !important;
+  }
+}
+.how-it-works-connector .connector-line {
+  flex: 1;
+  height: 1px;
+  background: var(--lp-violet-light);
+}
+.hiw-connector-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--lp-purple), var(--lp-violet-medium));
+  width: 0%;
+}
+/* The glowing traveling dot — sits at the fill's current trailing edge,
+   so as width animates 0%→100% it visibly rides along the growing bar
+   toward the next icon, then snaps back with the fill once this segment
+   resets for the next lap. */
+.hiw-connector-fill::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lp-purple);
+  box-shadow: 0 0 8px rgba(20,86,160,0.6);
+}
+@keyframes hiw-connector-fill-0 {
+  0%, 9.76% { width: 0%; }
+  26.83% { width: 100%; }
+  28.29%, 100% { width: 0%; }
+}
+@keyframes hiw-connector-fill-1 {
+  0%, 36.59% { width: 0%; }
+  53.66% { width: 100%; }
+  55.12%, 100% { width: 0%; }
+}
+@keyframes hiw-connector-fill-2 {
+  0%, 63.41% { width: 0%; }
+  80.49% { width: 100%; }
+  81.95%, 100% { width: 0%; }
+}
+.lp-scroll-reveal.is-visible .hiw-connector-0 .hiw-connector-fill { animation: hiw-connector-fill-0 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-connector-1 .hiw-connector-fill { animation: hiw-connector-fill-1 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .hiw-connector-2 .hiw-connector-fill { animation: hiw-connector-fill-2 10250ms linear infinite; }
+.hiw-step-item:has(.how-it-works-step:hover) ~ .how-it-works-connector .hiw-connector-fill {
+  box-shadow: 0 0 10px rgba(20,86,160,0.4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-scroll-reveal.is-visible .hiw-connector-0 .hiw-connector-fill,
+  .lp-scroll-reveal.is-visible .hiw-connector-1 .hiw-connector-fill,
+  .lp-scroll-reveal.is-visible .hiw-connector-2 .hiw-connector-fill {
+    animation: none !important;
+    width: 0% !important;
+    height: 0% !important;
+    opacity: 1 !important;
+  }
+  .hiw-connector-fill::after { display: none; }
+}
+.how-it-works-connector svg { flex-shrink: 0; margin: 0 1px; position: relative; }
+
+@media (max-width: 760px) {
+  .how-it-works-row { flex-direction: column; align-items: stretch; }
+  .how-it-works-connector {
+    flex-direction: column;
+    flex: 0 0 auto;
+    width: 52px;
+    height: 26px;
+    margin: 0 auto;
+  }
+  .how-it-works-connector .connector-line { width: 1px; height: 100%; flex: 1; }
+  .hiw-connector-fill {
+    left: 50%;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    height: 0%;
+    width: 2px;
+    transform: translateX(-50%);
+  }
+  /* Dot rides the bottom edge here instead of the right edge — the fill
+     grows downward (height, not width) on this vertical layout. */
+  .hiw-connector-fill::after { right: 50%; top: auto; bottom: -3px; transform: translate(50%, 0); }
+  /* Same sweep-in/sweep-out shape as the desktop keyframes above, just
+     with height standing in for width — re-declared here (matching
+     specificity, later in source order) so this wins over the desktop
+     `animation-name` above, since width needs to stay pinned to the bar's
+     own 2px thickness on this vertical layout rather than animating. */
+  @keyframes hiw-connector-fill-mobile-0 {
+    0%, 9.76% { width: 2px; height: 0%; }
+    26.83% { width: 2px; height: 100%; }
+    28.29%, 100% { width: 2px; height: 0%; }
+  }
+  @keyframes hiw-connector-fill-mobile-1 {
+    0%, 36.59% { width: 2px; height: 0%; }
+    53.66% { width: 2px; height: 100%; }
+    55.12%, 100% { width: 2px; height: 0%; }
+  }
+  @keyframes hiw-connector-fill-mobile-2 {
+    0%, 63.41% { width: 2px; height: 0%; }
+    80.49% { width: 2px; height: 100%; }
+    81.95%, 100% { width: 2px; height: 0%; }
+  }
+  .lp-scroll-reveal.is-visible .hiw-connector-0 .hiw-connector-fill { animation: hiw-connector-fill-mobile-0 10250ms linear infinite; }
+  .lp-scroll-reveal.is-visible .hiw-connector-1 .hiw-connector-fill { animation: hiw-connector-fill-mobile-1 10250ms linear infinite; }
+  .lp-scroll-reveal.is-visible .hiw-connector-2 .hiw-connector-fill { animation: hiw-connector-fill-mobile-2 10250ms linear infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .lp-scroll-reveal.is-visible .hiw-connector-0 .hiw-connector-fill,
+    .lp-scroll-reveal.is-visible .hiw-connector-1 .hiw-connector-fill,
+    .lp-scroll-reveal.is-visible .hiw-connector-2 .hiw-connector-fill {
+      animation: none !important;
+      height: 0% !important;
+    }
+  }
+  .how-it-works-connector svg { transform: rotate(90deg); margin: 1px 0; }
+}
 
 @media (max-width: 960px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .how-it-works-connector { display: none; }
-  .admin-split { grid-template-columns: 1fr !important; }
-  .admin-split-brand { display: none !important; }
   .app-sidebar { position: fixed !important; z-index: 40; transform: translateX(-100%); transition: transform 0.2s ease; }
   .app-sidebar.open { transform: translateX(0); }
   .app-main { max-width: 100% !important; }
@@ -136,7 +1779,2310 @@ tr:hover td { background: var(--color-surface-muted); }
 @media (max-width: 640px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
-  h1 { font-size: 28px !important; }
 }
 
 *:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* =========================================================
+   Landing page design system — scoped entirely under
+   `.landing-page` so none of this touches the admin dashboard
+   or login page, which keep the --color-* tokens above.
+   ========================================================= */
+html { scroll-behavior: smooth; }
+
+.landing-page {
+  /* Brand blues — same SafeSpace government-blue family as the admin
+     portal (--color-primary and friends in theme.css's :root), kept as
+     a parallel --lp-* token set rather than merged into --color-*
+     (see this block's own scoping comment above): the two systems
+     target different surfaces (survivor-facing public page vs.
+     authenticated admin shell) and may need to diverge again later
+     without one architecture constraining the other, but the VALUES
+     now agree. */
+  --lp-purple-deep: #0B3A82;
+  --lp-purple: #1456A0;
+  --lp-purple-soft: #2F80C9;
+  --lp-violet-medium: #4A93D6;
+  --lp-lavender: #A9CBEA;
+  --lp-violet-light: #D3E6F7;
+  --lp-periwinkle: #D6E8F8;
+  --lp-lilac: #EAF3FB;
+  --lp-lavender-pale: #F2F8FD;
+
+  /* Layered backgrounds — deliberately varied, never one flat tint, but
+     now much closer to white than the original's fairly saturated
+     violet/lilac pass: a minimalist public-service page reads as white
+     surfaces with a faint blue cast, not a tinted page throughout.
+     --lp-bg-card stays pure white — the actual card/pill/nav-surface
+     color — so cards still read as "lifted" against the section
+     backgrounds instead of blending in. */
+  --lp-bg: #EAF3FB;
+  --lp-bg-hero: #EAF3FB;
+  --lp-bg-alt: #E1EEFA;
+  --lp-bg-card: #FFFFFF;
+  --lp-bg-soft-gray: #F5F7FA;
+
+  /* Text */
+  --lp-text-primary: #172033;
+  --lp-text-heading: #0B3A82;
+  /* Matches --color-text-muted in :root above — already validated at
+     ~6.4:1 against white, comfortably clears WCAG AA against these
+     lighter-than-before backgrounds too. */
+  --lp-text-secondary: #526070;
+  --lp-text-muted: #6B7280;
+
+  /* Accents — semantic use only, never dominant. The brand's old warm
+     rose/pink accent is retired in favor of the accent blue below (the
+     brief's palette is blue + neutral + semantic only); --lp-rose* keeps
+     its name for any consumer still reading it, but now resolves to
+     blue rather than pink. */
+  --lp-rose: #2F80C9;
+  --lp-rose-soft: #5B9BD5;
+  --lp-rose-pale: #EAF3FB;
+  --lp-success: #2E7D32;
+  --lp-warning: #B7791F;
+  --lp-danger: #C62828;
+
+  --lp-gradient-primary: linear-gradient(135deg, #2F80C9, #1456A0);
+  --lp-gradient-primary-hover: linear-gradient(135deg, #1456A0, #0B3A82);
+  /* Section gradients — extremely subtle blue-on-blue tonal shifts now,
+     not a strong violet/rose sweep: per the brief, a gradient here only
+     where it helps hierarchy, never as decoration on its own. */
+  --lp-gradient-hero: linear-gradient(135deg, #EAF3FB 0%, #F5F9FD 55%, #EAF3FB 100%);
+  --lp-gradient-about: linear-gradient(135deg, #E1EEFA 0%, #D3E6F7 50%, #EAF3FB 100%);
+  --lp-gradient-features: linear-gradient(135deg, #E6F0FA 0%, #D3E6F7 50%, #EAF3FB 100%);
+  --lp-gradient-privacy: linear-gradient(120deg, #F5F9FD 0%, #EAF3FB 100%);
+  --lp-gradient-cta: linear-gradient(135deg, #0B3A82 0%, #1456A0 60%, #2F80C9 100%);
+  --lp-gradient-decorative: radial-gradient(circle, rgba(20,86,160,0.14), transparent 70%);
+
+  --lp-font: 'Plus Jakarta Sans', Manrope, Arial, sans-serif;
+  --lp-border: #D9E2EC;
+  /* "Expo ease-out" — decelerates smoothly with no overshoot. Used for the
+     About section's choreographed reveal so motion reads as calm/composed
+     rather than springy, appropriate for a survivor-support platform. */
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+
+  background: var(--lp-bg);
+  color: var(--lp-text-primary);
+  font-family: var(--lp-font);
+}
+.landing-page h1, .landing-page h2, .landing-page h3, .landing-page h4 {
+  font-family: var(--lp-font);
+  color: var(--lp-text-heading);
+}
+.landing-page p, .landing-page span, .landing-page a, .landing-page button {
+  font-family: var(--lp-font);
+}
+.landing-page *:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(20,86,160,0.20);
+  border-radius: 6px;
+}
+
+/* Typography scale */
+.lp-hero-heading {
+  font-weight: 800;
+  /* Was 64px originally, cut to 48px to force a single-viewport fit — that
+     read as cramped. Settled on 56px: a real step down from the original
+     (still comfortably fits with room to breathe now that the hero is
+     allowed to run past one screen), but noticeably bigger than the
+     48px "fit at all costs" version. */
+  font-size: 56px;
+  line-height: 1.08;
+  letter-spacing: -1.5px;
+  color: var(--lp-text-heading);
+}
+.lp-hero-description {
+  font-weight: 400;
+  /* Was 19px; nudged up slightly alongside the headline. */
+  font-size: 20px;
+  line-height: 1.7;
+  color: var(--lp-text-secondary);
+  max-width: 600px;
+}
+.lp-section-heading {
+  font-weight: 800;
+  font-size: 44px;
+  letter-spacing: -1px;
+  color: var(--lp-text-heading);
+}
+.lp-section-description {
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--lp-text-secondary);
+}
+.lp-card-heading { font-weight: 700; font-size: 20px; color: var(--lp-text-primary); }
+.lp-card-description { font-weight: 400; font-size: 15px; line-height: 1.6; color: var(--lp-text-secondary); }
+
+@media (max-width: 960px) {
+  .lp-hero-heading { font-size: 46px; }
+  .lp-hero-description { font-size: 18px; }
+}
+@media (max-width: 640px) {
+  .lp-hero-heading { font-size: 38px; letter-spacing: -1px; }
+  .lp-hero-description { font-size: 17px; }
+  .lp-section-heading { font-size: 32px; }
+}
+
+/* Support label pill (hero, above the headline) */
+.lp-support-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--lp-lavender-pale);
+  border: 1px solid var(--lp-violet-light);
+  color: var(--lp-purple);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 999px;
+  margin-bottom: 20px;
+  transition: filter 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+.lp-support-label:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(20,86,160,0.14);
+}
+
+/* Buttons — scoped overrides of the shared .btn-primary/.btn-outline so
+   the admin dashboard and login page keep their own palette untouched. */
+/* Tactile/raised button treatment: a soft outer shadow beneath (rest
+   state, not just on hover) plus a subtle inset highlight near the top
+   edge (light catching a rounded surface) and a matching inset shade near
+   the bottom for a touch of volume — layered box-shadow only, no
+   gradients/bevels. Hover lifts further (bigger outer shadow); :active
+   flips to "pressed in" — shadow shrinks, button nudges down 1-2px,
+   highlight fades to a soft inner shadow instead. */
+.landing-page .btn-primary {
+  background: var(--lp-gradient-primary);
+  color: #fff;
+  padding: 15px 30px;
+  box-shadow:
+    0 6px 16px rgba(8,28,58,0.24),
+    inset 0 1px 0 rgba(255,255,255,0.35),
+    inset 0 -2px 3px rgba(8,28,58,0.15);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 220ms ease;
+}
+.landing-page .btn-primary:hover {
+  background: var(--lp-gradient-primary-hover);
+  transform: translateY(-2px);
+  box-shadow:
+    0 12px 26px rgba(8,28,58,0.32),
+    0 0 0 6px rgba(20,86,160,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.4),
+    inset 0 -2px 3px rgba(8,28,58,0.12);
+}
+.landing-page .btn-primary:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    0 2px 6px rgba(8,28,58,0.22),
+    inset 0 1px 3px rgba(0,0,0,0.2);
+}
+.landing-page .btn-primary:focus-visible {
+  outline: none;
+  box-shadow:
+    0 6px 16px rgba(8,28,58,0.24),
+    inset 0 1px 0 rgba(255,255,255,0.35),
+    0 0 0 3px rgba(20,86,160,0.4);
+}
+
+/* Outline buttons get a near-white fill (was fully transparent) so the
+   same inset-highlight trick has a surface to read against — still
+   clearly the lighter/secondary button next to the solid-gradient
+   primary, just no longer flush/flat. */
+.landing-page .btn-outline {
+  background: var(--lp-bg-card);
+  border-color: var(--lp-purple-soft);
+  color: var(--lp-purple);
+  box-shadow:
+    0 4px 12px rgba(8,28,58,0.13),
+    inset 0 1px 0 rgba(255,255,255,0.8);
+  transition: background 200ms ease, color 200ms ease, border-color 200ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.landing-page .btn-outline:hover {
+  background: var(--lp-purple);
+  border-color: var(--lp-purple);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(20,86,160,0.26), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.landing-page .btn-outline:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow: 0 2px 6px rgba(20,86,160,0.2), inset 0 1px 3px rgba(0,0,0,0.12);
+}
+.landing-page .btn-outline:focus-visible {
+  outline: none;
+  box-shadow:
+    0 4px 12px rgba(8,28,58,0.13),
+    inset 0 1px 0 rgba(255,255,255,0.8),
+    0 0 0 3px rgba(20,86,160,0.4);
+}
+
+/* Hero entrance stagger — label / heading / description / buttons, each
+   100ms after the previous, fade + slight rise, ease-out. Plays once on
+   mount (`both` keeps the final state after finishing). */
+.lp-reveal-in {
+  animation: lp-fade-up 600ms ease-out both;
+}
+.lp-reveal-in.d1 { animation-delay: 0ms; }
+.lp-reveal-in.d2 { animation-delay: 100ms; }
+.lp-reveal-in.d3 { animation-delay: 200ms; }
+.lp-reveal-in.d4 { animation-delay: 300ms; }
+@keyframes lp-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Scroll-reveal for sections — see components/Reveal.tsx. Starts hidden;
+   IntersectionObserver adds `.is-visible` once the section enters the
+   viewport. */
+.lp-scroll-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 500ms ease-out, transform 500ms ease-out;
+}
+.lp-scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal-in { animation: none; opacity: 1; transform: none; }
+  .lp-scroll-reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* Per-card stagger inside a revealed section (feature grid). A separate
+   wrapper per card, not the card itself — the card already owns `transform`
+   for its own hover-lift, and stacking a second unrelated `transform`
+   transition on the same element/property risks one rule's cascade order
+   silently winning over the other's hover state. */
+.stagger-item {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 500ms ease-out, transform 500ms ease-out;
+}
+.lp-scroll-reveal.is-visible .stagger-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+.stagger-item:nth-child(1) { transition-delay: 0ms; }
+.stagger-item:nth-child(2) { transition-delay: 100ms; }
+.stagger-item:nth-child(3) { transition-delay: 200ms; }
+.stagger-item:nth-child(4) { transition-delay: 300ms; }
+@media (prefers-reduced-motion: reduce) {
+  .stagger-item { opacity: 1; transform: none; transition: none; }
+}
+
+/* "How SafeHer Helps" — sequential step-by-step reveal (Emergency SOS →
+   Case Tracking → Secure Reporting → Support Resources), so the 4 cards
+   read as a process rather than an unordered feature grid. A dedicated
+   wrapper class rather than reusing .stagger-item above (this section's
+   timing + in-card glow choreography below is specific to it, and giving
+   it its own class keeps .stagger-item's other call site — the privacy
+   grid — untouched). */
+.feature-step-item {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 400ms var(--ease-premium), transform 400ms var(--ease-premium);
+}
+.lp-scroll-reveal.is-visible .feature-step-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+.feature-step-item:nth-child(1) { transition-delay: 0ms; }
+.feature-step-item:nth-child(2) { transition-delay: 250ms; }
+.feature-step-item:nth-child(3) { transition-delay: 500ms; }
+.feature-step-item:nth-child(4) { transition-delay: 750ms; }
+
+/* A single glowing dot (see .feature-flow-dot further below) travels
+   left to right along the track, pausing on each card in turn — only
+   ONE card is ever active at a time, unlike an earlier version of this
+   animation that left completed cards permanently tinted. When the dot
+   arrives, the card eases from its plain resting look to a soft
+   lavender→rose gradient wash with a gentle glow and a ~1.5% lift/scale;
+   when the dot moves on, the card eases back to fully neutral before its
+   next turn comes around. Timeline (of the shared 10250ms loop, matching
+   the dot's own travel/pause timing below): card1 active 0-1000ms, dot
+   travels 1000-2750ms, card2 active 2750-3750ms, travels to 5500ms,
+   card3 active 5500-6500ms, travels to 8250ms, card4 active
+   8250-9250ms, then a ~1000ms return while the dot fades back to card1's
+   position for the next lap. Four dedicated keyframes (not one shared
+   shape + delay) since the travel segments between cards aren't all
+   equal length (three 1750ms travels + one ~1000ms return), so the
+   activation windows can't be expressed as even phase-shifted copies of
+   one animation. animation-delay is 0 on all four. Lives on .feature-card
+   itself (not the wrapper above) since that's the element with the
+   background/border/shadow/transform to animate.
+
+   Hover safety: an *infinite* animation, unlike a one-shot one, never
+   "finishes" and hands control back — it keeps winning over a :hover
+   transition for the same property for as long as the page is open. So
+   :hover explicitly sets `animation: none` (see further below) to fully
+   remove this animation's grip on the property while the card is being
+   hovered, letting the hover style apply immediately instead of being
+   silently overridden by whatever phase the loop happened to be in. */
+@keyframes feature-card-active-1 {
+  0% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+  2% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  9.76% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  12% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+  100% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+}
+@keyframes feature-card-active-2 {
+  0%, 26.83% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+  28.29% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  36.59% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  39.02%, 100% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+}
+@keyframes feature-card-active-3 {
+  0%, 53.66% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+  55.12% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  63.41% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  65.85%, 100% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+}
+@keyframes feature-card-active-4 {
+  0%, 80.49% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+  81.95% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  90.24% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 14px 32px rgba(20,86,160,0.18), 0 0 22px rgba(47,128,201,0.16); transform: translateY(-3px) scale(1.015); }
+  92.68%, 100% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 12px 35px rgba(8,28,58,0.08); transform: translateY(0) scale(1); }
+}
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(1) .feature-card { animation: feature-card-active-1 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(2) .feature-card { animation: feature-card-active-2 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(3) .feature-card { animation: feature-card-active-3 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(4) .feature-card { animation: feature-card-active-4 10250ms linear infinite; }
+
+/* Icon scale-up + brighten, synced to the exact same windows as the card
+   backgrounds above (same 4-dedicated-keyframe reasoning). */
+@keyframes feature-icon-active-1 {
+  0% { transform: scale(1); filter: brightness(1); }
+  2% { transform: scale(1.12); filter: brightness(1.1); }
+  9.76% { transform: scale(1.12); filter: brightness(1.1); }
+  12%, 100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes feature-icon-active-2 {
+  0%, 26.83% { transform: scale(1); filter: brightness(1); }
+  28.29% { transform: scale(1.12); filter: brightness(1.1); }
+  36.59% { transform: scale(1.12); filter: brightness(1.1); }
+  39.02%, 100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes feature-icon-active-3 {
+  0%, 53.66% { transform: scale(1); filter: brightness(1); }
+  55.12% { transform: scale(1.12); filter: brightness(1.1); }
+  63.41% { transform: scale(1.12); filter: brightness(1.1); }
+  65.85%, 100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes feature-icon-active-4 {
+  0%, 80.49% { transform: scale(1); filter: brightness(1); }
+  81.95% { transform: scale(1.12); filter: brightness(1.1); }
+  90.24% { transform: scale(1.12); filter: brightness(1.1); }
+  92.68%, 100% { transform: scale(1); filter: brightness(1); }
+}
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(1) .feature-card-icon { animation: feature-icon-active-1 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(2) .feature-card-icon { animation: feature-icon-active-2 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(3) .feature-card-icon { animation: feature-icon-active-3 10250ms linear infinite; }
+.lp-scroll-reveal.is-visible .feature-step-item:nth-child(4) .feature-card-icon { animation: feature-icon-active-4 10250ms linear infinite; }
+
+/* !important is required, not optional — the loop's own animation-
+   assigning selectors (e.g. `.lp-scroll-reveal.is-visible
+   .feature-step-item:nth-child(2) .feature-card`) chain 5 classes and
+   out-specificity a plain `:hover` rule, so without it the loop keeps
+   running (and winning) right through the hover, silently discarding the
+   hover box-shadow/transform declared below. */
+.landing-page .feature-card:hover { animation: none !important; }
+.landing-page .feature-card:hover .feature-card-icon { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-step-item,
+  .lp-scroll-reveal.is-visible .feature-step-item {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .lp-scroll-reveal.is-visible .feature-step-item .feature-card,
+  .lp-scroll-reveal.is-visible .feature-step-item .feature-card-icon {
+    animation: none !important;
+  }
+}
+
+/* Progress connector — a permanent, static soft gradient rail (not an
+   animated fill; that was an earlier version of this design) with 3 tick
+   marks dividing it into the 4 steps, and a single small glowing dot
+   (.feature-flow-dot) that travels along it, pausing over each card in
+   turn — the position keyframes below match the card activation windows
+   above exactly. Desktop-only (4-column layout) — below that the cards
+   wrap/stack, where a single left-to-right rail no longer reads as "one
+   line under 4 cards in a row"; the cards' own activation glow above
+   already carries the step-by-step story at those sizes. No
+   `overflow: hidden` here (unlike the old fill-bar version) — the dot's
+   box-shadow glow needs to render past the 3px-tall rail's own bounds. */
+.feature-flow-track {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(20,86,160,0.16), rgba(47,128,201,0.16));
+}
+.feature-flow-tick {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lp-bg-card);
+  border: 1.5px solid var(--lp-border);
+  transform: translate(-50%, -50%);
+}
+/* Card-center math: .grid-4 below has 4 equal columns and 3×20px gaps
+   eating into the row's width, so a card's center is NOT simply at
+   12.5/37.5/62.5/87.5% of the row — that ignores the gaps entirely and
+   drifts further off at every viewport width as the gap-to-width ratio
+   changes. .feature-flow-track shares the exact same width as .grid-4
+   (both are plain children of the same .container, no differing
+   padding/margin), so column width = (100% - 60px) / 4, and card i's
+   (0-indexed) center = i*(column + 20px) + column/2 — expressed below as
+   exact calc() so the dot lands precisely on every card's center at any
+   width, not just an eyeballed approximation. */
+:root {
+  --feat-card-0: calc((100% - 60px) / 8);
+  --feat-card-1: calc((100% - 60px) * 3 / 8 + 20px);
+  --feat-card-2: calc((100% - 60px) * 5 / 8 + 40px);
+  --feat-card-3: calc((100% - 60px) * 7 / 8 + 60px);
+}
+.feature-flow-dot {
+  position: absolute;
+  top: 50%;
+  left: var(--feat-card-0);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lp-purple);
+  box-shadow: 0 0 0 4px rgba(20,86,160,0.15), 0 0 10px rgba(20,86,160,0.5);
+  transform: translate(-50%, -50%);
+}
+/* Rests over each card's exact horizontal center (see --feat-card-N
+   above) for the same duration as that card's own activation window,
+   travels to the next during the gaps, then fades out and quietly resets
+   to the start for the next lap rather than visibly sliding backward
+   across all 4 cards (which would read as "undoing progress" instead of
+   "starting a new pass"). */
+@keyframes feature-flow-dot-travel {
+  0% { left: var(--feat-card-0); opacity: 1; }
+  9.76% { left: var(--feat-card-0); opacity: 1; }
+  26.83% { left: var(--feat-card-1); opacity: 1; }
+  36.59% { left: var(--feat-card-1); opacity: 1; }
+  53.66% { left: var(--feat-card-2); opacity: 1; }
+  63.41% { left: var(--feat-card-2); opacity: 1; }
+  80.49% { left: var(--feat-card-3); opacity: 1; }
+  90.24% { left: var(--feat-card-3); opacity: 1; }
+  92.68% { left: var(--feat-card-3); opacity: 0; }
+  93.66% { left: var(--feat-card-0); opacity: 0; }
+  100% { left: var(--feat-card-0); opacity: 1; }
+}
+.lp-scroll-reveal.is-visible .feature-flow-dot {
+  animation: feature-flow-dot-travel 10250ms linear infinite;
+}
+@media (max-width: 960px) {
+  .feature-flow-track { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feature-flow-dot { animation: none !important; opacity: 0 !important; }
+}
+
+/* Kept as its own class instead of reusing .stagger-item so the About
+   section's timing (absolute delays, tied to the heading/paragraphs above
+   it settling first, not a self-contained 0-260ms stagger — see the full
+   timeline near .about-ambient-photo below) stays independent of the
+   privacy grid, .stagger-item's remaining call site. */
+.stagger-item-left {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 380ms var(--ease-premium), transform 380ms var(--ease-premium);
+}
+.lp-scroll-reveal.is-visible .stagger-item-left {
+  opacity: 1;
+  transform: translateY(0);
+}
+.stagger-item-left:nth-child(1) { transition-delay: 140ms; }
+.stagger-item-left:nth-child(2) { transition-delay: 190ms; }
+.stagger-item-left:nth-child(3) { transition-delay: 240ms; }
+@media (prefers-reduced-motion: reduce) {
+  .stagger-item-left,
+  .lp-scroll-reveal.is-visible .stagger-item-left {
+    transform: none;
+  }
+}
+
+/* About section — three short support-point cards filling the space
+   beside the description (Confidential Support / Accessible Assistance /
+   Secure Case Management). Same lift-on-hover language as feature cards,
+   kept smaller/quieter since this section isn't the main feature grid. */
+/* About section — tighter than the default .section-sm padding
+   (56px) since this section's content (heading, two paragraphs, three
+   point cards) doesn't need that much breathing room; the reduction is
+   scoped to this section only so other .section-sm sections are unaffected. */
+.landing-page .about-section { padding-top: 24px; padding-bottom: 24px; }
+@media (max-width: 640px) {
+  .landing-page .about-section { padding-top: 20px; padding-bottom: 20px; }
+}
+
+/* Card surface + Soft Glow & Lift hover are shared, identically, by all 5
+   interactive cards in this section (these 3 feature cards + the 2
+   institutional/context cards below) — see the grouped hover rule near
+   .institutional-card for the single source of truth on the hover values.
+   The main About panel is deliberately excluded from hover (it's a static
+   content block, not an interactive card). */
+.landing-page .about-point-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: rgba(255, 253, 252, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--lp-border);
+  box-shadow: 0 8px 20px rgba(8,28,58,0.1);
+  transition: transform 350ms var(--ease-premium), box-shadow 350ms var(--ease-premium),
+    background-color 350ms var(--ease-premium), border-color 350ms var(--ease-premium);
+}
+
+/* Icon has no entrance animation of its own — it simply appears with its
+   parent card's single fade+rise (an element's own opacity:1 still renders
+   faded while an ancestor's opacity is <1, so this stays in sync for free
+   without a second choreographed stage). Hover-scale is the only motion it
+   ever gets on its own. */
+.about-point-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lp-lavender-pale);
+  transition: transform 220ms var(--ease-premium);
+}
+.landing-page .about-point-card:hover .about-point-icon {
+  transform: scale(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-page .about-point-card:hover,
+  .landing-page .about-point-card:hover .about-point-icon {
+    transform: none;
+  }
+}
+
+/* Cards */
+.landing-page .card {
+  background: var(--lp-bg-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgba(8,28,58,0.08);
+}
+.landing-page .feature-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  transition: transform 320ms var(--ease-premium), box-shadow 320ms var(--ease-premium),
+    border-color 320ms var(--ease-premium), background 320ms var(--ease-premium);
+}
+/* Same hover treatment on all 4 cards — a gentle lift, a soft diffused
+   shadow, and a purple accent glow/border, matching the "Soft Glow &
+   Lift" language used elsewhere on this page. Kept subtle (a smaller
+   lift than the old -8px) since these cards also carry the sequential
+   entrance glow below; hover shouldn't compete with that in intensity. */
+.landing-page .feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(8,28,58,0.14), 0 0 20px rgba(20,86,160,0.18);
+  border-color: var(--lp-lavender);
+  background: var(--lp-lavender-pale);
+}
+.landing-page .feature-card:hover .feature-card-icon { transform: scale(1.08); }
+.landing-page .feature-card-icon { transition: transform 220ms ease; }
+
+/* Small accent line, bottom-left of each card — a quiet hint of
+   interactivity without turning the whole card into a button. */
+.feature-card-accent {
+  position: absolute;
+  left: 24px;
+  bottom: 16px;
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--lp-purple);
+  transition: width 300ms ease;
+}
+.landing-page .feature-card:hover .feature-card-accent { width: 60px; }
+
+/* Button icon — arrow/shield glyph inside .btn-primary/.btn-outline that
+   nudges slightly on hover. */
+.btn-icon { display: inline-flex; transition: transform 200ms ease; }
+.landing-page .btn-primary:hover .btn-icon { transform: translateX(3px); }
+
+/* Privacy hero/CTA section — a touch more top/bottom padding than the
+   shared .section-sm gives every other .section-sm on the page, so this
+   "closing statement" section reads as a deliberate, spacious moment
+   rather than vertically compressed like a routine content block. */
+.privacy-cta-section { padding-top: 72px; padding-bottom: 72px; }
+@media (max-width: 640px) {
+  .privacy-cta-section { padding-top: 56px; padding-bottom: 56px; }
+}
+
+/* White-on-purple button variant — Final CTA section only, sits on a dark
+   deep blue CTA background where the usual blue-on-light .btn-primary
+   would disappear. Rest-state shadow (not just on hover) so it reads as
+   sitting slightly above the gradient even before interaction; hover adds
+   a small lift + a very subtle scale + a soft blue glow layered under
+   the existing neutral shadow, rather than swapping to a plain dark one. */
+.landing-page .btn-on-dark {
+  background: #fff;
+  color: #0B3A82;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(8,28,58,0.22);
+  transition: background var(--duration-micro) ease, transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease;
+}
+.landing-page .btn-on-dark:hover {
+  background: #EAF3FB;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(8,28,58,0.24), 0 0 16px rgba(47,128,201,0.3);
+}
+
+/* Navbar */
+/* Fully opaque at every scroll position, not just once "scrolled" past 8px
+   — it used to be transparent-until-scrolled and even then only 88%
+   opaque, which let hero content (glow, callouts) bleed faintly through it
+   as the hero scrolled underneath. z-index bumped well above any hero
+   layer (hero content tops out at 3) so there's no ambiguity. */
+.landing-page .site-header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--lp-bg-card);
+  border-bottom: 1px solid transparent;
+  /* Subtle floating shadow at rest too, not just once scrolled — reads as
+     a bar sitting slightly above the page rather than flush with it. */
+  box-shadow: 0 2px 10px rgba(8,28,58,0.05);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.landing-page .site-header.scrolled {
+  border-bottom-color: rgba(8,28,58,0.08);
+  box-shadow: 0 6px 20px rgba(8,28,58,0.09);
+}
+.site-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 56px;
+  min-height: 88px;
+  position: relative;
+}
+@media (max-width: 960px) {
+  .site-header-inner { padding: 0 32px; min-height: 76px; }
+}
+@media (max-width: 640px) {
+  .site-header-inner { padding: 0 20px; min-height: 68px; }
+}
+.landing-page .nav-link {
+  position: relative; color: var(--lp-text-primary); font-weight: 600; font-size: 15px; padding-bottom: 3px;
+  transition: color 200ms ease;
+}
+.landing-page .nav-link::after {
+  content: ''; position: absolute; left: 0; bottom: 0; width: 100%; height: 2px;
+  background: var(--lp-purple-soft); transform: scaleX(0); transform-origin: left;
+  transition: transform 200ms ease;
+}
+.landing-page .nav-link:hover { color: var(--lp-purple); }
+.landing-page .nav-link:hover::after { transform: scaleX(1); }
+.landing-page .nav-link.active { color: var(--lp-purple); }
+.landing-page .nav-link.active::after { transform: scaleX(1); }
+
+.nav-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: 1.5px solid var(--lp-purple-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+.nav-menu-toggle:hover { background: var(--lp-lavender-pale); }
+.nav-menu-toggle.open { border-color: var(--lp-purple); }
+
+/* Hamburger → X: three independent bars, each animating its own
+   top/rotation, rather than swapping two unrelated icon glyphs — that's
+   what makes it read as a smooth morph instead of a jump-cut. */
+.hamburger-box { position: relative; width: 18px; height: 12px; display: block; }
+.hamburger-bar {
+  position: absolute; left: 0; width: 100%; height: 2px; border-radius: 2px;
+  background: var(--lp-purple);
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), top 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease;
+}
+.hamburger-bar:nth-child(1) { top: 0; }
+.hamburger-bar:nth-child(2) { top: 5px; }
+.hamburger-bar:nth-child(3) { top: 10px; }
+.nav-menu-toggle.open .hamburger-bar:nth-child(1) { top: 5px; transform: rotate(45deg); }
+.nav-menu-toggle.open .hamburger-bar:nth-child(2) { opacity: 0; }
+.nav-menu-toggle.open .hamburger-bar:nth-child(3) { top: 5px; transform: rotate(-45deg); }
+
+.nav-links-row { display: flex; align-items: center; gap: 28px; }
+
+@media (max-width: 880px) {
+  .nav-menu-toggle { display: inline-flex; }
+  .nav-links-row {
+    position: absolute; top: calc(100% + 10px); left: 16px; right: 16px;
+    flex-direction: column; align-items: stretch; gap: 3px;
+    background: rgba(255, 253, 252, 0.92);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid var(--lp-border);
+    border-radius: 16px;
+    padding: 10px;
+    box-shadow: 0 18px 40px rgba(68, 52, 119, 0.18);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 200ms ease, transform 200ms ease, visibility 200ms;
+  }
+  .nav-links-row.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .landing-page .nav-link {
+    padding: 13px 14px;
+    border-radius: 10px;
+    width: 100%;
+    transition: color 180ms ease, background 180ms ease, transform 120ms ease;
+  }
+  .landing-page .nav-link:hover { background: var(--lp-lavender-pale); }
+  .landing-page .nav-link:active { transform: scale(0.98); }
+  .landing-page .nav-link::after { display: none; }
+  /* Underline doesn't read well on a full-width stacked item — a left
+     accent bar + soft tint fills the same "you are here" role. */
+  .landing-page .nav-link.active {
+    background: var(--lp-lavender-pale);
+    padding-left: 22px;
+  }
+  .landing-page .nav-link.active::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--lp-purple);
+  }
+  .nav-links-row .nav-admin-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+  }
+}
+
+/* Admin Portal nav CTA — same restrained tactile depth as the auth-page
+   buttons (see "Admin auth pages" section below): a raised resting shadow,
+   lift + stronger shadow on hover, a slight downward press on click. Layered
+   on top of .btn-outline's existing fill-on-hover so the button still reads
+   as secondary/outline at rest, just less flat. */
+.nav-admin-btn {
+  position: relative;
+  box-shadow: 0 1px 2px rgba(20,86,160,0.06), 0 4px 10px rgba(20,86,160,0.08);
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease, background var(--duration-micro) ease, color var(--duration-micro) ease;
+}
+.nav-admin-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(20,86,160,0.12), 0 6px 14px rgba(20,86,160,0.18);
+}
+.nav-admin-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(20,86,160,0.1);
+}
+
+/* Desktop nav — true 3-column centering via grid (1fr auto 1fr's cousin:
+   auto 1fr auto, since the outer columns should hug their own content,
+   not share the leftover space evenly). Grid auto-placement handles this
+   without explicit grid-column on each child: the hamburger toggle is
+   display:none up here, so it's skipped entirely and the three remaining
+   visible children (logo, nav-links-row, the desktop admin button) land in
+   columns 1/2/3 in DOM order — which is exactly that order already. */
+.nav-admin-btn-desktop { display: none; }
+@media (min-width: 881px) {
+  .site-header-inner { display: grid; grid-template-columns: auto 1fr auto; }
+  .nav-links-row { justify-content: center; }
+  .nav-links-row .nav-admin-btn-mobile { display: none; }
+  .nav-admin-btn-desktop { display: inline-flex; }
+}
+
+/* Ambient background blobs — each drifts on a different axis/duration
+   (12-20s, matching the brief) so they never move in lockstep. Movement is
+   20-50px, `alternate` direction on a simple two-point keyframe, exactly as
+   specified rather than a busier multi-stop path. */
+.bg-blob-h { position: absolute; border-radius: 50%; filter: blur(1px); animation: float-h 14s ease-in-out infinite alternate; }
+.bg-blob-v { position: absolute; border-radius: 50%; filter: blur(1px); animation: float-v 18s ease-in-out infinite alternate; }
+.bg-blob-d { position: absolute; border-radius: 50%; filter: blur(1px); animation: float-d 20s ease-in-out infinite alternate; }
+.bg-blob-h2 { position: absolute; border-radius: 50%; filter: blur(1px); animation: float-v 12s ease-in-out infinite alternate; }
+@keyframes float-h {
+  from { transform: translateX(0); }
+  to { transform: translateX(38px); }
+}
+@keyframes float-v {
+  from { transform: translateY(0); }
+  to { transform: translateY(-32px); }
+}
+@keyframes float-d {
+  from { transform: translate(0, 0); }
+  to { transform: translate(26px, -24px); }
+}
+
+/* Tiny floating particle dots — four movement styles (up, down, sideways,
+   fade-in/out) at three durations so the field reads as organic rather
+   than mechanical. */
+.bg-particle { position: absolute; border-radius: 50%; }
+.bg-particle.p1 { animation: particle-up 12s ease-in-out infinite; }
+.bg-particle.p2 { animation: particle-down 16s ease-in-out infinite; }
+.bg-particle.p3 { animation: particle-sideways 20s ease-in-out infinite; }
+.bg-particle.p4 { animation: particle-fade 14s ease-in-out infinite; }
+@keyframes particle-up {
+  0%, 100% { transform: translateY(0); opacity: 0.15; }
+  50% { transform: translateY(-16px); opacity: 0.35; }
+}
+@keyframes particle-down {
+  0%, 100% { transform: translateY(0); opacity: 0.15; }
+  50% { transform: translateY(14px); opacity: 0.3; }
+}
+@keyframes particle-sideways {
+  0%, 100% { transform: translateX(0); opacity: 0.18; }
+  50% { transform: translateX(16px); opacity: 0.32; }
+}
+@keyframes particle-fade {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.35; }
+}
+@media (max-width: 640px) {
+  .bg-particle { display: none; }
+  .bg-blob-h, .bg-blob-v, .bg-blob-d, .bg-blob-h2 { animation-duration: 26s; }
+  .shield-group { width: 230px; height: 230px; }
+  .floating-chip { width: 32px; height: 32px; }
+}
+
+/* Hero security visual — three rings, each its own speed and base opacity
+   (low / very low / extremely faint) so they read as layered depth rather
+   than one repeated ripple. */
+.shield-group {
+  position: relative;
+  width: 300px; height: 300px;
+  max-width: 100%; max-height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+/* Compact crest variant for the centered hero — compound selector so it
+   reliably wins over the plain .shield-group sizing above regardless of
+   source order, rather than relying on which rule happens to come last. */
+.shield-group.hero-shield-crest {
+  width: 180px;
+  height: 180px;
+  margin-bottom: 16px;
+}
+@media (max-width: 640px) {
+  .shield-group.hero-shield-crest { width: 145px; height: 145px; margin-bottom: 14px; }
+}
+/* Combined float + gentle scale pulse — a compound selector so this
+   overrides the shared .shield-badge animation (used elsewhere, e.g. the
+   admin login page's shield mark) only in this specific hero context,
+   without touching that other usage. One keyframe carries both effects;
+   two separate animations both writing to `transform` on the same element
+   would silently replace each other rather than combine. */
+.hero-shield-crest .shield-badge {
+  animation: shield-crest-pulse 4.5s ease-in-out infinite;
+}
+@keyframes shield-crest-pulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.015); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-shield-crest .shield-badge { animation: none; }
+}
+/* ---- Protective ring pulse — two rings, identical shape, started
+   half a cycle apart so there's always one quietly expanding (never a
+   synchronized double-flash). Each starts close to the shield, grows
+   outward a modest amount, and fades out before it would read as
+   "reaching" for anything — a reassurance cue, not a measurement or a
+   radar sweep. This replaces an earlier four-node orbital system
+   (small nodes continuously circling the shield on a fixed ring, each
+   with its own connector) — that read as a network/security-product
+   diagram; a plain expanding-and-fading ring reads as protection
+   instead, which is the actual brief for a public-service hero. ---- */
+.shield-pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 1px solid var(--lp-purple-soft);
+  opacity: 0;
+  animation: shield-ring-expand 5s ease-out infinite;
+}
+.shield-pulse-ring.ring-b { animation-delay: 2.5s; }
+@keyframes shield-ring-expand {
+  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0.32; }
+  70% { opacity: 0.07; }
+  100% { transform: translate(-50%, -50%) scale(1.35); opacity: 0; }
+}
+@media (max-width: 640px) {
+  .shield-pulse-ring { width: 112px; height: 112px; }
+}
+
+.shield-glow {
+  animation: glow-pulse 4s ease-in-out infinite;
+  transition: opacity 250ms ease;
+}
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.6; }
+}
+.shield-group:hover .shield-glow { opacity: 0.75; }
+
+.shield-badge {
+  animation: shield-idle-float 5.5s ease-in-out infinite;
+  transition: transform 250ms ease;
+}
+@keyframes shield-idle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.shield-group:hover .shield-badge { transform: scale(1.02); }
+
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--lp-purple); font-size: 12px; font-weight: 600;
+  margin-top: 14px;
+}
+
+/* Soft halo behind the shield — a plain filled disc (white center
+   fading to a very light blue edge), not glassmorphism: no
+   backdrop-filter/frosted-glass surface, which the government-style
+   brief explicitly asks to avoid. A slow opacity+scale breathe is the
+   only motion; nothing drifts or rotates. */
+.hero-glass-orb {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #FFFFFF 0%, #F5F9FD 55%, var(--lp-lilac) 100%);
+  border: 1px solid rgba(255,255,255,0.7);
+  box-shadow: 0 16px 36px rgba(8,28,58,0.1);
+  animation: halo-breathe 5s ease-in-out infinite;
+}
+@keyframes halo-breathe {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+.hero-glass-orb.hero-glass-orb-sm { width: 150px; height: 150px; }
+@media (max-width: 640px) {
+  .hero-glass-orb.hero-glass-orb-sm { width: 120px; height: 120px; }
+}
+
+/* ---- Protection pathways (HeroConnections.tsx) — four thin curves tying
+   the corner labels below to this halo, each carrying its own continuous
+   flowing current. Back to four independent paths (no merged/hidden
+   routing path, no mask, no hub-to-hub hops, no new connecting geometry —
+   an earlier version of this effect tried combining all four into one
+   loop; this one deliberately doesn't) — the four `.connection-path-base`
+   curves are exactly the visible geometry, unchanged and static.
+
+   Each `.connection-path-highlight` is its own long dash (`--dash`, ~40%
+   of that path's own length) with a SHORT gap (`--gap`, ~60% of the same
+   length) — dash+gap together equal exactly one path-length, so the
+   pattern completes one full repeat over the path itself. That's what
+   keeps part of the current visible on every path at every moment: as
+   one period's dash slides off the end, the next period's dash is
+   already sliding in behind it, because the pattern wraps within the
+   path's own length rather than hiding in a long empty gap. Each path
+   loops this way forever and independently — never resets, never drops
+   to zero opacity, never waits. `--delay` only offsets WHERE each path
+   currently is in its own identical, endless loop (via animation-delay),
+   staggered by PULSE_SEQUENCE order so the eye still reads a directional
+   progression (reporting -> support -> shelter -> SOS) — it does not
+   create any pause, since all four are moving at all times regardless. */
+.hero-connections {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+.connection-path-base,
+.connection-path-highlight {
+  fill: none;
+  stroke-linecap: round;
+}
+.connection-path-base {
+  stroke: var(--lp-purple-soft);
+  stroke-width: 1.25;
+  opacity: 0.14;
+}
+.connection-path-highlight {
+  stroke: var(--lp-purple-soft);
+  stroke-width: 2.5;
+  stroke-dasharray: var(--dash) var(--gap);
+  filter: drop-shadow(0 0 4px rgba(47,128,201,0.5));
+  opacity: 0.6;
+  animation: pathway-current 5s linear infinite;
+  animation-delay: var(--delay);
+}
+/* --dash + --gap (above) sum to exactly one path length (--neg-len's
+   magnitude), so sweeping the offset by that amount is exactly one
+   pattern period — the frame at 100% is pixel-identical to the frame at
+   0%, which is what makes the infinite loop invisible as a loop. All
+   three custom properties arrive pre-multiplied from HeroConnections, not
+   computed here via calc(var(...)) — see that file for why. 5s per
+   individual path, inside the 4-6s target; `linear` throughout, no ease,
+   so speed never visibly changes. */
+@keyframes pathway-current {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: var(--neg-len); }
+}
+/* The shield stays the calm, stationary anchor — explicitly NOT pulsed
+   or flashed as the current passes near it. Only halo-breathe (its own
+   slow, independent idle animation, unrelated to the pathways) remains. */
+@media (max-width: 1200px) {
+  .connection-path-base { opacity: 0.1; }
+  .connection-path-highlight { opacity: 0.45; }
+}
+@media (max-width: 960px) {
+  .hero-connections { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-path-highlight { animation: none !important; opacity: 0; }
+}
+
+/* Hero corner labels (HeroCallouts.tsx) — four small trust signals that
+   simply fade in once near the shield's own cluster. HeroConnections
+   (above) draws the curved pathways toward the halo from these same
+   label positions; this file only handles the label chips themselves.
+   Plain CSS percentage positioning. */
+.hero-callouts { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.hero-callout-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lp-text-primary);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+.hero-callout-label.is-visible { opacity: 1; }
+.hero-callout-label svg { color: var(--lp-purple); flex-shrink: 0; }
+/* Below this width the centered hero content itself takes most of the
+   width — corner callouts would overlap the heading/buttons rather than
+   framing them, so they're hidden entirely instead of trying to cram them
+   in (the shield crest + heading + CTAs already form a complete hero on
+   their own). */
+@media (max-width: 960px) {
+  .hero-callouts { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-callout-label { transition: none !important; }
+}
+@media (max-width: 640px) {
+  .hero-centered { padding: 32px 20px !important; }
+}
+/* Floating security icons — each gets its own movement type, duration, and
+   delay so they read as independent rather than synchronized. Positioning
+   (the outer element) and the hover response (the inner element) are two
+   separate DOM nodes on purpose: an element can't smoothly combine a
+   looping keyframe animation and a hover-triggered transition on the same
+   `transform` without one fighting the other. */
+.floating-chip { position: absolute; width: 40px; height: 40px; }
+.chip-lock { animation: chip-vertical 4s ease-in-out infinite; }
+.chip-shield { animation: chip-diagonal 5s ease-in-out infinite; }
+.chip-location { animation: chip-gentle 6s ease-in-out infinite; }
+.chip-heart { animation: chip-pulse 7s ease-in-out infinite; }
+@keyframes chip-vertical { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-11px); } }
+@keyframes chip-diagonal { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(7px, -9px); } }
+@keyframes chip-gentle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes chip-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
+.chip-inner {
+  width: 100%; height: 100%; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.floating-chip:hover .chip-inner {
+  transform: scale(1.15) rotate(6deg);
+  box-shadow: 0 0 0 4px rgba(20,86,160,0.15), 0 10px 22px rgba(8,28,58,0.2);
+}
+
+/* CSS-only tooltip via data-tooltip, no JS state or extra library. */
+.floating-chip[data-tooltip] {
+  --tooltip-visible: 0;
+}
+.floating-chip[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #172033;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 5;
+}
+.floating-chip[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* App Preview — three CSS phone frames (center Home screen raised and
+   larger, SOS/Case Tracking flanking it, tilted slightly for depth). Pure
+   CSS device chrome, not a real screenshot, so it never goes stale when the
+   actual app UI changes; the screens inside are built from the real
+   copy/labels/status vocabulary of the shipped Home, SOS, and Case Tracking
+   screens. */
+.app-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 0 4px;
+}
+.phone-mockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: transform 300ms ease;
+}
+.phone-mockup.side-left { transform: translateY(30px) rotate(-6deg); }
+.phone-mockup.side-right { transform: translateY(30px) rotate(6deg); }
+.phone-mockup.center { position: relative; z-index: 2; }
+.app-preview-row:hover .phone-mockup.side-left { transform: translateY(20px) rotate(-8deg); }
+.app-preview-row:hover .phone-mockup.side-right { transform: translateY(20px) rotate(8deg); }
+.phone-frame {
+  position: relative;
+  width: 208px;
+  height: 424px;
+  border-radius: 34px;
+  background: #172033;
+  padding: 9px;
+  box-shadow: 0 30px 54px rgba(8,28,58,0.28), 0 6px 16px rgba(8,28,58,0.16);
+}
+.phone-mockup.center .phone-frame { width: 232px; height: 472px; }
+.phone-notch {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 72px;
+  height: 16px;
+  background: #172033;
+  border-radius: 0 0 12px 12px;
+  z-index: 3;
+}
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  background: var(--lp-bg-soft-gray);
+  position: relative;
+}
+.phone-home-indicator {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 54px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.35);
+  z-index: 3;
+}
+.phone-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lp-purple);
+  background: var(--lp-bg-card);
+  border: 1px solid var(--lp-border);
+  padding: 5px 14px;
+  border-radius: 999px;
+}
+
+/* Scroll-drawn connector between the phone frame and its label — a short
+   stroke-dashoffset reveal rather than an instant appear. */
+.phone-connector line {
+  stroke: var(--lp-purple-soft);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 18;
+  stroke-dashoffset: 18;
+  transition: stroke-dashoffset 450ms ease;
+}
+.phone-connector.is-drawn line { stroke-dashoffset: 0; }
+@media (max-width: 860px) {
+  .phone-mockup.side-left, .phone-mockup.side-right { display: none; }
+  .phone-mockup.center .phone-frame { width: 220px; height: 448px; }
+}
+
+/* Footer — brand column plus two link columns under short uppercase
+   headings ("Quick Links" / "Admin"), collapsing to a single stacked
+   column on mobile. */
+.landing-page .footer-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 40px;
+  align-items: start;
+}
+.landing-page .footer-heading {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 14px;
+}
+.landing-page .footer-link {
+  display: block;
+  width: fit-content;
+  font-size: 13px;
+  color: rgba(255,255,255,0.85);
+  padding: 5px 0;
+  transition: color 150ms ease;
+}
+.landing-page .footer-link:hover { color: #fff; }
+@media (max-width: 640px) {
+  .landing-page .footer-grid { grid-template-columns: 1fr; gap: 28px; }
+}
+
+/* Hero / About / Privacy two-column splits stack earlier than the generic
+   4-column grids (which break at 960px) — at two columns of ~500px a 52px
+   headline or a 3-card About list gets cramped well before then. Scoped
+   under .landing-page so the shared .grid-2 utility (unused elsewhere on
+   this page, but generic) isn't silently changed for future use. */
+@media (max-width: 880px) {
+  .landing-page .lp-split { grid-template-columns: 1fr !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .bg-blob-h, .bg-blob-v, .bg-blob-d, .bg-blob-h2, .bg-particle,
+  .shield-pulse-ring, .shield-glow, .shield-badge, .floating-chip,
+  .hero-glass-orb {
+    animation: none !important;
+  }
+  /* The halo and shield stay fully visible at their resting state; the
+     two protective rings are hidden outright (rather than frozen
+     mid-expansion at some arbitrary scale/opacity) since a ring paused
+     partway through fading out would just look like a stray static
+     circle, not a deliberate part of the composition. The hero still
+     reads as complete — shield + halo — without any of the motion. */
+  .shield-pulse-ring { display: none; }
+  .phone-connector line { transition: none !important; stroke-dashoffset: 0 !important; }
+  .landing-page .feature-card:hover,
+  .landing-page .about-point-card:hover,
+  .floating-chip:hover .chip-inner,
+  .shield-group:hover .shield-badge {
+    transform: none;
+  }
+  /* Buttons keep their hover-lift and press-down feedback under reduced
+     motion — it's small, functional state feedback rather than decorative
+     motion — but it happens as an instant cut rather than an animated
+     transition, per the "no transition, instant state change" brief. */
+  .landing-page .btn-primary,
+  .landing-page .btn-outline,
+  .nav-admin-btn {
+    transition: none !important;
+  }
+  .phone-mockup,
+  .phone-mockup.side-left,
+  .phone-mockup.side-right,
+  .app-preview-row:hover .phone-mockup.side-left,
+  .app-preview-row:hover .phone-mockup.side-right {
+    transition: none;
+    transform: none;
+  }
+  .hamburger-bar,
+  .nav-links-row,
+  .landing-page .nav-link {
+    transition: none !important;
+  }
+  .landing-page .nav-link:active { transform: none; }
+}
+
+/* =========================================================
+   Admin auth pages (login / forgot / reset password) — the
+   split-screen shell shared by all of AuthPages.tsx. Reuses the
+   unscoped bg-blob, floating-chip, and glow-pulse keyframes already
+   defined above for the public landing page, just re-colored for
+   the deep-blue brand panel (see AuthBackground.tsx) — the same
+   --sidebar-bg/--sidebar-bg-raised anchor used by the authenticated
+   shell's sidebar, so sign-in reads as the entrance to that same
+   system rather than a differently-branded gate in front of it.
+   ========================================================= */
+/* 45/55 split (not an even 50/50) — the institutional panel only needs to
+   carry a wordmark, a title, and two lines of description now that the
+   feature list is gone, so the form earns the larger share. */
+.admin-split { grid-template-columns: 0.85fr 1fr; }
+/* Deep government blue, plus two large soft light pools layered on top
+   (upper-left bright white, lower-right pale-sky-blue) for restrained
+   depth beyond a flat fill — a 2-stop gradient rather than a multi-stop
+   sweep, per the minimalist brief. */
+.admin-split-brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 72px 60px;
+  color: #fff;
+  /* One simple entrance for the whole panel, replacing what used to be
+     seven separately-delayed child animations cascading over ~1.6s —
+     fast and subtle reads as "the interface responded", not "watch
+     this sequence" (see the panel's own children below, now static). Pure
+     opacity fade, no translate — the form card (below) carries the only
+     movement, so the two don't compete for "what just moved." */
+  animation: auth-fade-in var(--duration-page) var(--ease-out) both;
+  background:
+    radial-gradient(ellipse 60% 45% at 20% 12%, rgba(255,255,255,0.08), transparent 60%),
+    radial-gradient(ellipse 55% 42% at 88% 82%, rgba(191,219,245,0.14), transparent 60%),
+    linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-raised) 60%, #15529E 100%);
+}
+/* ::before/::after here carry the soft glow behind the form card (below),
+   kept on the wrapper rather than the card itself so they sit behind it
+   without needing an extra DOM node. */
+/* Soft ambient glow instead of the flat --color-bg, echoing the same
+   layered-radial-gradient language used elsewhere — a faint blue wash
+   upper-left, a whisper of the accent blue lower-right, over the
+   existing page background. */
+.admin-split-form {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 28% 20%, rgba(225,237,248,0.55), transparent 55%),
+    radial-gradient(circle at 82% 85%, rgba(47,128,201,0.08), transparent 50%),
+    var(--color-bg);
+}
+/* Static — a government/public-service login shouldn't keep moving after
+   it's loaded (see .admin-split-brand's entrance comment above and
+   AuthBackground.tsx); these two soft pools used to pulse forever via
+   glow-pulse, which is exactly the "continuously animated login page"
+   this design now deliberately avoids. */
+.admin-split-form::before,
+.admin-split-form::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(50px);
+}
+.admin-split-form::before {
+  width: 280px; height: 280px; top: 8%; right: 8%;
+  background: rgba(20,86,160,0.10);
+}
+.admin-split-form::after {
+  width: 200px; height: 200px; bottom: 10%; left: 10%;
+  background: rgba(47,128,201,0.08);
+}
+
+
+/* Brand panel composition — wordmark (top), title + description (middle,
+   vertically centered within the remaining space), footer caption
+   (bottom). Anchoring content at all three zones instead of one big
+   centered block is what actually uses the panel's height intentionally
+   rather than leaving large flat gaps above and below a centered cluster. */
+.auth-brand-top { position: relative; z-index: 1; flex-shrink: 0; }
+.auth-brand-middle { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+.auth-brand-bottom { position: relative; z-index: 1; flex-shrink: 0; }
+
+.auth-brand-footer {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0.02em;
+}
+
+/* Back-to-home button — fixed to the true top-left of the viewport (not
+   inside either panel) so it stays put even when the panels reorder on
+   mobile. Solid white/cream chip rather than a translucent one so it
+   reads clearly whether it's sitting over the dark purple panel or the
+   white form background. Layered inset highlight + graduated shadow gives
+   it the same raised-surface feel as the primary buttons, just quieter. */
+.auth-back-btn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0) 60%), var(--color-surface);
+  color: var(--color-primary-dark);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 8px 14px 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 2px 4px rgba(10,26,48,0.08), 0 6px 14px rgba(10,26,48,0.12);
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease, background var(--duration-micro) ease;
+}
+.auth-back-btn:hover {
+  background: var(--color-primary-light);
+  transform: translateY(-1px) translateX(-1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 8px rgba(10,26,48,0.1), 0 10px 22px rgba(20,86,160,0.18);
+}
+.auth-back-btn:active {
+  transform: translateY(1px) translateX(-1px) scale(0.98);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(10,26,48,0.1);
+}
+@media (max-width: 640px) {
+  .auth-back-btn { top: 14px; left: 14px; padding: 7px 12px 7px 10px; }
+}
+
+/* No logo badge here anymore — SafeSpace has no official logo yet, and the
+   brand panel now identifies itself with a plain text wordmark
+   (AuthWordmark in AuthPages.tsx) rather than an icon mark that risks
+   conflicting with whatever gets designed later. */
+
+/* Form card — a government-form surface, not a floating dashboard panel:
+   a plain neutral border carries the edge (rather than a shadow doing all
+   the work), radius is moderate rather than "rounded card", and the shadow
+   is just enough to read as sitting slightly above the page. */
+.admin-split-form-inner {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px 36px;
+  border: 1px solid var(--color-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.6),
+    0 1px 3px rgba(10,26,48,0.04),
+    0 12px 28px -14px rgba(10,26,48,0.14);
+  /* Short, small-amplitude entrance (fade + 6px rise) — see auth-fade-up's
+     own comment for why 6px, not the 18px this used to carry; a 380ms
+     delay here used to exist specifically so this animation wouldn't
+     finish until after the card itself had fully appeared via a separate,
+     slower sequence — no longer needed now that the delay is tiny and the
+     whole thing wraps up in well under 300ms. */
+  animation: auth-fade-up 260ms 60ms var(--ease-out) both;
+  position: relative;
+  z-index: 1;
+}
+.admin-split-form-inner .input {
+  min-height: 50px;
+  border-radius: 12px;
+  border-color: var(--color-border);
+  transition: border-color var(--duration-standard) ease, box-shadow var(--duration-standard) ease;
+}
+.admin-split-form-inner .input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-primary-tint);
+}
+.admin-split-form-inner .input.input-invalid { border-color: var(--color-danger); }
+.admin-split-form-inner .input.input-invalid:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 4px rgba(196,72,91,0.12);
+}
+/* Icon shifts to the brand color while its input is focused — :focus-within
+   on the wrapper rather than a JS-tracked focus state, since the icon is a
+   sibling of the input, not a descendant. */
+.icon-input-icon { transition: color 200ms ease; }
+.icon-input-wrap:focus-within .icon-input-icon { color: var(--color-primary); }
+
+/* A fresh `key` on the .field wrapper (see LoginPage) remounts it, which
+   is what makes this animation replay on each new error rather than only
+   the first time the class appears. */
+.field-shake { animation: auth-shake 400ms ease; }
+@keyframes auth-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+/* Card-level shake + a brief red glow ring — distinct from (and stronger
+   than) the per-field shake above: this fires specifically when Supabase
+   actually rejects the sign-in attempt (wrong credentials, lockout, etc.),
+   not on a simple client-side "you left a field blank" catch, so a real
+   auth failure reads as more consequential than a formatting slip.
+   Toggled via a plain class (LoginPage adds it, then removes it ~900ms
+   later) rather than a key-remount like .field-shake, because this class
+   lands on .admin-split-form-inner itself, which already owns the
+   page-load entrance animation (auth-fade-up, both-filled with a 60ms
+   delay). The `animation` shorthand can't be split across two rules and
+   merged — whichever rule wins replaces the whole property — so
+   auth-fade-up is repeated here at the same list position with identical
+   timing on purpose: a CSS animation only restarts when its name
+   disappears and reappears in the computed value, so keeping it present
+   (already finished/held by the time any login attempt is possible)
+   avoids the entrance fade replaying — and the card flashing invisible —
+   every time the shake class is added or removed. */
+.auth-card-shake {
+  animation:
+    auth-fade-up 260ms 60ms var(--ease-out) both,
+    auth-shake 450ms ease,
+    auth-card-glow 900ms ease;
+}
+@keyframes auth-card-glow {
+  0% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(10,26,48,0.04), 0 12px 28px -14px rgba(10,26,48,0.14); }
+  25% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(10,26,48,0.04), 0 12px 28px -14px rgba(10,26,48,0.14), 0 0 0 4px rgba(217,75,99,0.22); }
+  100% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(10,26,48,0.04), 0 12px 28px -14px rgba(10,26,48,0.14); }
+}
+
+.auth-remember-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.auth-remember-row input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* Security cue under the login form's forgot-password link — a soft
+   tinted chip rather than plain text, so it reads as "a distinct piece of
+   information" instead of trailing off the form, while staying quiet
+   (same light lavender the rest of the form uses for its own soft
+   accents, not an alarming color). */
+/* A single small muted line — no longer a tinted card with an icon, which
+   was large enough to read as "another piece of UI" competing with the
+   form above it rather than a quiet footnote. */
+.auth-security-note {
+  margin-top: 22px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* "Forgot your password?" — a secondary action, so it stays muted rather
+   than competing with the primary purple link color, and only picks up
+   the brand color on hover/focus. */
+.auth-secondary-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  transition: color 160ms ease;
+}
+.auth-secondary-link:hover, .auth-secondary-link:focus-visible {
+  color: var(--color-primary);
+}
+
+/* Password show/hide — both icons stacked, crossfaded via opacity/scale
+   rather than an instant swap. */
+.auth-eye-toggle { position: relative; width: 17px; height: 17px; }
+.auth-eye-toggle svg { position: absolute; top: 0; left: 0; transition: opacity 180ms ease, transform 180ms ease; }
+
+/* Log In / submit buttons — subtle tactile depth: a soft gradient
+   highlight across the surface plus a two-layer shadow (a tight inset
+   edge + a broad ambient lift) reads as a raised surface without looking
+   like a heavy bevel. Hover lifts and deepens the shadow; pressing moves
+   the button down relative to its resting position and flattens the
+   shadow, like it's being pushed into the surface. Disabled goes flat —
+   no shadow, reduced contrast — rather than just dimmer. */
+.auth-submit-btn {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 46%),
+    var(--color-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    0 1px 2px rgba(8,28,58,0.14),
+    0 3px 8px rgba(8,28,58,0.16);
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease, background var(--duration-micro) ease;
+}
+.auth-submit-btn:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 46%),
+    var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    0 2px 4px rgba(8,28,58,0.16),
+    0 6px 14px rgba(8,28,58,0.2);
+}
+.auth-submit-btn:active:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 46%),
+    var(--color-primary-dark);
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 1px 2px rgba(8,28,58,0.16);
+}
+.auth-submit-btn:disabled {
+  background: var(--color-primary);
+  filter: grayscale(0.2) brightness(0.97);
+  box-shadow: none;
+  opacity: 0.6;
+}
+.auth-spinner { animation: auth-spin 700ms linear infinite; }
+
+/* Login confirmation modal — a focused, low-drama security check rather
+   than an alarming dialog: soft dim + blur behind it, a gentle fade+scale
+   entrance, and the same tactile button language as the submit button. */
+.auth-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,20,38,0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 200;
+  animation: auth-confirm-backdrop-in var(--duration-standard) var(--ease-out) both;
+}
+@keyframes auth-confirm-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.auth-confirm-modal {
+  position: relative;
+  background: #fff;
+  border-radius: 20px;
+  padding: 32px 30px 28px;
+  width: 380px;
+  max-width: 100%;
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(10,26,48,0.18), 0 30px 60px -12px rgba(10,26,48,0.35);
+  animation: auth-confirm-modal-in var(--duration-panel) var(--ease-out) both;
+}
+@keyframes auth-confirm-modal-in {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.auth-confirm-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-confirm-title { font-size: 19px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
+.auth-confirm-desc { font-size: 13.5px; line-height: 1.6; color: var(--color-text-muted); margin: 0 0 24px; }
+.auth-confirm-actions { display: flex; gap: 10px; }
+.auth-confirm-btn {
+  flex: 1;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform var(--duration-micro) var(--ease-standard), box-shadow var(--duration-micro) ease, background var(--duration-micro) ease;
+}
+.auth-confirm-btn-secondary {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(10,26,48,0.06);
+}
+.auth-confirm-btn-secondary:hover:not(:disabled) { background: var(--color-border); transform: translateY(-1px); }
+.auth-confirm-btn-secondary:active:not(:disabled) { transform: translateY(1px); }
+.auth-confirm-btn-primary {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 46%), var(--color-primary);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 2px rgba(8,28,58,0.14), 0 3px 8px rgba(8,28,58,0.16);
+}
+.auth-confirm-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 46%), var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 4px rgba(8,28,58,0.16), 0 6px 14px rgba(8,28,58,0.2);
+}
+.auth-confirm-btn-primary:active:not(:disabled) {
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 46%), var(--color-primary-dark);
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 1px 2px rgba(8,28,58,0.16);
+}
+.auth-confirm-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; box-shadow: none; }
+@media (max-width: 420px) {
+  .auth-confirm-modal { padding: 26px 22px 22px; }
+  .auth-confirm-actions { flex-direction: column-reverse; }
+}
+
+@keyframes auth-appear {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes auth-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* 6px — exclusively used by the auth form card now that the brand panel
+   (above) uses a pure opacity fade instead; a small, government-form-
+   appropriate rise rather than the 18px this used to carry elsewhere. */
+@keyframes auth-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes auth-slide-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes auth-fade-left {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes auth-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Tablet — keep the two-column split, but shrink the brand panel's share
+   further and tighten its spacing/type so the form (the actual task) keeps
+   most of the width as the viewport narrows. */
+@media (max-width: 960px) {
+  .admin-split { grid-template-columns: 0.65fr 1fr; }
+  .admin-split-brand { padding: 44px 36px !important; }
+  .admin-split-brand h1 { font-size: 27px !important; }
+  .admin-split-form-inner { padding: 32px 28px; }
+}
+
+/* Mobile — stack vertically with the form first. */
+@media (max-width: 720px) {
+  .admin-split { grid-template-columns: 1fr; }
+  .admin-split-form { order: 1; padding: 28px 20px 16px; }
+  .admin-split-brand { order: 2; padding: 32px 24px !important; }
+  .admin-split-brand h1 { font-size: 24px !important; margin-top: 16px !important; }
+  .admin-split-form-inner { padding: 28px 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-split-brand, .admin-split-form-inner, .auth-confirm-backdrop, .auth-confirm-modal {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .auth-submit-btn:hover:not(:disabled), .auth-submit-btn:active:not(:disabled),
+  .auth-confirm-btn-primary:hover:not(:disabled), .auth-confirm-btn-primary:active:not(:disabled),
+  .auth-confirm-btn-secondary:hover:not(:disabled), .auth-confirm-btn-secondary:active:not(:disabled),
+  .nav-admin-btn:hover {
+    transform: none;
+  }
+  .field-shake, .auth-card-shake { animation: none !important; }
+  .auth-back-btn:hover, .auth-back-btn:active { transform: none; }
+}
+
+/* =========================================================
+   About SafeHer — unified 2-column layout with a full-bleed
+   ambient background, a choreographed entrance sequence, and
+   the Aurora seal / PSWDO context cards merged into the right
+   column (previously a separate section/component).
+
+   FULL TIMELINE (all delays relative to the section's single
+   IntersectionObserver trigger — see <Reveal> in Reveal.tsx —
+   easing is var(--ease-premium) throughout unless noted). Deliberately
+   fast/flat: one fade + slight-rise per element, a small stagger between
+   them, no per-element sub-stages (icons/logos/underlines simply fade in
+   with their parent card rather than animating on their own delayed beat)
+   and no continuous looping motion — "fast and professional", not a
+   multi-second showpiece:
+
+     0ms    heading            420ms  fade + rise
+     70ms   paragraph 1        380ms
+     130ms  paragraph 2        380ms
+     140ms  feature card 1     380ms  fade + rise (.stagger-item-left)
+     190ms  feature card 2     380ms
+     240ms  feature card 3     380ms
+     220ms  context card A     400ms  fade + rise
+     280ms  context card B     400ms  fade + rise
+
+   Total ~0.68s. Below-the-fold, plays once per visit — see Reveal.tsx /
+   IntersectionObserver, not a page-load timer. */
+
+/* Ambient background — a very light blur, just enough to soften hard
+   edges without erasing the photo's own detail (faces/figures in the
+   crowd need to stay recognizable, which a heavier blur destroys no
+   matter how light the overlay is), plus a thin violet overlay for tint.
+   scale(1.1) keeps the blur from sampling/revealing the layer's own
+   transparent edge. Static — no animation of its own;
+   background-attachment:fixed (falls back to scroll on mobile/reduced-
+   motion) keeps it from scrolling with the page, and a low-opacity
+   SVG-noise grain layer on top adds texture without affecting legibility. */
+.about-section-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.about-ambient-photo {
+  position: absolute;
+  inset: -20px;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  filter: blur(4px);
+  transform: scale(1.1);
+}
+/* ~70% visible photo (~30% average overlay alpha) — present and clearly
+   recognizable, with just enough tint for the cards on top to read as
+   "content over a photo" rather than "content over a busy image". Text/
+   card contrast doesn't depend on this value (every panel/card behind
+   which text sits is already ~95-100% opaque white, not translucent), so
+   this is purely about how present the photo itself feels. */
+.about-ambient-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(20,86,160,0.3) 0%, rgba(8,28,58,0.28) 55%, rgba(47,128,201,0.26) 100%);
+}
+.about-ambient-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@media (max-width: 880px) {
+  .about-ambient-photo { background-attachment: scroll; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-ambient-photo { background-attachment: scroll; }
+}
+
+/* Column ratio: 1.3fr / 1fr (~56.5% / 43.5%) — the left column carries a
+   full text panel + 3 feature cards, the right just 2 context cards, so
+   it gets less width to keep its cards reading as reasonably dense
+   rather than short and wide. */
+.about-grid { grid-template-columns: 1.3fr 1fr; }
+
+/* Text column — heading + paragraphs sit in their own panel (guaranteed-
+   readable regardless of the ambient photo behind the whole section),
+   separate from the 3 feature-card panels below it. Same surface
+   language (radius, border, backdrop blur) as every other card in this
+   section — see .institutional-card below — just with a touch more
+   shadow, since this is the section's primary content block and should
+   read as slightly "heavier"/more prominent than the supporting cards. */
+.about-text-panel {
+  position: relative;
+  background: rgba(255, 253, 252, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--lp-border);
+  border-radius: 18px;
+  padding: 20px 24px;
+  box-shadow: 0 10px 28px rgba(8,28,58,0.12);
+}
+.about-heading-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 420ms var(--ease-premium), transform 420ms var(--ease-premium);
+}
+.about-para-reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  line-height: 1.55;
+  transition: opacity 380ms var(--ease-premium), transform 380ms var(--ease-premium);
+}
+.about-para-reveal:nth-of-type(1) { transition-delay: 70ms; }
+.about-para-reveal:nth-of-type(2) { transition-delay: 130ms; }
+.lp-scroll-reveal.is-visible .about-heading-reveal,
+.lp-scroll-reveal.is-visible .about-para-reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.about-feature-cards { display: flex; flex-direction: column; gap: 8px; }
+
+/* align-self:stretch overrides the grid's own alignItems:'start' (see
+   the inline style on .about-grid's container in LandingPage.tsx) just
+   for this column, so it fills the full row height set by the taller
+   left column; justify-content then centers the 2 context cards inside
+   that height instead of leaving all the leftover space stranded below
+   them. */
+.about-context-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: stretch;
+}
+
+/* Context cards — a vertical stack of the 2 institutional cards, revealed
+   just after the feature cards. */
+.about-context-cards { display: flex; flex-direction: column; gap: 12px; }
+.institutional-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  background: rgba(255, 253, 252, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--lp-border);
+  border-radius: 18px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 20px rgba(8,28,58,0.1);
+  transition: transform 350ms var(--ease-premium), box-shadow 350ms var(--ease-premium),
+    background-color 350ms var(--ease-premium), border-color 350ms var(--ease-premium);
+}
+
+/* Soft Glow & Lift — the single hover treatment shared, identically, by
+   all 5 interactive cards in the About section (the 3 feature cards
+   above + these 2 context cards): a gentle rise + very subtle scale-up,
+   a soft diffused elevation shadow, a faint glow in the shared accent
+   purple, and a slight background/border brighten. One grouped rule so
+   the two card types can never drift apart in value. Only the card
+   itself moves — its contents (icon/logo, text, underline) stay put
+   rather than animating independently. */
+.landing-page .about-point-card:hover,
+.institutional-card:hover {
+  transform: translateY(-6px) scale(1.015);
+  background-color: #fff;
+  border-color: var(--lp-lavender);
+  box-shadow: 0 18px 34px rgba(8,28,58,0.18), 0 0 24px rgba(20,86,160,0.2);
+}
+.institutional-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  padding: 6px;
+}
+.institutional-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lp-purple);
+  margin-bottom: 4px;
+  display: inline-block;
+}
+
+.context-card-left,
+.context-card-right {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 400ms var(--ease-premium), transform 400ms var(--ease-premium);
+}
+.context-card-left { transition-delay: 220ms; }
+.context-card-right { transition-delay: 280ms; }
+.lp-scroll-reveal.is-visible .context-card-left,
+.lp-scroll-reveal.is-visible .context-card-right {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Underline — a static rule under the eyebrow label, always fully drawn;
+   it fades in with its card rather than animating on its own delayed beat
+   (see .about-point-icon above for the same reasoning). No hover motion
+   of its own — the card's Soft Glow & Lift hover is the only interaction
+   here, so nothing inside the card moves independently of it. */
+.institutional-eyebrow-underline {
+  display: block;
+  width: 100%;
+  height: 3px;
+  margin-top: 3px;
+  overflow: visible;
+}
+.institutional-eyebrow-underline line {
+  stroke: var(--lp-purple);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-heading-reveal,
+  .about-para-reveal,
+  .lp-scroll-reveal.is-visible .about-heading-reveal,
+  .lp-scroll-reveal.is-visible .about-para-reveal {
+    transform: none;
+    transition: opacity 400ms ease-out;
+  }
+  .context-card-left,
+  .context-card-right,
+  .lp-scroll-reveal.is-visible .context-card-left,
+  .lp-scroll-reveal.is-visible .context-card-right {
+    transform: none;
+    transition: opacity 400ms ease-out;
+  }
+  .institutional-card:hover {
+    transform: none;
+  }
+}
+
+/* Province-wide support section — municipality chips + layered depth
+   (blobs, an abstract map-inspired shape, a decorative node cluster) —
+   see LandingPage.tsx's ProvinceWideSupport for why an actual map
+   outline isn't used here. Dedicated gradient/padding rather than the
+   shared --lp-gradient-privacy/.section-sm — the Privacy section further
+   up the page also uses those and shouldn't be affected. */
+/* Ambient background motion — everything here is intentionally
+   ungated (not behind .lp-scroll-reveal.is-visible, unlike the content
+   below): decoration that's simply always drifting, the same convention
+   .province-node already used before this pass. Content (heading,
+   paragraph, and the pill row's own entrance) stays completely
+   untouched by any of this — only the section's own background paints
+   (gradient, blobs, map shape) move. */
+/* 68px (up from 40px) — measured to land the section's total height
+   ~20% taller than before at both desktop and mobile widths (the
+   content itself, heading through the pill row, is unchanged; padding
+   is the only lever, split evenly top/bottom so the content block stays
+   vertically centered). No separate mobile override anymore — 68px
+   reads comfortably at both sizes, and mobile's much taller content
+   (wrapped heading, wrapped description) needs proportionally more
+   added padding than desktop to hit the same ~20% target, so collapsing
+   to one shared value landed closer to both breakpoints than keeping
+   mobile's old, smaller padding scaled by the same ratio would have. */
+.province-support-section {
+  padding-top: 68px;
+  padding-bottom: 68px;
+  background: linear-gradient(115deg, #EAF3FB 0%, #E1EEFA 25%, #F5F9FD 50%, #E1EEFA 75%, #EAF3FB 100%);
+  background-size: 250% 250%;
+  animation: province-gradient-drift 42s ease-in-out infinite;
+}
+/* Palindromic stop order (lavender→purple→pink→purple→lavender) at
+   250% background-size, sliding between 0%/50% and 100%/50% position —
+   this is what makes the gradient itself feel like it's slowly warming
+   toward pink and cooling back toward lavender, rather than a fill
+   simply sliding sideways. */
+@keyframes province-gradient-drift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.province-bg-blobs { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.province-blob { position: absolute; border-radius: 50%; filter: blur(60px); }
+.province-blob-1 {
+  width: 320px; height: 320px; top: -90px; left: -70px; background: rgba(169,203,234,0.3);
+  animation: province-blob-drift-1 28s ease-in-out infinite;
+}
+.province-blob-2 {
+  width: 280px; height: 280px; bottom: -110px; right: -60px; background: rgba(234,243,251,0.6);
+  animation: province-blob-drift-2 34s ease-in-out infinite;
+}
+/* Self-contained "there and back" keyframes (0%=100%=origin) rather than
+   `animation-direction: alternate` — loops with zero visible seam either
+   way, but keeping the full path explicit in one place is easier to
+   tune than reasoning about a doubled effective duration. Two different
+   paths/durations so the pair never reads as mechanically synced. */
+@keyframes province-blob-drift-1 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(50px, 24px); }
+}
+@keyframes province-blob-drift-2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-45px, -20px); }
+}
+/* Irregular blob via mismatched border-radius corners (a common CSS
+   trick for an organic, non-geometric silhouette) rather than a hand-
+   traced SVG path — reads as "a soft coverage area" without asserting
+   any specific shape is Aurora Province's actual outline. ~4% opacity
+   overall (rgba alpha on both gradient stops) so it's felt more than
+   seen, never interfering with the pills or text on top of it. A slow
+   drift + very slight "breathing" scale gives it the same ambient life
+   as the blobs above, just subtler to match its own much lower opacity. */
+.province-map-shape {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 640px;
+  max-width: 92%;
+  height: 320px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, rgba(20,86,160,0.06), rgba(47,128,201,0.04));
+  border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%;
+  animation: province-map-drift 38s ease-in-out infinite;
+}
+@keyframes province-map-drift {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(calc(-50% + 18px), calc(-50% - 10px)) scale(1.025); }
+}
+/* Wider than the heading/paragraph's own .container above (see
+   LandingPage.tsx) — the 8 municipality names need more than a 720px
+   reading-width column to sit in one unbroken row. */
+.municipality-row-container { max-width: 980px; }
+.municipality-chip-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+  position: relative;
+}
+/* Below ~980px there isn't room for one row without cramming the pills
+   illegibly small — switch to a horizontally-scrollable strip instead of
+   wrapping to a second row (matches the existing .grid-4/feature-flow
+   960px breakpoint used elsewhere on this page). Extra vertical padding
+   here (not on the row itself) gives the hover lift + shadow room so
+   overflow-x:auto doesn't clip them. */
+@media (max-width: 960px) {
+  .municipality-chip-row {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 8px 4px 16px;
+    margin-left: -4px;
+    margin-right: -4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+}
+/* Wrapper owns the entrance fade-up (staggered one pill at a time); the
+   inner .municipality-chip owns hover + the active-glow loop below —
+   kept on separate elements so none of the three motion sources
+   (entrance transition, hover transition, active-glow animation) ever
+   fight over the same `transform`/property on one element, the same
+   split used throughout this file (see .stagger-item earlier). */
+.municipality-chip-wrap {
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 420ms var(--ease-premium), transform 420ms var(--ease-premium);
+}
+.lp-scroll-reveal.is-visible .municipality-chip-wrap {
+  opacity: 1;
+  transform: translateY(0);
+}
+.municipality-chip-wrap:nth-child(1) { transition-delay: 0ms; }
+.municipality-chip-wrap:nth-child(2) { transition-delay: 70ms; }
+.municipality-chip-wrap:nth-child(3) { transition-delay: 140ms; }
+.municipality-chip-wrap:nth-child(4) { transition-delay: 210ms; }
+.municipality-chip-wrap:nth-child(5) { transition-delay: 280ms; }
+.municipality-chip-wrap:nth-child(6) { transition-delay: 350ms; }
+.municipality-chip-wrap:nth-child(7) { transition-delay: 420ms; }
+.municipality-chip-wrap:nth-child(8) { transition-delay: 490ms; }
+.municipality-chip {
+  display: inline-block;
+  white-space: nowrap;
+  background: var(--lp-bg-card);
+  border: 1px solid var(--lp-border);
+  color: var(--lp-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(8,28,58,0.08);
+  transition: transform 280ms var(--ease-premium), background 280ms var(--ease-premium), border-color 280ms var(--ease-premium), box-shadow 280ms var(--ease-premium);
+}
+/* `!important` is required, not optional — the active-glow rule below
+   chains 5 selectors (.lp-scroll-reveal.is-visible
+   .municipality-chip-wrap:nth-child(N) .municipality-chip) and
+   out-specificities this plain :hover rule, so without it the infinite
+   loop keeps running (and winning) right through the hover. */
+.municipality-chip:hover {
+  animation: none !important;
+  transform: translateY(-3px);
+  background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale));
+  border-color: var(--lp-lavender);
+  box-shadow: 0 10px 22px rgba(20,86,160,0.18);
+}
+/* Coverage animation — after the entrance stagger above settles (last
+   pill's fade-up finishes ~490+420=910ms in), a soft highlight visits
+   each of the 8 pills in turn, forever: one shared keyframe, all 8 using
+   the *same* 12000ms duration but staggered by exactly 1/8 of it
+   (1500ms apart, starting at a 1100ms base offset so the glow never
+   starts before entrance has settled) — since each pill's own "active"
+   window is only the first 12.5% of its own timeline, this tiles the 8
+   turns back-to-back with no gap or overlap, endlessly. */
+@keyframes municipality-pill-active {
+  0% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 4px 12px rgba(8,28,58,0.08); }
+  3% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 6px 18px rgba(20,86,160,0.22), 0 0 14px rgba(47,128,201,0.22); }
+  9% { background: linear-gradient(135deg, var(--lp-lavender-pale), var(--lp-rose-pale)); border-color: var(--lp-lavender); box-shadow: 0 6px 18px rgba(20,86,160,0.22), 0 0 14px rgba(47,128,201,0.22); }
+  12.5%, 100% { background: var(--lp-bg-card); border-color: var(--lp-border); box-shadow: 0 4px 12px rgba(8,28,58,0.08); }
+}
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(1) .municipality-chip { animation: municipality-pill-active 12000ms linear 1100ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(2) .municipality-chip { animation: municipality-pill-active 12000ms linear 2600ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(3) .municipality-chip { animation: municipality-pill-active 12000ms linear 4100ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(4) .municipality-chip { animation: municipality-pill-active 12000ms linear 5600ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(5) .municipality-chip { animation: municipality-pill-active 12000ms linear 7100ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(6) .municipality-chip { animation: municipality-pill-active 12000ms linear 8600ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(7) .municipality-chip { animation: municipality-pill-active 12000ms linear 10100ms infinite; }
+.lp-scroll-reveal.is-visible .municipality-chip-wrap:nth-child(8) .municipality-chip { animation: municipality-pill-active 12000ms linear 11600ms infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .municipality-chip-wrap,
+  .lp-scroll-reveal.is-visible .municipality-chip-wrap {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .lp-scroll-reveal.is-visible .municipality-chip-wrap .municipality-chip {
+    animation: none !important;
+  }
+}
+.province-visual {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.province-node {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(20,86,160,0.08);
+  animation: node-drift 16s ease-in-out infinite alternate;
+}
+.province-node-1 { width: 10px; height: 10px; animation-duration: 14s; }
+.province-node-2 { width: 6px; height: 6px; background: rgba(47,128,201,0.09); animation-duration: 19s; }
+.province-node-3 { width: 8px; height: 8px; background: rgba(169,203,234,0.12); animation-duration: 22s; }
+@keyframes node-drift {
+  from { transform: translate(0, 0); opacity: 0.5; }
+  to { transform: translate(6px, -8px); opacity: 0.9; }
+}
+.province-node:nth-child(1) { top: 12%; left: 8%; }
+.province-node:nth-child(2) { top: 22%; left: 82%; }
+.province-node:nth-child(3) { top: 68%; left: 14%; }
+.province-node:nth-child(4) { top: 78%; left: 88%; }
+.province-node:nth-child(5) { top: 40%; left: 46%; }
+.province-node:nth-child(6) { top: 15%; left: 55%; }
+.province-node:nth-child(7) { top: 85%; left: 45%; }
+.province-node:nth-child(8) { top: 55%; left: 6%; }
+.province-node:nth-child(9) { top: 60%; left: 92%; }
+
+/* Footer institutional logos — small, muted, on a white chip so the
+   official artwork's own colors read correctly against the dark purple
+   footer. Optional by design: if either import is a blank placeholder this
+   still lays out cleanly (an empty white chip), never breaking the row. */
+.footer-institutional-logos {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+.footer-institutional-logos img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .province-node { animation: none !important; }
+  .province-support-section { animation: none !important; background-position: 50% 50% !important; }
+  .province-blob-1, .province-blob-2 { animation: none !important; transform: none !important; }
+  .province-map-shape { animation: none !important; }
+  .institutional-card:hover { transform: none; }
+}

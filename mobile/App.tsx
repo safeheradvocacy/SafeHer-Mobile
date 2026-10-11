@@ -1,5 +1,4 @@
 import React, { useCallback } from 'react';
-import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View } from 'react-native';
@@ -37,7 +36,6 @@ export default function App() {
   return (
     <SafeAreaProvider onLayout={onLayoutRootView}>
       <AuthProvider>
-        <StatusBar style="dark" />
         <RootNavigator />
       </AuthProvider>
     </SafeAreaProvider>

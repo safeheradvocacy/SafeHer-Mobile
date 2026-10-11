@@ -1,46 +1,48 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { logAudit } from '../../lib/audit';
 import { PageHeader } from '../../components/ui';
-import type { CaseReport, Municipality, Shelter, SosAlert } from '../../types/database.types';
+import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
+import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
+import type { CaseReport, Municipality, Shelter } from '../../types/database.types';
 
 export function MunicipalityManagementPage() {
-  const { profile } = useAuth();
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      const [muniRes, caseRes, shelterRes] = await Promise.all([
-        supabase.from('municipalities').select('*').order('municipality_name'),
-        supabase.from('case_reports').select('*'),
-        supabase.from('shelters').select('*'),
-      ]);
-      setMunicipalities(muniRes.data ?? []);
-      setCases(caseRes.data ?? []);
-      setShelters(shelterRes.data ?? []);
-    })();
+  const load = useCallback(async () => {
+    const [muniRes, caseRes, shelterRes] = await Promise.all([
+      supabase.from('municipalities').select('*').order('municipality_name'),
+      supabase.from('case_reports').select('*'),
+      supabase.from('shelters').select('*'),
+    ]);
+    setMunicipalities(muniRes.data ?? []);
+    setCases(caseRes.data ?? []);
+    setShelters(shelterRes.data ?? []);
+    setLoading(false);
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const { refreshing, lastUpdated, onRefresh } = useHeaderRefresh(loading, load);
+
   const toggleActive = async (m: Municipality) => {
-    if (!profile) return;
     await supabase.from('municipalities').update({ is_active: !m.is_active }).eq('municipality_id', m.municipality_id);
-    await logAudit({
-      profileId: profile.profile_id,
-      action: 'UPDATE',
-      tableName: 'municipalities',
-      recordId: m.municipality_id,
-      oldValues: { is_active: m.is_active },
-      newValues: { is_active: !m.is_active },
-    });
+    // No manual logAudit() call here — trg_audit_municipalities (see
+    // supabase/module3_barangay_hierarchy.sql) fires automatically.
     setMunicipalities((prev) => prev.map((x) => (x.municipality_id === m.municipality_id ? { ...x, is_active: !x.is_active } : x)));
   };
 
   return (
     <div>
-      <PageHeader title="Municipality Management" subtitle="All municipalities in the province" />
+      <PageHeader
+        title="Municipality Management"
+        subtitle="All municipalities in the province"
+        actions={<DashboardHeaderActions showSearch lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={onRefresh} />}
+      />
       <div className="card">
         <table>
           <thead>

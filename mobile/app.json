@@ -1,13 +1,18 @@
 {
   "expo": {
-    "name": "SafeHer",
+    "name": "SafeSpace",
     "slug": "safeher-mobile",
     "scheme": "safeher",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
-    "ios": { "supportsTablet": false, "bundleIdentifier": "ph.pswdo.safeher" },
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ph.pswdo.safeher"
+    },
     "android": {
       "package": "ph.pswdo.safeher",
       "permissions": [
@@ -15,21 +20,47 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "READ_EXTERNAL_STORAGE"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR-GOOGLE-MAPS-KEY"
+        }
+      }
     },
     "plugins": [
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "SafeHer uses your location to send it with an SOS alert and to find shelters near you."
+          "locationWhenInUsePermission": "SafeSpace uses your location to help authorized responders identify where emergency assistance may be needed, and to find shelters near you."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "SafeHer uses your photos to attach evidence to an incident report."
+          "photosPermission": "SafeSpace uses your photos to attach evidence to an incident report."
         }
-      ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SafeSpace uses your camera to scan a Client Case Access QR code.",
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "SafeSpace uses Face ID to keep your app locked and your information private."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "expo-font",
+      "expo-splash-screen"
     ]
   }
 }

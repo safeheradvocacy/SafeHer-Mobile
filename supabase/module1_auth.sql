@@ -5,19 +5,34 @@
 -- =========================================================
 
 -- ---------------------------------------------------------
--- 1. Auto-create a user_profiles row whenever a new
---    auth.users row is created, reading the metadata passed
---    from supabase.auth.signUp({ options: { data } }).
+-- 1. Auto-create a user_profiles row (and, for survivors, a
+--    matching survivors row) whenever a new auth.users row is
+--    created, reading the metadata passed from
+--    supabase.auth.signUp({ options: { data } }).
 --    This sidesteps the RLS/session race that happens if the
---    client tries to insert user_profiles itself before email
---    confirmation completes.
+--    client tries to insert these rows itself before email
+--    confirmation completes: with "Confirm email" on,
+--    auth.signUp() returns no session until the user clicks the
+--    verification link, so a client-side read of user_profiles or
+--    insert into survivors immediately after signUp() runs as an
+--    anonymous request and is correctly rejected by RLS. Doing
+--    both inserts here — as SECURITY DEFINER, in the same
+--    transaction as the auth.users insert — means every new
+--    account has a complete, consistent profile the instant it
+--    exists, independent of whether/when the client ever gets a
+--    session.
 -- ---------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  new_profile_id uuid;
+  meta_municipality_id uuid;
 begin
+  meta_municipality_id := nullif(new.raw_user_meta_data->>'municipality_id', '')::uuid;
+
   insert into public.user_profiles (
     auth_user_id,
     municipality_id,
@@ -28,12 +43,24 @@ begin
   )
   values (
     new.id,
-    nullif(new.raw_user_meta_data->>'municipality_id', '')::uuid,
+    meta_municipality_id,
     'survivor',
     coalesce(new.raw_user_meta_data->>'first_name', ''),
     coalesce(new.raw_user_meta_data->>'last_name', ''),
     new.raw_user_meta_data->>'phone_number'
-  );
+  )
+  returning profile_id into new_profile_id;
+
+  -- survivors.municipality_id is NOT NULL — only insert when the
+  -- signup actually supplied one (it always should, since
+  -- RegisterScreen requires picking a municipality before it will
+  -- submit, but this stays defensive rather than erroring the whole
+  -- signup if that's ever not the case).
+  if meta_municipality_id is not null then
+    insert into public.survivors (profile_id, municipality_id)
+    values (new_profile_id, meta_municipality_id);
+  end if;
+
   return new;
 end;
 $$;

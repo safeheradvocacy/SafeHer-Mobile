@@ -1,0 +1,63 @@
+-- =========================================================
+-- SafeHer — Module 15: Barangay anon-read grant fix
+--
+-- Run in the Supabase SQL editor AFTER 00_schema.sql through
+-- module14_walkin_case_qr_access.sql.
+--
+-- BUG — Registration screen's barangay dropdown showed "Couldn't load
+-- barangays." for every municipality, including Baler.
+--
+-- ROOT CAUSE — confirmed by direct anon-role REST calls (not assumed):
+--   * Real barangay data exists for Baler ("Sabang", is_active = true).
+--   * mobile/src/components/BarangayPicker.tsx correctly filters by the
+--     real `municipality_id` UUID (no name-vs-id mismatch).
+--   * The RLS policy on `barangays` ("Authenticated users can view
+--     active barangays", using is_active = true OR is_admin()) already
+--     correctly permits this read for an anonymous caller too —
+--     is_active = true evaluates true regardless of auth state.
+--   * BUT module3_barangay_hierarchy.sql only ever granted
+--     `select on public.barangays to authenticated` — never to `anon`.
+--     Registration happens BEFORE the user has a session, so the
+--     mobile client queries as `anon`. PostgREST rejects the request at
+--     the GRANT layer with 42501 "permission denied for table
+--     barangays" before RLS is ever evaluated — RLS and GRANT are
+--     separate authorization layers, and a correct policy with a
+--     missing grant still fails. Confirmed directly:
+--       curl .../rest/v1/barangays?... (anon key only)
+--       -> {"code":"42501","message":"permission denied for table barangays",
+--           "hint":"Grant the required privileges to the current role
+--                    with: GRANT SELECT ON public.barangays TO anon;"}
+--     `municipalities` already has this exact anon grant (module1_auth.sql
+--     — "public read of active municipalities... needed for the sign-up
+--     dropdown, before the user has a session") — barangays needs the
+--     identical treatment for the same reason, and never got it.
+--
+-- FIX — the minimal correct change: add the missing SELECT grant, with
+-- the exact same scope/shape as municipalities' existing anon grant.
+-- No RLS change (the existing policy is already correct and unchanged),
+-- no schema change, no data change. Non-sensitive geographic reference
+-- data only — no survivor/case/profile table is touched.
+-- =========================================================
+
+grant select on public.barangays to anon;
+
+-- =========================================================
+-- VERIFICATION — read-only, run after the grant above.
+-- =========================================================
+
+-- 1. Confirm the grant now exists:
+--   select grantee, privilege_type from information_schema.role_table_grants
+--   where table_name = 'barangays' and grantee = 'anon';
+--   Expect a SELECT row.
+
+-- 2. Confirm an anonymous request now succeeds (no Authorization header
+--    beyond the anon apikey):
+--   curl "$SUPABASE_URL/rest/v1/barangays?select=*&is_active=eq.true" -H "apikey: $ANON_KEY"
+--   Expect 200 with real barangay rows, not a 42501 error.
+
+-- 3. Confirm this did NOT widen access to any sensitive table — spot
+--    check that survivors/case_reports/user_profiles/user_verifications
+--    still have NO anon grant:
+--   select table_name, privilege_type from information_schema.role_table_grants
+--   where grantee = 'anon' and table_name in ('survivors','case_reports','user_profiles','user_verifications');
+--   Expect 0 rows.

@@ -4,7 +4,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { EmptyState } from '../../components/ui';
-import { colors, radius, spacing, typography } from '../../theme/theme';
+import { useTheme } from '../../contexts/ThemeContext';
+import { radius, spacing, typography } from '../../theme/theme';
 import type { Notification } from '../../types/database.types';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -13,21 +14,25 @@ const TYPE_LABEL: Record<string, string> = {
   Assignment: 'Assignment',
   Referral: 'Referral',
   Announcement: 'Announcement',
+  Support: 'Support',
 };
 
 export function NotificationsScreen() {
+  const { palette, prefs } = useTheme();
   const { profile } = useAuth();
   const [items, setItems] = useState<Notification[]>([]);
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('profile_id', profile.profile_id)
-      .order('created_at', { ascending: false });
+    let query = supabase.from('notifications').select('*').eq('profile_id', profile.profile_id).order('created_at', { ascending: false });
+    if (!prefs.emergencyAlertsEnabled) {
+      // Only hides them from this device's list — SOS triggering,
+      // creation, and responder dispatch never go through this screen.
+      query = query.neq('notification_type', 'SOS');
+    }
+    const { data } = await query;
     setItems(data ?? []);
-  }, [profile]);
+  }, [profile, prefs.emergencyAlertsEnabled]);
 
   useFocusEffect(
     useCallback(() => {
@@ -42,13 +47,17 @@ export function NotificationsScreen() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `profile_id=eq.${profile.profile_id}` },
-        (payload) => setItems((prev) => [payload.new as Notification, ...prev])
+        (payload) => {
+          const inserted = payload.new as Notification;
+          if (!prefs.emergencyAlertsEnabled && inserted.notification_type === 'SOS') return;
+          setItems((prev) => [inserted, ...prev]);
+        }
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile]);
+  }, [profile, prefs.emergencyAlertsEnabled]);
 
   const markRead = async (n: Notification) => {
     if (n.is_read) return;
@@ -58,21 +67,40 @@ export function NotificationsScreen() {
 
   return (
     <FlatList
-      style={styles.screen}
+      style={[styles.screen, { backgroundColor: palette.background }]}
       contentContainerStyle={{ padding: spacing.lg, flexGrow: 1 }}
       data={items}
       keyExtractor={(n) => n.notification_id}
-      ListHeaderComponent={<Text style={styles.title}>Notifications</Text>}
+      ListHeaderComponent={
+        <>
+          <Text style={[styles.title, { color: palette.text }]}>Notifications</Text>
+          {!prefs.emergencyAlertsEnabled ? (
+            <View style={[styles.alertsOffBanner, { backgroundColor: palette.warning + '1A', borderColor: palette.warning + '55' }]}>
+              <Text style={[styles.alertsOffText, { color: palette.text }]}>
+                Emergency alerts are turned off on this device. Turn them back on from Settings to see SOS and
+                case-status updates here.
+              </Text>
+            </View>
+          ) : null}
+        </>
+      }
       ListEmptyComponent={<EmptyState title="You're all caught up" subtitle="New updates about your cases and SOS alerts will show up here." />}
       renderItem={({ item }) => (
-        <Pressable onPress={() => markRead(item)} style={[styles.row, !item.is_read && styles.rowUnread]}>
+        <Pressable
+          onPress={() => markRead(item)}
+          style={[
+            styles.row,
+            { backgroundColor: palette.surface, borderColor: palette.border },
+            !item.is_read && { borderColor: palette.primary },
+          ]}
+        >
           <View style={styles.rowHeader}>
-            <Text style={styles.type}>{TYPE_LABEL[item.notification_type] ?? item.notification_type}</Text>
-            {!item.is_read && <View style={styles.dot} />}
+            <Text style={[styles.type, { color: palette.primary }]}>{TYPE_LABEL[item.notification_type] ?? item.notification_type}</Text>
+            {!item.is_read && <View style={[styles.dot, { backgroundColor: palette.danger }]} />}
           </View>
-          <Text style={styles.notifTitle}>{item.title}</Text>
-          <Text style={styles.message}>{item.message}</Text>
-          <Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>
+          <Text style={[styles.notifTitle, { color: palette.text }]}>{item.title}</Text>
+          <Text style={[styles.message, { color: palette.textMuted }]}>{item.message}</Text>
+          <Text style={[styles.time, { color: palette.textMuted }]}>{new Date(item.created_at).toLocaleString()}</Text>
         </Pressable>
       )}
     />
@@ -80,21 +108,20 @@ export function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  title: { ...typography.display, fontSize: 24, color: colors.text, marginBottom: spacing.lg },
+  screen: { flex: 1 },
+  title: { ...typography.display, fontSize: 24, marginBottom: spacing.lg },
+  alertsOffBanner: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, marginTop: -spacing.md, marginBottom: spacing.lg },
+  alertsOffText: { ...typography.caption },
   row: {
-    backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  rowUnread: { borderColor: colors.primary },
   rowHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  type: { ...typography.caption, color: colors.primary, textTransform: 'uppercase' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
-  notifTitle: { ...typography.bodyMedium, color: colors.text, marginTop: 4 },
-  message: { ...typography.body, color: colors.textMuted, marginTop: 2 },
-  time: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  type: { ...typography.caption, textTransform: 'uppercase' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  notifTitle: { ...typography.bodyMedium, marginTop: 4 },
+  message: { ...typography.body, marginTop: 2 },
+  time: { ...typography.caption, marginTop: spacing.xs },
 });

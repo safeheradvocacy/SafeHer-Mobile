@@ -106,10 +106,13 @@ as $$
   );
 $$;
 
--- True if the calling survivor's own profile owns this case.
+-- True if the calling survivor's own profile owns this case. Called
+-- from case_referrals' SELECT policy (module3) — only touches
+-- case_reports/survivors, never case_referrals itself, so it's safe
+-- there without re-entering that table's own policy expansion.
 create or replace function public.owns_case(p_case_id uuid)
 returns boolean
-language sql stable security definer set search_path = public
+language sql stable security definer set search_path = public set row_security = off
 as $$
   select exists (
     select 1 from public.case_reports cr

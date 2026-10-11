@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { EmptyState, PageHeader } from '../../components/ui';
+import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
+import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
+import { hasPermission } from '../../lib/permissions';
 import type { Notification } from '../../types/database.types';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -10,6 +13,7 @@ const TYPE_LABEL: Record<string, string> = {
   Assignment: 'Assignment',
   Referral: 'Referral',
   Announcement: 'Announcement',
+  Support: 'Support',
 };
 
 export function NotificationsPage() {
@@ -17,18 +21,22 @@ export function NotificationsPage() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!profile) return;
-    supabase
+    const { data } = await supabase
       .from('notifications')
       .select('*')
       .eq('profile_id', profile.profile_id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setItems(data ?? []);
-        setLoading(false);
-      });
+      .order('created_at', { ascending: false });
+    setItems(data ?? []);
+    setLoading(false);
   }, [profile]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const { refreshing, lastUpdated, onRefresh } = useHeaderRefresh(loading, load);
 
   const markRead = async (n: Notification) => {
     if (n.is_read) return;
@@ -38,7 +46,7 @@ export function NotificationsPage() {
 
   return (
     <div>
-      <PageHeader title="Notifications" />
+      <PageHeader title="Notifications" actions={<DashboardHeaderActions showSearch={hasPermission(profile?.role, 'cases.view')} lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={onRefresh} />} />
       <div className="card">
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)' }}>Loading...</p>

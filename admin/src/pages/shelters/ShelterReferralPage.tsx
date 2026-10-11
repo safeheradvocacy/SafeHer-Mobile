@@ -3,13 +3,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import { EmptyState, PageHeader, StatusBadge } from '../../components/ui';
+import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
+import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import { REFERRAL_STATUS_FLOW, type CaseReport, type ReferralStatus, type Shelter, type ShelterReferral } from '../../types/database.types';
 
 type ReferralRow = ShelterReferral & { shelters?: Shelter; case_reports?: CaseReport };
 
 export function ShelterReferralPage() {
-  const { profile } = useAuth();
-  const isProvincial = profile?.role === 'provincial_admin' || profile?.role === 'super_admin';
+  const { profile, roleTier } = useAuth();
+  const isProvincial = roleTier === 'province';
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [referrals, setReferrals] = useState<ReferralRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,9 +59,11 @@ export function ShelterReferralPage() {
     load();
   };
 
+  const { refreshing, lastUpdated, onRefresh } = useHeaderRefresh(loading, load);
+
   return (
     <div>
-      <PageHeader title="Shelters & Referrals" />
+      <PageHeader title="Shelters & Referrals" actions={<DashboardHeaderActions showSearch lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={onRefresh} />} />
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ marginBottom: 12 }}>Shelters</h3>
