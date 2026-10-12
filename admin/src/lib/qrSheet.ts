@@ -113,7 +113,7 @@ export async function buildClientAccessQrSheet(params: {
   });
   // Watermark — its own row below the confidentiality notice, same
   // shared helper every other PDF generator in this codebase uses.
-  drawWatermarkFooter(doc, PAGE_WIDTH, 289);
+  drawWatermarkFooter(doc, PAGE_WIDTH / 2, 289, 'center');
 
   return doc;
 }

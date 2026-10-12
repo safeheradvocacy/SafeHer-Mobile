@@ -1,6 +1,16 @@
 import jsPDF from 'jspdf';
 import autoTable, { type RowInput } from 'jspdf-autotable';
-import { BRAND_PRIMARY, TEXT_BODY, TEXT_MUTED, BORDER, HEADER_FILL_LIGHT, drawWatermarkFooter, setSafeSpaceDocumentMetadata } from './reportDocument';
+import {
+  BRAND_PRIMARY,
+  TEXT_BODY,
+  TEXT_MUTED,
+  BORDER,
+  HEADER_FILL_LIGHT,
+  drawWatermarkFooter,
+  setSafeSpaceDocumentMetadata,
+  CHECKMARK_CELL,
+  checkmarkCellHooks,
+} from './reportDocument';
 import { SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE, CICL_NOT_AVAILABLE_NOTE } from './governmentReportMapping';
 import { SERVICE_TYPE_LABELS } from './serviceTypes';
 import type { GovernmentReportRow } from './governmentReportRows';
@@ -89,7 +99,13 @@ function drawHeader(doc: jsPDF, title: string, params: GovernmentReportParams): 
 function drawTotalRow(doc: jsPDF, y: number, label: string, total: number): number {
   autoTable(doc, {
     startY: y,
-    margin: { left: MARGIN, right: MARGIN },
+    // Without a bottom margin, autoTable assumes it can use the full
+    // page height and would happily place (or split) this mini-table
+    // right where the footer/watermark get drawn afterward — this is
+    // part of the footer-collision root cause this pass fixes (the
+    // main data table already had this margin; this one-row table
+    // didn't).
+    margin: { left: MARGIN, right: MARGIN, bottom: FOOTER_RESERVE },
     body: [[label, String(total)]],
     theme: 'plain',
     styles: { fontSize: 9, cellPadding: 1.5, fillColor: '#FCE9B0', textColor: TEXT_BODY, fontStyle: 'bold' },
@@ -98,13 +114,33 @@ function drawTotalRow(doc: jsPDF, y: number, label: string, total: number): numb
   return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
 }
 
-function drawCertificationAndFooter(doc: jsPDF, y: number, params: GovernmentReportParams, extraNotes: string[], serviceCodes: ServiceType[]) {
-  y += 4;
-  if (y + 40 > PAGE_HEIGHT - FOOTER_RESERVE) {
-    doc.addPage('a4', 'landscape');
-    y = MARGIN;
-  }
+/**
+ * ROOT CAUSE of the footer/watermark overlap this fixes: this function
+ * used to check ONCE, up front, whether a flat 40mm would fit — but the
+ * signatory block (28mm) + Services Provided legend (4 + 3.6mm per
+ * code — up to ~37mm for WEDC's 9 codes) + every explanatory note
+ * easily exceeds that in the worst case (WEDC specifically), so the
+ * tail end of this content could render PAST PAGE_HEIGHT -
+ * FOOTER_RESERVE and directly under/through the footer line, "Page X
+ * of Y", and watermark that finalizePages draws afterward at fixed
+ * coordinates. Fixed by checking room before EACH sub-section
+ * individually (mirroring reportDocument.ts's own ensureSpace
+ * pattern), so a page break happens exactly where content would
+ * otherwise collide with the reserved footer area — never mid-section,
+ * never relying on one upfront guess.
+ */
+function drawCertificationAndFooter(doc: jsPDF, startY: number, params: GovernmentReportParams, extraNotes: string[], serviceCodes: ServiceType[]) {
+  let y = startY + 4;
+  const pageBottom = PAGE_HEIGHT - FOOTER_RESERVE;
+  const ensureRoom = (needed: number) => {
+    if (y + needed > pageBottom) {
+      doc.addPage('a4', 'landscape');
+      y = MARGIN;
+    }
+  };
 
+  // ---- Signatory block (labels row + signature-line/name/role row) ----
+  ensureRoom(28);
   const colWidth = CONTENT_WIDTH / 3;
   const cols: [string, string][] = [
     ['Prepared by:', params.signatories.preparedBy],
@@ -135,8 +171,9 @@ function drawCertificationAndFooter(doc: jsPDF, y: number, params: GovernmentRep
   });
   y += 14;
 
-  // Services Provided legend
+  // ---- Services Provided legend ----
   if (serviceCodes.length > 0) {
+    ensureRoom(4 + serviceCodes.length * 3.6 + 2);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(BRAND_PRIMARY);
@@ -152,14 +189,18 @@ function drawCertificationAndFooter(doc: jsPDF, y: number, params: GovernmentRep
     y += 2;
   }
 
-  // Documented methodology / data-limitation notes — never silent.
+  // ---- Documented methodology / data-limitation notes — never silent ----
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(6.8);
   doc.setTextColor(TEXT_MUTED);
   extraNotes.forEach((note) => {
     const wrapped = doc.splitTextToSize(note, CONTENT_WIDTH);
+    const noteHeight = wrapped.length * 3 + 2;
+    ensureRoom(noteHeight);
+    // ensureRoom may have started a new page — font/size/color are
+    // page-independent in jsPDF, so nothing needs re-applying here.
     doc.text(wrapped, MARGIN, y);
-    y += wrapped.length * 3 + 2;
+    y += noteHeight;
   });
 }
 
@@ -174,11 +215,13 @@ function finalizePages(doc: jsPDF, footerTitle: string) {
     doc.setTextColor(TEXT_MUTED);
     doc.text(`SafeSpace — ${footerTitle} · Confidential — For Authorized Use Only`, MARGIN, PAGE_HEIGHT - 7);
     doc.text(`Page ${i} of ${pageCount}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 7, { align: 'right' });
-    // Watermark — its own reserved row below the confidentiality/page-
-    // number line, on every page (first through last, including ones
-    // created by autoTable's own pagination for the consolidated-cases
-    // table).
-    drawWatermarkFooter(doc, PAGE_WIDTH, PAGE_HEIGHT - 3);
+    // Watermark — bottom-right (per this report's own brief), directly
+    // under "Page X of Y" in its own reserved row below the
+    // confidentiality/page-number line, on every page (first through
+    // last, including ones created by autoTable's own pagination for
+    // the consolidated-cases table, or by drawCertificationAndFooter's
+    // own pagination above).
+    drawWatermarkFooter(doc, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 3, 'right');
   }
 }
 
@@ -192,18 +235,25 @@ function abuseCells(row: GovernmentReportRow): AbuseCell {
     other: row.templateColumn === 'Other Cases',
   };
 }
+// Every cell below that should render a checkmark uses CHECKMARK_CELL
+// (reportDocument.ts) — a vector tick drawn by checkmarkCellHooks, not
+// the literal '✓' character — because jsPDF's standard fonts have no
+// real glyph for it at these table font sizes (see that file's own
+// header note). The LOGIC that decides whether a cell is marked is
+// completely unchanged here — only what an affirmative answer renders
+// as changed.
 function mark(v: boolean): string {
-  return v ? '✓' : '';
+  return v ? CHECKMARK_CELL : '';
 }
 const SEXUAL_SUBTYPES = ['Rape', 'AOL', 'Incest', 'AR', 'Seduction', 'Others'] as const;
 function sexualCell(row: GovernmentReportRow, subtype: string): string {
-  return row.templateColumn === 'Sexual Abuse' && row.sexualAbuseSubtype === subtype ? '✓' : '';
+  return row.templateColumn === 'Sexual Abuse' && row.sexualAbuseSubtype === subtype ? CHECKMARK_CELL : '';
 }
 // Only a case_services row whose status is 'Provided' ever lands in
 // row.providedServices (see governmentReportRows.ts) — a referral,
 // request, or in-progress service renders blank here, never guessed.
 function serviceCell(row: GovernmentReportRow, type: ServiceType): string {
-  return row.providedServices.has(type) ? '✓' : '';
+  return row.providedServices.has(type) ? CHECKMARK_CELL : '';
 }
 
 /** WEDC/VAW — no demographic columns (Birthdate/Age/Sex/Educational
@@ -240,7 +290,7 @@ export function generateWedcReportPdf(params: GovernmentReportParams): jsPDF {
       sexualCell(r, 'Rape'), sexualCell(r, 'AOL'), sexualCell(r, 'Incest'), sexualCell(r, 'AR'), sexualCell(r, 'Seduction'), sexualCell(r, 'Others'),
       serviceCell(r, 'CS'), serviceCell(r, 'LS'), serviceCell(r, 'PPO'), serviceCell(r, 'TPO'), serviceCell(r, 'BPO'), serviceCell(r, 'LA'), serviceCell(r, 'FA'), serviceCell(r, 'MA'), serviceCell(r, 'TA'),
       r.statusRemarks,
-      '✓', '',
+      CHECKMARK_CELL, '',
     ];
   });
 
@@ -254,6 +304,7 @@ export function generateWedcReportPdf(params: GovernmentReportParams): jsPDF {
     headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 6, valign: 'middle' },
     columnStyles: { 0: { halign: 'left', cellWidth: 32 }, 1: { halign: 'left', cellWidth: 32 }, 22: { cellWidth: 26 } },
     showHead: 'everyPage',
+    ...checkmarkCellHooks(),
   });
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
   y = drawTotalRow(doc, y, 'TOTAL', params.rows.length);
@@ -305,7 +356,7 @@ export function generateCnspReportPdf(params: GovernmentReportParams): jsPDF {
       sexualCell(r, 'Rape'), sexualCell(r, 'AOL'), sexualCell(r, 'Incest'), sexualCell(r, 'AR'), sexualCell(r, 'Seduction'), sexualCell(r, 'Others'),
       serviceCell(r, 'CS'), serviceCell(r, 'LS'), serviceCell(r, 'EA'), serviceCell(r, 'LA'), serviceCell(r, 'FA'), serviceCell(r, 'MA'), serviceCell(r, 'TA'),
       r.statusRemarks,
-      '✓', '',
+      CHECKMARK_CELL, '',
     ];
   });
 
@@ -319,6 +370,7 @@ export function generateCnspReportPdf(params: GovernmentReportParams): jsPDF {
     headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 5.8, valign: 'middle' },
     columnStyles: { 0: { halign: 'left', cellWidth: 24 }, 1: { halign: 'left', cellWidth: 24 }, 5: { cellWidth: 18 } },
     showHead: 'everyPage',
+    ...checkmarkCellHooks(),
   });
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
   y = drawTotalRow(doc, y, 'TOTAL', params.rows.length);
@@ -368,6 +420,11 @@ export function generateCiclReportPdf(params: GovernmentReportParams): jsPDF {
     headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 6, valign: 'middle' },
     columnStyles: { 0: { halign: 'left', cellWidth: 30 }, 1: { halign: 'left', cellWidth: 30 } },
     showHead: 'everyPage',
+    // body is always [] today (see this function's own header note),
+    // but wired identically to WEDC/CNSP so this report benefits the
+    // moment a real derivation path exists, rather than needing this
+    // fix applied a second time later.
+    ...checkmarkCellHooks(),
   });
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
   y = drawTotalRow(doc, y, 'TOTAL', 0);

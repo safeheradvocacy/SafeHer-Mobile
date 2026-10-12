@@ -259,16 +259,95 @@ export const WATERMARK_COLOR = '#6B7280'; // muted blue-gray, ~WCAG-legible on w
 
 /** Draws the standardized watermark line on whichever page is CURRENTLY
  * selected on `doc` (caller loops pages via doc.setPage(i) first) — one
- * shared implementation so the exact text/size/color/placement can
- * never drift between the three independent PDF generators in this
- * codebase. Small (7.5pt), muted, bottom-center, in its own reserved
- * footer row below any existing footer line/page-number text — never
- * overlapping them. */
-export function drawWatermarkFooter(doc: jsPDF, pageWidth: number, y: number): void {
+ * shared implementation so the exact text/size/color can never drift
+ * between the independent PDF generators in this codebase, while still
+ * letting each one place it where its own footer has room reserved
+ * (bottom-center for the general/role/analytics reports; bottom-right
+ * for the government consolidated-cases reports, directly under their
+ * own "Page X of Y" — see governmentReportDocument.ts). Small (7.5pt),
+ * muted, in its own reserved footer row below any existing footer
+ * line/page-number text — never overlapping them. */
+export function drawWatermarkFooter(doc: jsPDF, x: number, y: number, align: 'left' | 'center' | 'right' = 'center'): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(WATERMARK_COLOR);
-  doc.text(WATERMARK_TEXT, pageWidth / 2, y, { align: 'center' });
+  doc.text(WATERMARK_TEXT, x, y, { align });
+}
+
+// =====================================================================
+// Vector checkmark rendering — built specifically for the government
+// consolidated-cases tables (WEDC/VAW, CNSP, CICL/CAR; see
+// governmentReportDocument.ts), but kept here as a shared primitive per
+// this fix's own "correct shared components, don't patch one file"
+// instruction, in case any future table needs the same treatment.
+//
+// ROOT CAUSE this works around: jsPDF's standard 14 fonts (Helvetica
+// et al.) only implement WinAnsi/Latin-1 encoding. U+2713 CHECK MARK is
+// outside that range, so passing '✓' through doc.text()/autoTable's
+// normal cell-text renderer at a small table font size (~6pt, required
+// to fit these wide official templates) does not reliably draw a
+// check — depending on the viewer it comes out as a stray apostrophe,
+// a dot, or a clipped sliver, because the font has no real glyph for
+// that code point. This is a font/encoding limitation, not a sizing
+// bug — no font size fixes it. The fix is to never ask jsPDF's text
+// renderer to draw that character at all: draw a small hand-built
+// vector tick instead, which renders identically in every viewer and
+// in print regardless of font support.
+// =====================================================================
+
+/** Sentinel written into a body cell to mean "draw a checkmark here" —
+ * never rendered as text itself (see checkmarkCellHooks below), and
+ * distinct from an empty string, which still means "no mark" exactly
+ * as before. The existing logic that decides WHETHER a cell is marked
+ * (mark()/sexualCell()/serviceCell() in governmentReportDocument.ts) is
+ * unchanged by this — only what gets drawn for a "yes" changed. */
+export const CHECKMARK_CELL = '__SAFESPACE_CHECKMARK__';
+
+/** The autoTable `didParseCell`/`didDrawCell` hook pair that makes
+ * CHECKMARK_CELL work: didParseCell empties the cell's text so
+ * autoTable's own renderer never attempts to draw the raw sentinel (or
+ * the unicode glyph) as text; didDrawCell then draws a small vector
+ * tick, sized and centered to the cell's own REAL, final geometry
+ * (`cell.x/y/width/height`, already correct post-pagination/post-
+ * column-sizing) — so it can never clip, misalign, or overflow into a
+ * neighboring cell regardless of how narrow a given column ends up.
+ * Pass the returned object's two functions as a table's own
+ * `didParseCell`/`didDrawCell` (or compose with an existing one). */
+export function checkmarkCellHooks() {
+  return {
+    didParseCell(data: { cell: { raw: unknown; text: string[] } }) {
+      if (data.cell.raw === CHECKMARK_CELL) data.cell.text = [];
+    },
+    didDrawCell(data: { cell: { raw: unknown; x: number; y: number; width: number; height: number }; doc: jsPDF }) {
+      if (data.cell.raw !== CHECKMARK_CELL) return;
+      const { x, y, width, height } = data.cell;
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      // Bounded by the SMALLER of width/height so a narrow column can
+      // never produce a tick that overflows left/right into the next
+      // cell, and a short row can never overflow up/down.
+      const size = Math.min(width, height) * 0.62;
+      const d = data.doc;
+      d.setDrawColor(TEXT_BODY);
+      d.setLineWidth(Math.max(size * 0.16, 0.12));
+      d.setLineCap('round');
+      d.setLineJoin('round');
+      // Three points forming a check (short down-stroke, long up-stroke),
+      // expressed as the two relative segments doc.lines() expects.
+      const startX = cx - size * 0.42;
+      const startY = cy + size * 0.02;
+      d.lines(
+        [
+          [size * 0.3, size * 0.28],
+          [size * 0.46, -size * 0.58],
+        ],
+        startX,
+        startY,
+        [1, 1],
+        'S'
+      );
+    },
+  };
 }
 
 /** Populates standard PDF metadata (Title/Subject/Author/Creator) in
@@ -511,7 +590,7 @@ export function finalizePagination(doc: jsPDF, opts: { runningHeaderTitle: strin
     // page-number line — on every page, first through last, including
     // ones created by autoTable's own pagination (this loop runs after
     // the full document, including every table, is already built).
-    drawWatermarkFooter(doc, pageWidth, pageHeight - 3);
+    drawWatermarkFooter(doc, pageWidth / 2, pageHeight - 3, 'center');
   }
 }
 
