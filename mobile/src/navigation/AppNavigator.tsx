@@ -19,6 +19,8 @@ import { CaseAccessScreen } from '../screens/caseAccess/CaseAccessScreen';
 import { ScanCaseQrScreen } from '../screens/caseAccess/ScanCaseQrScreen';
 import { LinkedCaseDetailScreen } from '../screens/caseAccess/LinkedCaseDetailScreen';
 import { TermsAndConditionsScreen } from '../screens/legal/TermsAndConditionsScreen';
+import { AnnouncementsScreen } from '../screens/announcements/AnnouncementsScreen';
+import { AnnouncementDetailScreen } from '../screens/announcements/AnnouncementDetailScreen';
 import { ClayTabBar } from './ClayTabBar';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -66,6 +68,8 @@ export function AppNavigator() {
       <Stack.Screen name="ScanCaseQr" component={ScanCaseQrScreen} options={{ title: 'Scan Case Access QR', headerTintColor: '#fff' }} />
       <Stack.Screen name="LinkedCaseDetail" component={LinkedCaseDetailScreen} options={{ title: 'My Case' }} />
       <Stack.Screen name="Terms" component={TermsAndConditionsScreen} options={{ title: 'Terms and Conditions' }} />
+      <Stack.Screen name="Announcements" component={AnnouncementsScreen} options={{ title: 'Announcements' }} />
+      <Stack.Screen name="AnnouncementDetail" component={AnnouncementDetailScreen} options={{ title: 'Announcement' }} />
     </Stack.Navigator>
   );
 }

@@ -342,7 +342,19 @@ export interface CaseReport {
   walkin_created_by: string | null; // FK -> user_profiles.profile_id (the admin who created this walk-in case)
   reported_at: string;
   updated_at: string;
+  // module30 — third-party reporting. survivor_id above always stays
+  // the REPORTING account's own survivor row; these describe who the
+  // incident actually happened to when that's someone else. All
+  // nullable except reported_for — never required, never a fabricated
+  // exact age/birthdate.
+  reported_for: ReportSubject;
+  third_party_name: string | null;
+  third_party_relationship: string | null;
+  third_party_age_range: string | null;
+  third_party_contact_number: string | null;
 }
+
+export type ReportSubject = 'Self' | 'Other';
 
 export interface CaseReferral {
   referral_id: string; // uuid, PK
@@ -479,11 +491,42 @@ export interface SosAlert {
   acknowledged_at: string | null;
 }
 
+// module28 — Provincial Announcements Management. target_audience is a
+// real enum with exactly ONE value today ('All Survivors') — the only
+// role this app's survivor-facing feed reads for. published_at/
+// updated_at are set only by a server-side trigger, never client-
+// writable from this app.
+export type AnnouncementCategory =
+  | 'General Announcement' | 'Public Advisory' | 'Service Update'
+  | 'Program or Activity' | 'Safety Information' | 'Emergency Advisory' | 'Other';
+export type AnnouncementPriority = 'Normal' | 'Important' | 'Urgent';
+export type AnnouncementStatus = 'Draft' | 'Scheduled' | 'Published' | 'Expired' | 'Archived' | 'Unpublished';
+export type AnnouncementAudience = 'All Survivors';
+
+export interface Announcement {
+  announcement_id: string; // uuid, PK
+  title: string;
+  summary: string | null;
+  content: string;
+  category: AnnouncementCategory;
+  priority: AnnouncementPriority;
+  status: AnnouncementStatus;
+  target_audience: AnnouncementAudience;
+  external_link: string | null;
+  author_id: string; // FK -> user_profiles.profile_id
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  scheduled_at: string | null;
+  expires_at: string | null;
+}
+
 export interface Notification {
   notification_id: string; // uuid, PK
   profile_id: string; // FK -> user_profiles.profile_id
   case_id: string | null; // FK -> case_reports.case_id
   sos_id: string | null; // FK -> sos_alerts.sos_id
+  announcement_id: string | null; // FK -> announcements.announcement_id (module28)
   notification_type: NotificationType;
   title: string;
   message: string;
@@ -742,6 +785,7 @@ export interface Database {
       case_access_tokens: { Row: CaseAccessToken; Insert: Partial<CaseAccessToken>; Update: Partial<CaseAccessToken> } & NoRelationships;
       case_client_links: { Row: CaseClientLink; Insert: Partial<CaseClientLink>; Update: Partial<CaseClientLink> } & NoRelationships;
       terms_acceptances: { Row: TermsAcceptance; Insert: Partial<TermsAcceptance>; Update: Partial<TermsAcceptance> } & NoRelationships;
+      announcements: { Row: Announcement; Insert: Partial<Announcement>; Update: Partial<Announcement> } & NoRelationships;
     };
     Views: Record<string, never>;
     // module14 RPCs — see supabase/module14_walkin_case_qr_access.sql.

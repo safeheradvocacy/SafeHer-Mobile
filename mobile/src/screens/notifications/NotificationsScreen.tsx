@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { EmptyState } from '../../components/ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
+import { AppStackParamList } from '../../navigation/types';
 import type { Notification } from '../../types/database.types';
+
+type Nav = NativeStackNavigationProp<AppStackParamList, 'Notifications'>;
 
 const TYPE_LABEL: Record<string, string> = {
   'Case Update': 'Case update',
@@ -20,6 +24,7 @@ const TYPE_LABEL: Record<string, string> = {
 export function NotificationsScreen() {
   const { palette, prefs } = useTheme();
   const { profile } = useAuth();
+  const navigation = useNavigation<Nav>();
   const [items, setItems] = useState<Notification[]>([]);
 
   const load = useCallback(async () => {
@@ -65,6 +70,13 @@ export function NotificationsScreen() {
     await supabase.from('notifications').update({ is_read: true }).eq('notification_id', n.notification_id);
   };
 
+  const onPressNotification = (n: Notification) => {
+    markRead(n);
+    if (n.announcement_id) {
+      navigation.navigate('AnnouncementDetail', { announcementId: n.announcement_id });
+    }
+  };
+
   return (
     <FlatList
       style={[styles.screen, { backgroundColor: palette.background }]}
@@ -87,7 +99,7 @@ export function NotificationsScreen() {
       ListEmptyComponent={<EmptyState title="You're all caught up" subtitle="New updates about your cases and SOS alerts will show up here." />}
       renderItem={({ item }) => (
         <Pressable
-          onPress={() => markRead(item)}
+          onPress={() => onPressNotification(item)}
           style={[
             styles.row,
             { backgroundColor: palette.surface, borderColor: palette.border },

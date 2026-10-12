@@ -1,0 +1,106 @@
+-- =========================================================
+-- SafeSpace — Module 32: Police Management
+-- (audit record — no schema or RLS change was required)
+--
+-- WHY THIS FILE HAS NO DDL — before writing any code for the "Police
+-- Management" module (master prompt: "Reorganize Shelter Management
+-- and Implement Police Management"), the actual schema and RLS were
+-- checked directly, per that brief's own instruction: "If the existing
+-- schema does not define police station or municipality assignments,
+-- do not invent a false assignment relationship... implement a
+-- migration only when it is necessary."
+--
+-- SCOPE — Police Management is a PROVINCE-TIER-ONLY module:
+-- provincial_staff / provincial_admin / super_admin. Municipal Admin
+-- (MSWDO) does NOT get a Police Management surface at all (confirmed
+-- product decision) — it is not in permissions.ts's police.manage set,
+-- not in App.tsx's /admin/police-management route guard, and
+-- create-admin-user/index.ts never accepts a municipal_admin caller for
+-- role === 'law_enforcement' on either 'create' or 'update'. This is
+-- enforced server-side, not merely hidden from the sidebar.
+--
+-- Findings:
+--   1. user_profiles.municipality_id already EXISTS, is nullable, and
+--      carries no CHECK constraint tying it to any particular role
+--      (confirmed by inspecting 00_schema.sql and every module*.sql for
+--      a constraint referencing it — none exists). law_enforcement
+--      accounts have simply never had this column populated. Giving an
+--      officer an assigned municipality for PERSONNEL ADMINISTRATION/
+--      oversight purposes is therefore reusing an existing column and
+--      an existing hierarchy concept, not inventing a new one — exactly
+--      the brief's own preferred outcome ("Use the existing jurisdiction
+--      hierarchy").
+--   2. "Admins can view profiles in scope" (module3) already reads:
+--        is_provincial_admin() OR (current_role() = 'municipal_admin'
+--        AND municipality_id = current_municipality_id())
+--      is_provincial_admin() already includes provincial_staff
+--      (module11) — so provincial_staff can ALREADY see any
+--      user_profiles row, including law_enforcement, with zero RLS
+--      change. The municipal_admin branch of this policy is irrelevant
+--      to Police Management, since municipal_admin is never a caller of
+--      this module at the application layer.
+--   3. "Admins can update profile status in scope" (module2) already
+--      reads the identical is_provincial_admin() condition, column-
+--      scoped to `is_active` only — so Activate/Deactivate for an
+--      officer already works for provincial_staff/provincial_admin/
+--      super_admin with zero RLS change.
+--   4. audit_logs already captures every user_profiles change via the
+--      existing trg_audit_user_profiles trigger (module3) — no new
+--      audit wiring was needed.
+--
+-- What DID need to change — both in application code, not the
+-- database — is documented in their own files, not duplicated here:
+--   * supabase/functions/create-admin-user/index.ts — provincial_staff
+--     added as a caller, but restricted to action='update' on an
+--     EXISTING law_enforcement profile only (never create, never any
+--     other role). Account CREATION for law_enforcement remains
+--     province-admin-tier-only, preserving that function's own
+--     pre-existing, deliberate "Provincial Admin -> Authorized Law
+--     Enforcement Account" design decision unchanged.
+--   * supabase/functions/admin-user-metadata/index.ts — provincial_staff
+--     added as a caller (needed for the Police Management directory's
+--     email/last-sign-in columns), treated identically to the existing
+--     province-tier branch.
+--   * admin/src/lib/permissions.ts — new 'police.manage' permission key,
+--     held by provincial_staff/provincial_admin/super_admin only — a
+--     UI-layer convenience, same as every other key in that file; the
+--     real boundary is the RLS/Edge-Function behavior documented above
+--     and in those files' own comments.
+--
+-- Deliberately NOT done, and why:
+--   * No new table/column — see findings 1-4 above.
+--   * No Municipal Admin involvement of any kind — Police Officer
+--     account administration stays province-tier-only. (An earlier pass
+--     briefly explored a municipal_admin "claim an unassigned officer"
+--     flow; it was reverted at the product owner's explicit direction
+--     before shipping, so no trace of it remains in application code or
+--     RLS — this file documents the final, shipped scope only.)
+--   * Police Management never touches sos_alerts, law_enforcement_
+--     referrals, or any case-response table — it is a personnel/
+--     account-administration surface over user_profiles only. Nothing
+--     in this pass changes how an SOS alert reaches a Police Officer
+--     or how a case referral is assigned.
+--
+-- =========================================================
+
+-- ---------------------------------------------------------
+-- VERIFICATION — read-only, confirming the findings above hold on your
+-- actual database before relying on them.
+-- ---------------------------------------------------------
+
+-- 1. Confirm municipality_id has no role-specific CHECK constraint:
+--   select conname, pg_get_constraintdef(oid) from pg_constraint
+--   where conrelid = 'public.user_profiles'::regclass and contype = 'c';
+
+-- 2. Confirm is_provincial_admin() already includes provincial_staff:
+--   select pg_get_functiondef('public.is_provincial_admin()'::regprocedure);
+
+-- 3. Confirm the two existing user_profiles policies read as described:
+--   select policyname, cmd, qual, with_check from pg_policies where tablename = 'user_profiles';
+
+-- 4. Confirm no municipal_admin profile can reach this module's Edge
+--    Function path (expect this to always return zero rows for any
+--    municipal_admin-driven attempt — enforced by create-admin-user's
+--    own checks, this is a sanity query on the data only):
+--   select profile_id, role from user_profiles
+--   where role = 'law_enforcement' and municipality_id is not null;

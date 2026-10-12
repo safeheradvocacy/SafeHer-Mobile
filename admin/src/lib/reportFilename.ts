@@ -48,6 +48,23 @@ export function buildReportFilename(
  * report title + timestamp. Falls back to "all" for an unset date
  * bound rather than an empty string in the filename.
  */
+/**
+ * Analytics PDF filenames follow the brief's own convention
+ * (SafeSpace_Analytics_<Scope>_<period>.pdf) — a predictable, scope-
+ * and-period-based shape, matching buildGovernmentReportFilename's
+ * approach rather than the free-text+timestamp one above. `scope` is
+ * sanitized the same way a free-text report name is (no invalid
+ * filesystem characters, no raw PII) and should be a short tier label
+ * such as "Provincial"/"Municipal"/"Barangay"/"Police"/"Shelter"/
+ * "Support" — never a survivor's name or any case-level identifier.
+ */
+export function buildAnalyticsReportFilename(scope: string, dateFrom: string, dateTo: string): string {
+  const safeScope = sanitizeReportName(scope).replace(/_Report$/, '');
+  const from = dateFrom || 'all';
+  const to = dateTo || 'present';
+  return `SafeSpace_Analytics_${safeScope}_${from}_to_${to}.pdf`;
+}
+
 export function buildGovernmentReportFilename(
   reportType: 'General' | 'WEDC' | 'CNSP' | 'CICL',
   dateFrom: string,

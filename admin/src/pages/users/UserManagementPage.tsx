@@ -7,14 +7,8 @@ import { DashboardHeaderActions } from '../../components/dashboard/DashboardHead
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import { hasPermission } from '../../lib/permissions';
 import { ROLE_LABEL } from '../../lib/roleLabels';
+import { type AdminMetadata, formatDateTime, extractInvokeError } from '../../lib/adminUserHelpers';
 import type { Barangay, Municipality, Shelter, UserProfile, UserRole } from '../../types/database.types';
-
-type AdminMetadata = { last_sign_in_at: string | null; email: string | null; email_confirmed_at: string | null };
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return 'Never signed in';
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
 
 // shelter_admin and support_expert are deliberately province-only (not
 // municipality tier): a shelter can receive referrals across
@@ -57,32 +51,6 @@ function creatableRoles(roleTier: 'province' | 'municipality' | 'barangay' | nul
   if (roleTier === 'province') return ['municipal_admin', 'barangay_admin', 'shelter_admin', 'support_expert', 'law_enforcement', 'provincial_staff', 'provincial_admin'];
   if (roleTier === 'municipality') return ['municipal_admin', 'barangay_admin'];
   return [];
-}
-
-async function extractInvokeError(data: unknown, error: unknown): Promise<string | undefined> {
-  let message = (data as { error?: string } | null)?.error;
-  if (!message && error) {
-    console.error('[UserManagementPage] invoke error:', error);
-    const ctx = (error as { context?: Response }).context;
-    if (ctx && typeof ctx.json === 'function') {
-      console.error('[UserManagementPage] error HTTP status:', ctx.status, ctx.statusText);
-      try {
-        const body = await ctx.clone().json();
-        console.error('[UserManagementPage] error body (json):', body);
-        // Our own function returns {error}; Supabase's edge gateway (JWT
-        // verification failures etc., which never reach our code) uses
-        // {message} instead — check both rather than assuming our shape.
-        message = body?.error || body?.message || JSON.stringify(body);
-      } catch {
-        const text = await ctx.clone().text().catch(() => '');
-        console.error('[UserManagementPage] error body (text):', text);
-        message = text || `Request failed (HTTP ${ctx.status}${ctx.statusText ? ' ' + ctx.statusText : ''}).`;
-      }
-    } else {
-      message = (error as Error)?.message;
-    }
-  }
-  return message;
 }
 
 export function UserManagementPage() {

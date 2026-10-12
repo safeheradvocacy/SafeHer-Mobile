@@ -1,19 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
 import '../../lib/chartSetup';
 import { chartBaseOptions } from '../../lib/chartSetup';
-import { MessageCircleHeart, Download, Clock3, CheckCircle2 } from 'lucide-react';
+import { MessageCircleHeart, Eye, FileText, Printer, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
-import { downloadCsv } from '../../lib/exportCsv';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { PageHeader, EmptyState } from '../../components/ui';
 import { groupCount, KpiCard, KpiSkeletonCard, ChartCard } from './reportsUi';
+import { ROLE_LABEL } from '../../lib/roleLabels';
+import { captureChartImage } from '../../lib/captureChartImage';
+import { generateAnalyticsPdf, type AnalyticsChartSection } from '../../lib/analyticsReportDocument';
+import { buildAnalyticsReportFilename } from '../../lib/reportFilename';
+import { isWithinDateFilter } from '../../lib/reportFilters';
+import { usePdfReportActions } from '../../hooks/usePdfReportActions';
+import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 import type { ExpertSupportRequest } from '../../types/database.types';
 
 const CLOSED: ExpertSupportRequest['status'][] = ['CLOSED'];
@@ -62,13 +68,7 @@ export function SupportAnalyticsPage() {
 
   useAutoRefresh(() => load(true));
 
-  const inRange = (iso: string) => {
-    if (dateFrom && iso < `${dateFrom}T00:00:00`) return false;
-    if (dateTo && iso >= `${dateTo}T23:59:59.999`) return false;
-    return true;
-  };
-
-  const filtered = useMemo(() => requests.filter((r) => inRange(r.requested_at)), [requests, dateFrom, dateTo]);
+  const filtered = useMemo(() => requests.filter((r) => isWithinDateFilter(r.requested_at, dateFrom, dateTo)), [requests, dateFrom, dateTo]);
 
   const byStatus = useMemo(() => groupCount(filtered, (r) => r.status), [filtered]);
   const byPriority = useMemo(() => groupCount(filtered, (r) => r.priority), [filtered]);
@@ -91,31 +91,59 @@ export function SupportAnalyticsPage() {
     [reducedMotion]
   );
 
-  const exportCsv = () => {
-    const filename = `support-conversations-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadCsv(
-      filename,
-      filtered.map((r) => ({
-        request_id: r.request_id,
-        status: r.status,
-        priority: r.priority,
-        requested_at: r.requested_at,
-        assigned_at: r.assigned_at ?? '',
-        accepted_at: r.accepted_at ?? '',
-        closed_at: r.closed_at ?? '',
-      })),
-      [
-        { key: 'request_id', label: 'Request ID' },
-        { key: 'status', label: 'Status' },
-        { key: 'priority', label: 'Priority' },
-        { key: 'requested_at', label: 'Requested At' },
-        { key: 'assigned_at', label: 'Assigned At' },
-        { key: 'accepted_at', label: 'Accepted At' },
-        { key: 'closed_at', label: 'Closed At' },
-      ]
-    );
-    if (profile) logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'expert_support_requests', recordId: profile.profile_id, newValues: { filename, rowCount: filtered.length } });
-    showToast('success', `Exported ${filename}.`);
+  const statusChartRef = useRef<HTMLDivElement>(null);
+  const priorityChartRef = useRef<HTMLDivElement>(null);
+  const volumeBarRef = useRef<HTMLDivElement>(null);
+
+  const buildPdfDocument = async () => {
+    const charts: AnalyticsChartSection[] = [
+      { title: 'Support Requests by Status', image: captureChartImage(statusChartRef.current), tableRows: byStatus },
+      { title: 'Support Requests by Priority', image: captureChartImage(priorityChartRef.current), tableRows: byPriority },
+      { title: 'Request Volume', image: captureChartImage(volumeBarRef.current), tableRows: byStatus },
+    ];
+    return generateAnalyticsPdf({
+      documentKicker: 'SUPPORT ANALYTICS REPORT',
+      reportTitle: 'My Support Analytics',
+      runningHeaderTitle: 'SAFESPACE — SUPPORT ANALYTICS REPORT',
+      footerLabel: 'SafeSpace — Support Analytics Report · Confidential — For Authorized Use Only',
+      generatedByName: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown',
+      generatedByRole: profile ? ROLE_LABEL[profile.role] : '',
+      // Assignment-only scope (assigned_expert_id = current_profile_id())
+      // — never a shared queue, matching this role's real RLS/dashboard
+      // precedent (see this file's own header note).
+      scopeLabel: 'Conversations assigned to me',
+      dateFrom,
+      dateTo,
+      appliedFilterLines: [dateFrom && `From: ${dateFrom}`, dateTo && `To: ${dateTo}`].filter(Boolean) as string[],
+      // No clinical outcome, satisfaction, or counseling-content metric
+      // is included — none of that is recorded anywhere in SafeSpace
+      // (see this file's own header note); including one here would be
+      // exactly the kind of fabrication the brief warns against.
+      kpis: [
+        { label: 'Total Assigned', count: filtered.length },
+        { label: 'Active', count: activeCount },
+        { label: 'Closed', count: closedCount },
+      ],
+      charts,
+    });
+  };
+
+  const pdfActions = usePdfReportActions({
+    buildDoc: buildPdfDocument,
+    filename: () => buildAnalyticsReportFilename('Support', dateFrom, dateTo),
+    onAudit: (action, filename) => {
+      if (!profile) return;
+      logAudit({ profileId: profile.profile_id, action, tableName: 'expert_support_requests', recordId: profile.profile_id, newValues: { filename, dateFrom, dateTo } });
+    },
+  });
+
+  const handleExportPdf = async () => {
+    try {
+      const filename = await pdfActions.exportPdf();
+      if (filename) showToast('success', `Report exported successfully as ${filename}.`);
+    } catch {
+      showToast('error', 'Unable to generate the PDF report. Please try again.');
+    }
   };
 
   return (
@@ -146,6 +174,18 @@ export function SupportAnalyticsPage() {
         )}
       </div>
 
+      <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || pdfActions.busy}>
+          <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
+        </button>
+        <button className="btn btn-primary btn-sm" onClick={handleExportPdf} disabled={loading || pdfActions.busy}>
+          <FileText size={13} /> {pdfActions.state === 'exporting' ? 'Generating…' : 'Export PDF'}
+        </button>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.printPdf} disabled={loading || pdfActions.busy}>
+          <Printer size={13} /> {pdfActions.state === 'printing' ? 'Preparing…' : 'Print PDF'}
+        </button>
+      </div>
+
       <div className="dash-kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 20 }}>
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <KpiSkeletonCard key={i} />)
@@ -169,27 +209,34 @@ export function SupportAnalyticsPage() {
       </div>
 
       <div className="dash-chart-row dash-chart-row-2" style={{ marginBottom: 20 }}>
-        <ChartCard title="By Status" data={byStatus} options={doughnutOptions} loading={loading} emptyText="No assigned conversations match the selected period." />
-        <ChartCard title="By Priority" data={byPriority} options={doughnutOptions} loading={loading} emptyText="No assigned conversations match the selected period." />
+        <ChartCard title="By Status" data={byStatus} options={doughnutOptions} loading={loading} emptyText="No assigned conversations match the selected period." chartBoxRef={statusChartRef} />
+        <ChartCard title="By Priority" data={byPriority} options={doughnutOptions} loading={loading} emptyText="No assigned conversations match the selected period." chartBoxRef={priorityChartRef} />
       </div>
 
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15 }}>Request Volume</h3>
-          <button className="btn btn-outline btn-sm report-no-print" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download size={13} /> Export CSV
-          </button>
-        </div>
+        <h3 style={{ fontSize: 15, marginBottom: 16 }}>Request Volume</h3>
         {loading ? (
           <div className="skeleton" style={{ height: 180 }} />
         ) : byStatus.length === 0 ? (
           <EmptyState title="No assigned conversations match the selected period." />
         ) : (
-          <div className="chart-box" style={{ height: 180 }}>
+          <div className="chart-box" style={{ height: 180 }} ref={volumeBarRef}>
             <Bar data={{ labels: byStatus.map((s) => s.label), datasets: [{ label: 'Requests', data: byStatus.map((s) => s.count), backgroundColor: '#4C82B3', borderRadius: 6, maxBarThickness: 56 }] }} options={chartBaseOptions(barOptions)} />
           </div>
         )}
       </div>
+
+      {pdfActions.viewerOpen && (
+        <PdfViewerModal
+          title="My Support Analytics"
+          pdfUrl={pdfActions.viewerUrl}
+          error={pdfActions.viewerError}
+          onClose={pdfActions.closeViewer}
+          onExport={handleExportPdf}
+          onPrint={pdfActions.printViewerDoc}
+          printing={pdfActions.printing}
+        />
+      )}
     </div>
   );
 }

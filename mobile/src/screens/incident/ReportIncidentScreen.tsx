@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Switch, ActivityIndicator } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,9 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit, generateCaseNumber } from '../../lib/audit';
-import { readFileAsArrayBuffer } from '../../lib/uploadFile';
 import { preflightLocation, acquireSosLocation } from '../../lib/sosLocation';
-import { Input, PrimaryButton, Screen, AlertMessage } from '../../components/ui';
+import { Input, PrimaryButton, Screen, AlertMessage, DropdownInput } from '../../components/ui';
 import { LocationMapPicker, type LocationPickerResult } from '../../components/LocationMapPicker';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
@@ -28,6 +26,45 @@ const CASE_TYPES: CaseType[] = [
 ];
 const PRIORITIES: PriorityLevel[] = ['Low', 'Medium', 'High', 'Critical'];
 
+// Government-reporting-alignment audit: case_reports.incident_date is a
+// real, separate column from reported_at (submission time) — Walk-In
+// cases already collect it (WalkInCaseModal.tsx) but this screen used
+// to just stamp the submission instant into it, making "Incident date"
+// on the admin case detail page silently identical to "Reported" for
+// every mobile-submitted case. This is a coarse, honest alternative to
+// a full date/time picker (no such native picker is installed in this
+// app) — it never fabricates a precise date the survivor didn't
+// actually give, and classification (classifyForGovernmentReport) was
+// confirmed to key off reported_at, never incident_date, so this has
+// zero effect on WEDC/CNSP/CICL eligibility either way.
+const INCIDENT_TIMING_OPTIONS = [
+  { label: 'Just now or today', value: 'now' },
+  { label: 'Yesterday', value: 'yesterday' },
+  { label: 'A few days ago', value: 'few_days' },
+  { label: 'More than a week ago', value: 'over_week' },
+  { label: 'Not sure', value: 'unsure' },
+];
+
+function incidentDateFor(timing: string): string {
+  const d = new Date();
+  if (timing === 'yesterday') d.setDate(d.getDate() - 1);
+  else if (timing === 'few_days') d.setDate(d.getDate() - 3);
+  else if (timing === 'over_week') d.setDate(d.getDate() - 14);
+  // 'now' and 'unsure' both keep the submission instant — never a guess.
+  return d.toISOString();
+}
+
+// Who the report is actually about (module30). A coarse age bucket,
+// never a fabricated exact birthdate — the reporter is describing
+// someone else and may genuinely not know an exact age.
+const THIRD_PARTY_AGE_OPTIONS = [
+  { label: 'Child (0–12)', value: 'Child (0–12)' },
+  { label: 'Teen (13–17)', value: 'Teen (13–17)' },
+  { label: 'Adult (18–59)', value: 'Adult (18–59)' },
+  { label: 'Senior (60+)', value: 'Senior (60+)' },
+  { label: 'Not sure', value: 'Not sure' },
+];
+
 export function ReportIncidentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'ReportIncident'>>();
   const { palette } = useTheme();
@@ -36,12 +73,16 @@ export function ReportIncidentScreen() {
   const [survivorId, setSurvivorId] = useState<string | null>(null);
   const [municipalityId, setMunicipalityId] = useState<string | null>(null);
   const [municipalityName, setMunicipalityName] = useState<string>('');
+  const [reportedFor, setReportedFor] = useState<'Self' | 'Other'>('Self');
+  const [thirdPartyName, setThirdPartyName] = useState('');
+  const [thirdPartyRelationship, setThirdPartyRelationship] = useState('');
+  const [thirdPartyAgeRange, setThirdPartyAgeRange] = useState<string | null>(null);
+  const [thirdPartyContact, setThirdPartyContact] = useState('');
   const [caseType, setCaseType] = useState<CaseType | null>(null);
   const [priority, setPriority] = useState<PriorityLevel>('Medium');
+  const [incidentTiming, setIncidentTiming] = useState('now');
   const [description, setDescription] = useState('');
   const [incidentLocation, setIncidentLocation] = useState('');
-  const [isAnonymous, setIsAnonymous] = useState(false);
-  const [pickedFile, setPickedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittedCaseNumber, setSubmittedCaseNumber] = useState<string | null>(null);
@@ -134,13 +175,6 @@ export function ReportIncidentScreen() {
     setShowLocationPicker(true);
   };
 
-  const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: ['image/*', 'application/pdf'] });
-    if (!result.canceled && result.assets?.[0]) {
-      setPickedFile(result.assets[0]);
-    }
-  };
-
   const onSubmit = async () => {
     if (!survivorId || !municipalityId || !profile) {
       setError('Your profile is still loading. Please try again in a moment.');
@@ -148,6 +182,10 @@ export function ReportIncidentScreen() {
     }
     if (!caseType || !description || !incidentLocation) {
       setError('Case type, description, and incident location are required.');
+      return;
+    }
+    if (reportedFor === 'Other' && (!thirdPartyName.trim() || !thirdPartyRelationship.trim())) {
+      setError("Please enter the person's name and your relationship to them.");
       return;
     }
     // Defense in depth: re-check right before submitting, in case
@@ -173,7 +211,7 @@ export function ReportIncidentScreen() {
         case_number: caseNumber,
         case_type: caseType,
         description,
-        incident_date: new Date().toISOString(),
+        incident_date: incidentDateFor(incidentTiming),
         incident_location: incidentLocation,
         // Descriptive-only enrichment (module12) — never affects case
         // routing/jurisdiction, which stays driven by municipality_id
@@ -188,13 +226,24 @@ export function ReportIncidentScreen() {
         incident_location_source: incidentCoords?.source ?? null,
         priority_level: priority,
         status: 'Pending',
-        is_anonymous: isAnonymous,
+        is_anonymous: false,
+        reported_for: reportedFor,
+        third_party_name: reportedFor === 'Other' ? thirdPartyName.trim() : null,
+        third_party_relationship: reportedFor === 'Other' ? thirdPartyRelationship.trim() : null,
+        third_party_age_range: reportedFor === 'Other' ? thirdPartyAgeRange : null,
+        third_party_contact_number: reportedFor === 'Other' ? thirdPartyContact.trim() || null : null,
       })
       .select()
       .single();
 
     if (insertErr || !caseRow) {
       setSubmitting(false);
+      // This was previously silent — the generic message below gave no
+      // way to tell a real RLS rejection apart from, say, a migration
+      // that hadn't been run yet (a missing column surfaces here as a
+      // PGRST204 error, not 42501). Logging the raw error is what makes
+      // that diagnosable from the Metro/Expo console.
+      console.error('[ReportIncidentScreen] case_reports insert failed:', insertErr?.code, insertErr?.message, insertErr?.details);
       if (insertErr?.code === '42501' || insertErr?.message?.toLowerCase().includes('row-level security')) {
         setError('Please verify your account before submitting an incident report.');
       } else {
@@ -219,38 +268,6 @@ export function ReportIncidentScreen() {
       new_status: 'Pending',
       remarks: 'Report submitted.',
     });
-
-    if (pickedFile) {
-      const path = `${caseRow.case_id}/${Date.now()}_${pickedFile.name}`;
-      const fileBuffer = await readFileAsArrayBuffer(pickedFile.uri);
-      const { error: uploadErr } = await supabase.storage.from('evidence').upload(path, fileBuffer, {
-        contentType: pickedFile.mimeType ?? 'application/octet-stream',
-      });
-      if (uploadErr) console.error('[ReportIncidentScreen] evidence upload failed:', uploadErr.message);
-      if (!uploadErr) {
-        const { data: evidenceRow } = await supabase
-          .from('evidence')
-          .insert({
-            case_id: caseRow.case_id,
-            uploaded_by: profile.profile_id,
-            file_name: pickedFile.name,
-            storage_path: path,
-            mime_type: pickedFile.mimeType ?? 'application/octet-stream',
-            file_size: pickedFile.size ?? 0,
-          })
-          .select()
-          .single();
-        if (evidenceRow) {
-          await logAudit({
-            profileId: profile.profile_id,
-            action: 'INSERT',
-            tableName: 'evidence',
-            recordId: evidenceRow.evidence_id,
-            newValues: evidenceRow,
-          });
-        }
-      }
-    }
 
     setSubmitting(false);
     setSubmittedCaseNumber(caseRow.case_number);
@@ -279,6 +296,53 @@ export function ReportIncidentScreen() {
       <Text style={[styles.subtitle, { color: palette.textMuted }]}>
         What you share here is confidential and only seen by authorized staff.
       </Text>
+
+      <Text style={[styles.label, { color: palette.text }]}>Who is this report about? *</Text>
+      <View style={styles.chipRow}>
+        {(['Self', 'Other'] as const).map((who) => (
+          <Pressable
+            key={who}
+            onPress={() => setReportedFor(who)}
+            style={[
+              styles.chip,
+              { borderColor: palette.border },
+              reportedFor === who && { backgroundColor: palette.primary, borderColor: palette.primary },
+            ]}
+          >
+            <Text style={[styles.chipText, { color: reportedFor === who ? palette.white : palette.text }]}>
+              {who === 'Self' ? 'Myself' : 'Someone else'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {reportedFor === 'Other' && (
+        <View style={{ marginBottom: spacing.sm }}>
+          <Text style={[styles.helperText, { color: palette.textMuted, marginBottom: spacing.xs }]}>
+            Tell us who you're reporting for. It's okay if you don't know everything.
+          </Text>
+          <Input label="Their name *" value={thirdPartyName} onChangeText={setThirdPartyName} placeholder="Full name" />
+          <Input
+            label="Your relationship to them *"
+            value={thirdPartyRelationship}
+            onChangeText={setThirdPartyRelationship}
+            placeholder="e.g. Parent, relative, neighbor, friend"
+          />
+          <DropdownInput
+            label="Their approximate age (optional)"
+            value={thirdPartyAgeRange}
+            options={THIRD_PARTY_AGE_OPTIONS}
+            onSelect={setThirdPartyAgeRange}
+          />
+          <Input
+            label="Their contact number (optional)"
+            value={thirdPartyContact}
+            onChangeText={setThirdPartyContact}
+            placeholder="If known"
+            keyboardType="phone-pad"
+          />
+        </View>
+      )}
 
       <Text style={[styles.label, { color: palette.text }]}>Case type *</Text>
       <View style={styles.chipRow}>
@@ -313,6 +377,16 @@ export function ReportIncidentScreen() {
           </Pressable>
         ))}
       </View>
+
+      <DropdownInput
+        label="When did this happen?"
+        value={incidentTiming}
+        options={INCIDENT_TIMING_OPTIONS}
+        onSelect={setIncidentTiming}
+      />
+      <Text style={[styles.helperText, { color: palette.textMuted, marginTop: -spacing.sm, marginBottom: spacing.sm }]}>
+        An approximate timeframe is fine — exact dates aren't required.
+      </Text>
 
       <Text style={[styles.label, { color: palette.text }]}>Where did the incident occur?</Text>
       <View style={{ marginBottom: spacing.sm }}>
@@ -373,22 +447,6 @@ export function ReportIncidentScreen() {
         style={{ minHeight: 110, textAlignVertical: 'top' }}
       />
 
-      <Pressable onPress={pickFile} style={[styles.uploadBox, { borderColor: palette.border }]}>
-        <Text style={[styles.uploadText, { color: palette.textMuted }]}>
-          {pickedFile ? `Attached: ${pickedFile.name}` : 'Attach evidence (photo or document) — optional'}
-        </Text>
-      </Pressable>
-
-      <View style={styles.anonymousRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.label, { color: palette.text }]}>Submit anonymously</Text>
-          <Text style={[styles.helperText, { color: palette.textMuted }]}>
-            Your name will be hidden from municipal staff where supported.
-          </Text>
-        </View>
-        <Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: palette.primary }} />
-      </View>
-
       {error ? <Text style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
 
       <PrimaryButton title="Submit report" onPress={onSubmit} loading={submitting} />
@@ -433,16 +491,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   locationChoiceLabel: { ...typography.bodyMedium },
-  uploadBox: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginVertical: spacing.md,
-    alignItems: 'center',
-  },
-  uploadText: { ...typography.caption },
-  anonymousRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
   error: { ...typography.caption, marginBottom: spacing.sm },
   confirmWrap: { alignItems: 'center', paddingTop: spacing.xxl },
   confirmIcon: { width: 88, height: 88, borderRadius: radius.pill, marginBottom: spacing.lg },

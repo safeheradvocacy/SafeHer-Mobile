@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, Eye, FileText, Printer } from 'lucide-react';
+import { Eye, FileText, Printer } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { logAudit } from '../../lib/audit';
-import { downloadCsv } from '../../lib/exportCsv';
 import { buildReportFilename } from '../../lib/reportFilename';
-import { generateRoleReportPdf, loadSafeherLogoDataUrl, reportingPeriodLabel } from '../../lib/reportDocument';
+import { generateRoleReportPdf, reportingPeriodLabel } from '../../lib/reportDocument';
 import { usePdfReportActions } from '../../hooks/usePdfReportActions';
 import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 import { usePoliceSosAlerts } from '../../hooks/usePoliceSosAlerts';
 import { bucketOf as caseBucketOf, useLawEnforcementReferrals } from '../../hooks/useLawEnforcementReferrals';
+import { isWithinDateFilter } from '../../lib/reportFilters';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { PageHeader } from '../../components/ui';
 import { groupCount } from './reportsUi';
@@ -60,14 +60,8 @@ export function PoliceReportsPage() {
     reloadRef(true);
   };
 
-  const inRange = (iso: string) => {
-    if (dateFrom && iso < `${dateFrom}T00:00:00`) return false;
-    if (dateTo && iso >= `${dateTo}T23:59:59.999`) return false;
-    return true;
-  };
-
-  const filteredAlerts = useMemo(() => alerts.filter((a) => inRange(a.triggered_at)), [alerts, dateFrom, dateTo]);
-  const filteredReferrals = useMemo(() => caseReferrals.filter((r) => inRange(r.created_at)), [caseReferrals, dateFrom, dateTo]);
+  const filteredAlerts = useMemo(() => alerts.filter((a) => isWithinDateFilter(a.triggered_at, dateFrom, dateTo)), [alerts, dateFrom, dateTo]);
+  const filteredReferrals = useMemo(() => caseReferrals.filter((r) => isWithinDateFilter(r.created_at, dateFrom, dateTo)), [caseReferrals, dateFrom, dateTo]);
 
   const sosByStatus = useMemo(() => groupCount(filteredAlerts, (a) => a.status), [filteredAlerts]);
   const referralsByStatus = useMemo(() => groupCount(filteredReferrals, (r) => r.status), [filteredReferrals]);
@@ -84,7 +78,6 @@ export function PoliceReportsPage() {
   }, [dateFrom, dateTo]);
 
   const buildPdfDocument = async () => {
-    const logoDataUrl = await loadSafeherLogoDataUrl();
     return generateRoleReportPdf({
       // Landscape — the SOS Alert Detail table (5 columns, 3 of them
       // full timestamps) was cramped/wrapping in portrait's narrower
@@ -148,7 +141,6 @@ export function PoliceReportsPage() {
         { label: 'Certified Correct:', name: certifiedBy, roleLabel: 'Reviewing / Approving Officer' },
         { label: 'Noted by:', name: notedBy, roleLabel: 'Authorized Reviewing Official' },
       ],
-      logoDataUrl,
     });
   };
 
@@ -168,23 +160,6 @@ export function PoliceReportsPage() {
     } catch {
       showToast('error', 'Unable to generate the PDF report. Please try again.');
     }
-  };
-
-  const exportCsv = () => {
-    const filename = buildReportFilename(`${reportTitle} - SOS Alerts`, 'csv');
-    downloadCsv(
-      filename,
-      filteredAlerts.map((a: SosAlert) => ({ sos_id: a.sos_id, status: a.status, triggered_at: a.triggered_at, acknowledged_at: a.acknowledged_at ?? '', resolved_at: a.resolved_at ?? '' })),
-      [
-        { key: 'sos_id', label: 'SOS ID' },
-        { key: 'status', label: 'Status' },
-        { key: 'triggered_at', label: 'Triggered At' },
-        { key: 'acknowledged_at', label: 'Acknowledged At' },
-        { key: 'resolved_at', label: 'Resolved At' },
-      ]
-    );
-    if (profile) logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'sos_alerts', recordId: profile.profile_id, newValues: { filename, rowCount: filteredAlerts.length } });
-    showToast('success', `Exported ${filename}.`);
   };
 
   const busy = pdfActions.busy;
@@ -258,9 +233,6 @@ export function PoliceReportsPage() {
         <div className="report-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ fontSize: 15.5 }}>Generate Report</h3>
           <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-outline btn-sm" onClick={exportCsv} disabled={loading || busy || filteredAlerts.length === 0}>
-              <Download size={13} /> Export CSV
-            </button>
             <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || busy}>
               <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
             </button>

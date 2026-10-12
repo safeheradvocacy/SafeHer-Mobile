@@ -11,9 +11,11 @@ import { ClientAccessCard } from '../../components/cases/ClientAccessCard';
 import { ageAt } from '../../lib/governmentReportMapping';
 import { EDUCATIONAL_ATTAINMENT_OPTIONS, SEX_OPTIONS } from '../../lib/survivorInfo';
 import { SERVICE_TYPE_LABELS, SERVICE_TYPE_OPTIONS } from '../../lib/serviceTypes';
+import { requiresBarangayRequest, barangayRequestTypeFor } from '../../lib/barangayRouting';
 import {
   CASE_STATUS_FLOW,
   type Barangay,
+  type BarangayActionRequest,
   type CaseAssignment,
   type CaseOwnerLevel,
   type CaseReferral,
@@ -60,6 +62,7 @@ export function CaseDetailPage() {
   const [caseBarangays, setCaseBarangays] = useState<Barangay[]>([]);
   const [ownershipHistory, setOwnershipHistory] = useState<CaseReferral[]>([]);
   const [services, setServices] = useState<CaseService[]>([]);
+  const [barangayRequests, setBarangayRequests] = useState<BarangayActionRequest[]>([]);
   // Looked up independently rather than derived from caseBarangays (which
   // is scoped to the case's municipality_id) — a survivor's registered
   // barangay may have since diverged from that if they've updated their
@@ -110,6 +113,12 @@ export function CaseDetailPage() {
   const [newServiceProvider, setNewServiceProvider] = useState('');
   const [newServiceNotes, setNewServiceNotes] = useState('');
   const [newServiceScheduledDate, setNewServiceScheduledDate] = useState('');
+  // module31 — only relevant when newServiceType requires barangay
+  // action (barangayRouting.ts); defaulted from the best available
+  // real jurisdiction signal, never silently assumed, and always
+  // user-confirmable from the case's OWN municipality's barangay list
+  // (caseBarangays) before submission.
+  const [targetBarangayId, setTargetBarangayId] = useState('');
 
   // module25 — editing scheduled/follow-up date and (when applicable)
   // the not-provided reason on an EXISTING service. Separate from the
@@ -129,7 +138,7 @@ export function CaseDetailPage() {
       return;
     }
 
-    const [survivorRes, historyRes, assignRes, evidenceRes, referralRes, leReferralRes, officersRes, shelterRes, municipalityRes, barangaysRes, ownershipRes, servicesRes] = await Promise.all([
+    const [survivorRes, historyRes, assignRes, evidenceRes, referralRes, leReferralRes, officersRes, shelterRes, municipalityRes, barangaysRes, ownershipRes, servicesRes, barangayRequestsRes] = await Promise.all([
       // A Walk-In case with no associated account yet (Scenario B,
       // module14) has survivor_id === null — nothing to look up until a
       // client is verified and linked.
@@ -147,6 +156,12 @@ export function CaseDetailPage() {
       supabase.from('barangays').select('*').eq('municipality_id', caseRow.municipality_id),
       supabase.from('case_referrals').select('*').eq('case_id', caseId).order('created_at', { ascending: true }),
       supabase.from('case_services').select('*').eq('case_id', caseId).order('created_at', { ascending: false }),
+      // module31 — RLS on this table already restricts rows to the
+      // target barangay's own admin or the original requester; a
+      // viewer with neither relationship simply gets zero rows back,
+      // which this page renders as "no barangay requests" rather than
+      // an error.
+      supabase.from('barangay_action_requests').select('*').eq('case_id', caseId).order('created_at', { ascending: false }),
     ]);
 
     setSurvivor(survivorRes.data ?? null);
@@ -161,6 +176,7 @@ export function CaseDetailPage() {
     setCaseBarangays(barangaysRes.data ?? []);
     setOwnershipHistory(ownershipRes.data ?? []);
     setServices(servicesRes.data ?? []);
+    setBarangayRequests(barangayRequestsRes.data ?? []);
 
     if (survivorRes.data && !caseRow.is_anonymous) {
       const { data: sp } = await supabase.from('user_profiles').select('*').eq('profile_id', survivorRes.data.profile_id).single();
@@ -434,25 +450,58 @@ export function CaseDetailPage() {
   // gate, not the real boundary, same as every other case action here.
   const submitAddService = async () => {
     if (!profile || !caseReport || !newServiceType) return;
-    setSaving(true);
-    const { error } = await supabase.from('case_services').insert({
-      case_id: caseReport.case_id,
-      service_type: newServiceType,
-      provider_agency: newServiceProvider.trim() || null,
-      notes: newServiceNotes.trim() || null,
-      scheduled_date: newServiceScheduledDate || null,
-      created_by: profile.profile_id,
-    });
-    setSaving(false);
-    if (error) {
-      console.error('[CaseDetailPage] submitAddService:', error.message);
+    const needsBarangayRequest = requiresBarangayRequest(newServiceType);
+    if (needsBarangayRequest && !targetBarangayId) {
+      console.error('[CaseDetailPage] submitAddService: target barangay is required for', newServiceType);
       return;
     }
+    setSaving(true);
+    const { data: serviceRow, error } = await supabase
+      .from('case_services')
+      .insert({
+        case_id: caseReport.case_id,
+        service_type: newServiceType,
+        provider_agency: newServiceProvider.trim() || null,
+        notes: newServiceNotes.trim() || null,
+        scheduled_date: newServiceScheduledDate || null,
+        created_by: profile.profile_id,
+      })
+      .select()
+      .single();
+    if (error || !serviceRow) {
+      setSaving(false);
+      console.error('[CaseDetailPage] submitAddService:', error?.message);
+      return;
+    }
+
+    // module31 — route to the Barangay Requests inbox when this service
+    // type genuinely requires barangay action (barangayRouting.ts is the
+    // ONE place that decision is made). This LINKS to the case_services
+    // row just created; it never duplicates it, and never marks
+    // anything "issued" — only that a request now exists for the target
+    // barangay to act on.
+    if (needsBarangayRequest) {
+      const { error: reqErr } = await supabase.from('barangay_action_requests').insert({
+        case_id: caseReport.case_id,
+        service_id: serviceRow.service_id,
+        request_type: barangayRequestTypeFor(newServiceType),
+        requesting_role: profile.role,
+        requested_by: profile.profile_id,
+        target_barangay_id: targetBarangayId,
+        priority: caseReport.priority_level,
+        notes: newServiceNotes.trim() || null,
+      });
+      if (reqErr) {
+        console.error('[CaseDetailPage] submitAddService: barangay_action_requests insert failed:', reqErr.message);
+      }
+    }
+    setSaving(false);
     setServiceModalOpen(false);
     setNewServiceType('');
     setNewServiceProvider('');
     setNewServiceNotes('');
     setNewServiceScheduledDate('');
+    setTargetBarangayId('');
     load();
   };
 
@@ -669,6 +718,7 @@ export function CaseDetailPage() {
             <Field label="Incident date" value={new Date(caseReport.incident_date).toLocaleString()} />
             <Field label="Reported" value={new Date(caseReport.reported_at).toLocaleString()} />
             <Field label="Anonymous report" value={caseReport.is_anonymous ? 'Yes' : 'No'} />
+            <Field label="Reported for" value={caseReport.reported_for === 'Other' ? 'Someone else (see below)' : 'Self'} />
             <div style={{ marginTop: 12 }}>
               <span className="label">Description</span>
               <p>{caseReport.description}</p>
@@ -684,9 +734,30 @@ export function CaseDetailPage() {
             )}
           </div>
 
+          {/* module30 — shown only when a reporting account filed this on
+              behalf of someone else. The Survivor Information card below
+              always describes the REPORTING account, never this person —
+              clarified in that card's own subtitle just below. */}
+          {caseReport.reported_for === 'Other' && (
+            <div className="card">
+              <h3 style={{ marginBottom: 12 }}>Person the Report Concerns</h3>
+              <Field label="Name" value={caseReport.third_party_name ?? '—'} />
+              <Field label="Reporter's relationship to them" value={caseReport.third_party_relationship ?? '—'} />
+              <Field label="Approximate age" value={caseReport.third_party_age_range ?? 'Not provided'} />
+              <Field label="Contact number" value={caseReport.third_party_contact_number ?? 'Not provided'} />
+            </div>
+          )}
+
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>Survivor Information</h3>
+              <div>
+                <h3 style={{ margin: 0 }}>Survivor Information</h3>
+                {caseReport.reported_for === 'Other' && (
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    The account that filed this report — not necessarily the person affected (see above).
+                  </p>
+                )}
+              </div>
               {survivorProfile && (roleTier === 'province' || roleTier === 'municipality') && (
                 <button className="btn btn-outline btn-sm" onClick={openSurvivorInfoModal}>
                   Edit Survivor Information
@@ -845,6 +916,23 @@ export function CaseDetailPage() {
                         </div>
                       )}
                       {s.reason_not_provided && <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Reason: {s.reason_not_provided}</div>}
+                      {(() => {
+                        // module31 — this case's own view of a request this
+                        // service generated, read-only here (the barangay
+                        // acts on it from its own Barangay Requests inbox).
+                        // RLS already limits what comes back in
+                        // barangayRequests to rows this viewer (as the
+                        // original requester, or province-wide oversight)
+                        // is actually allowed to see.
+                        const linked = barangayRequests.find((r) => r.service_id === s.service_id);
+                        if (!linked) return null;
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <StatusBadge label={`Barangay request: ${linked.status}`} />
+                            {linked.response_notes && <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>{linked.response_notes}</span>}
+                          </div>
+                        );
+                      })()}
                       <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>
                         {s.status === 'Provided' && s.provided_at ? `Provided ${new Date(s.provided_at).toLocaleString()}` : `Added ${new Date(s.created_at).toLocaleString()}`}
                       </div>
@@ -1236,7 +1324,11 @@ export function CaseDetailPage() {
               <button className="btn btn-outline" onClick={() => setServiceModalOpen(false)} disabled={saving}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={submitAddService} disabled={!newServiceType || saving}>
+              <button
+                className="btn btn-primary"
+                onClick={submitAddService}
+                disabled={!newServiceType || saving || (requiresBarangayRequest(newServiceType) && !targetBarangayId)}
+              >
                 {saving ? 'Saving...' : 'Add'}
               </button>
             </>
@@ -1244,13 +1336,46 @@ export function CaseDetailPage() {
         >
           <div className="field">
             <label className="label">Service type</label>
-            <select className="input" value={newServiceType} onChange={(e) => setNewServiceType(e.target.value as ServiceType | '')}>
+            <select
+              className="input"
+              value={newServiceType}
+              onChange={(e) => {
+                const value = e.target.value as ServiceType | '';
+                setNewServiceType(value);
+                if (value && requiresBarangayRequest(value)) {
+                  // Best available real signal, never a guess: the
+                  // survivor's own registered barangay first, falling
+                  // back to where the incident was recorded. Always
+                  // confirmable/overridable in the dropdown below before
+                  // submission — this just saves a redundant click when
+                  // the obvious answer is already on file.
+                  setTargetBarangayId(survivor?.barangay_id ?? caseReport?.incident_barangay_id ?? '');
+                } else {
+                  setTargetBarangayId('');
+                }
+              }}
+            >
               <option value="">Select a service</option>
               {SERVICE_TYPE_OPTIONS.map((code) => (
                 <option key={code} value={code}>{SERVICE_TYPE_LABELS[code]} ({code})</option>
               ))}
             </select>
           </div>
+          {newServiceType && requiresBarangayRequest(newServiceType) && (
+            <div className="field">
+              <label className="label">Target barangay *</label>
+              <select className="input" value={targetBarangayId} onChange={(e) => setTargetBarangayId(e.target.value)}>
+                <option value="">Select the barangay that should act on this</option>
+                {caseBarangays.map((b) => (
+                  <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                {SERVICE_TYPE_LABELS[newServiceType]} will appear in this barangay's Barangay Requests inbox. This
+                creates a request, not an issued order — the barangay still has to act on it.
+              </p>
+            </div>
+          )}
           <div className="field">
             <label className="label">Provider / agency (optional)</label>
             <input className="input" value={newServiceProvider} onChange={(e) => setNewServiceProvider(e.target.value)} />

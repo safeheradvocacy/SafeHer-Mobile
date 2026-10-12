@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { EmptyState, PageHeader } from '../../components/ui';
@@ -18,6 +19,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export function NotificationsPage() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,6 +46,14 @@ export function NotificationsPage() {
     await supabase.from('notifications').update({ is_read: true }).eq('notification_id', n.notification_id);
   };
 
+  const onOpenNotification = (n: Notification) => {
+    markRead(n);
+    // module31 — the deep link just opens the request id in the query
+    // string; RLS on barangay_action_requests (not this link) is what
+    // actually decides whether the viewer can see it.
+    if (n.barangay_request_id) navigate(`/admin/barangay-requests?open=${n.barangay_request_id}`);
+  };
+
   return (
     <div>
       <PageHeader title="Notifications" actions={<DashboardHeaderActions showSearch={hasPermission(profile?.role, 'cases.view')} lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={onRefresh} />} />
@@ -57,7 +67,7 @@ export function NotificationsPage() {
             {items.map((n) => (
               <div
                 key={n.notification_id}
-                onClick={() => markRead(n)}
+                onClick={() => onOpenNotification(n)}
                 style={{
                   padding: 14,
                   borderRadius: 10,

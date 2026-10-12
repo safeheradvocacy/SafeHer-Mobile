@@ -1,11 +1,11 @@
 import type { CaseAssignment, CaseReport, ShelterReferral, UserProfile } from '../types/database.types';
 
 /**
- * The one shared case-record row shape consumed by the on-screen Case
- * Detail table, the CSV export, and the PDF's case-records table — see
- * ReportsPage.tsx. Building this once here (instead of three times) is
- * what makes "the report total, the CSV, and the PDF can never
- * independently drift" a structural guarantee.
+ * The one shared case-record row shape consumed by both the on-screen
+ * Case Detail table and the PDF's case-records table — see
+ * ReportsPage.tsx. Building this once here (instead of twice) is what
+ * makes "the on-screen total and the PDF can never independently
+ * drift" a structural guarantee.
  *
  * `assignedStaff`/`referralStatus` are genuinely-available fields (not
  * fabricated) — case_assignments/shelter_referrals are already fetched
@@ -15,7 +15,7 @@ import type { CaseAssignment, CaseReport, ShelterReferral, UserProfile } from '.
  */
 export interface ReportRow {
   caseNumber: string;
-  dateReportedIso: string; // yyyy-mm-dd — machine-readable, for CSV
+  dateReportedIso: string; // yyyy-mm-dd — machine-readable
   dateReportedDisplay: string; // e.g. "Sep 10, 2026" — for the on-screen table/PDF
   caseType: string;
   status: string;

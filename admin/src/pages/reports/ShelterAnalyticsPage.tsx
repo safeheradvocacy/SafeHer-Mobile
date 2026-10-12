@@ -1,19 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
 import '../../lib/chartSetup';
 import { chartBaseOptions } from '../../lib/chartSetup';
-import { Home, Users, Download, ClipboardList, ArrowLeftRight } from 'lucide-react';
+import { Home, Users, Eye, FileText, Printer, ClipboardList, ArrowLeftRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
-import { downloadCsv } from '../../lib/exportCsv';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { PageHeader, EmptyState } from '../../components/ui';
 import { groupCount, KpiCard, KpiSkeletonCard, ChartCard } from './reportsUi';
+import { ROLE_LABEL } from '../../lib/roleLabels';
+import { captureChartImage } from '../../lib/captureChartImage';
+import { generateAnalyticsPdf, type AnalyticsChartSection } from '../../lib/analyticsReportDocument';
+import { buildAnalyticsReportFilename } from '../../lib/reportFilename';
+import { isWithinDateFilter } from '../../lib/reportFilters';
+import { usePdfReportActions } from '../../hooks/usePdfReportActions';
+import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 import type { Shelter, ShelterRequest, ShelterReferral } from '../../types/database.types';
 
 type ReferralRow = ShelterReferral & { case_reports?: { case_number: string } | null };
@@ -69,18 +75,12 @@ export function ShelterAnalyticsPage() {
 
   useAutoRefresh(() => load(true));
 
-  const inRange = (iso: string) => {
-    if (dateFrom && iso < `${dateFrom}T00:00:00`) return false;
-    if (dateTo && iso >= `${dateTo}T23:59:59.999`) return false;
-    return true;
-  };
-
   const filteredRequests = useMemo(
-    () => requests.filter((r) => inRange(r.created_at) && (!assignedOnly || r.assigned_staff_id === profile?.profile_id)),
+    () => requests.filter((r) => isWithinDateFilter(r.created_at, dateFrom, dateTo) && (!assignedOnly || r.assigned_staff_id === profile?.profile_id)),
     [requests, dateFrom, dateTo, assignedOnly, profile?.profile_id]
   );
   const filteredReferrals = useMemo(
-    () => referrals.filter((r) => inRange(r.referred_at) && (!assignedOnly || r.assigned_staff_id === profile?.profile_id)),
+    () => referrals.filter((r) => isWithinDateFilter(r.referred_at, dateFrom, dateTo) && (!assignedOnly || r.assigned_staff_id === profile?.profile_id)),
     [referrals, dateFrom, dateTo, assignedOnly, profile?.profile_id]
   );
 
@@ -99,38 +99,63 @@ export function ShelterAnalyticsPage() {
     [reducedMotion]
   );
 
-  const exportRequests = () => {
-    const filename = `shelter-requests-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadCsv(
-      filename,
-      filteredRequests.map((r) => ({ request_id: r.request_id, status: r.status, urgency: r.urgency, people_count: r.people_count, children_count: r.children_count, created_at: r.created_at })),
-      [
-        { key: 'request_id', label: 'Request ID' },
-        { key: 'status', label: 'Status' },
-        { key: 'urgency', label: 'Urgency' },
-        { key: 'people_count', label: 'People' },
-        { key: 'children_count', label: 'Children' },
-        { key: 'created_at', label: 'Requested At' },
-      ]
-    );
-    if (profile) logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'shelter_requests', recordId: profile.profile_id, newValues: { filename, rowCount: filteredRequests.length } });
-    showToast('success', `Exported ${filename}.`);
+  const requestsChartRef = useRef<HTMLDivElement>(null);
+  const requestsBarRef = useRef<HTMLDivElement>(null);
+  const referralsBarRef = useRef<HTMLDivElement>(null);
+
+  const buildPdfDocument = async () => {
+    const charts: AnalyticsChartSection[] = [
+      { title: 'Shelter Requests by Status', image: captureChartImage(requestsChartRef.current), tableRows: requestsByStatus },
+      { title: 'Shelter Requests — Status Breakdown', image: captureChartImage(requestsBarRef.current), tableRows: requestsByStatus },
+      { title: 'Shelter Referrals by Status', image: captureChartImage(referralsBarRef.current), tableRows: referralsByStatus, valueLabel: 'Referrals' },
+    ];
+    return generateAnalyticsPdf({
+      documentKicker: 'SHELTER ANALYTICS REPORT',
+      reportTitle: 'Shelter Operations Analytics',
+      runningHeaderTitle: 'SAFESPACE — SHELTER ANALYTICS REPORT',
+      footerLabel: 'SafeSpace — Shelter Analytics Report · Confidential — For Authorized Use Only',
+      generatedByName: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown',
+      generatedByRole: profile ? ROLE_LABEL[profile.role] : '',
+      // Explicitly the ONE assigned shelter, never every shelter in the
+      // province — same scoping the on-screen page and its RLS already
+      // enforce (shelter_id = current_shelter_id()).
+      scopeLabel: shelter ? shelter.shelter_name : 'Assigned shelter',
+      dateFrom,
+      dateTo,
+      appliedFilterLines: [
+        dateFrom && `From: ${dateFrom}`,
+        dateTo && `To: ${dateTo}`,
+        assignedOnly && 'Scope: Assigned to me only',
+      ].filter(Boolean) as string[],
+      kpis: [
+        { label: 'Capacity', count: shelter?.capacity ?? 0 },
+        { label: 'Current Occupancy', count: shelter?.current_occupancy ?? 0 },
+        { label: 'Available Beds', count: shelter ? Math.max(shelter.capacity - shelter.current_occupancy, 0) : 0 },
+        { label: 'Total Requests', count: filteredRequests.length },
+        { label: 'Open / In Progress Requests', count: openRequests },
+        { label: 'Total Referrals', count: filteredReferrals.length },
+        { label: 'Pending / Accepted Referrals', count: openReferrals },
+      ],
+      charts,
+    });
   };
 
-  const exportReferrals = () => {
-    const filename = `shelter-referrals-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadCsv(
-      filename,
-      filteredReferrals.map((r) => ({ referral_id: r.referral_id, case_number: r.case_reports?.case_number ?? '', status: r.referral_status, referred_at: r.referred_at })),
-      [
-        { key: 'referral_id', label: 'Referral ID' },
-        { key: 'case_number', label: 'Case #' },
-        { key: 'status', label: 'Status' },
-        { key: 'referred_at', label: 'Referred At' },
-      ]
-    );
-    if (profile) logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'shelter_referrals', recordId: profile.profile_id, newValues: { filename, rowCount: filteredReferrals.length } });
-    showToast('success', `Exported ${filename}.`);
+  const pdfActions = usePdfReportActions({
+    buildDoc: buildPdfDocument,
+    filename: () => buildAnalyticsReportFilename('Shelter', dateFrom, dateTo),
+    onAudit: (action, filename) => {
+      if (!profile) return;
+      logAudit({ profileId: profile.profile_id, action, tableName: 'shelter_requests', recordId: profile.profile_id, newValues: { filename, dateFrom, dateTo } });
+    },
+  });
+
+  const handleExportPdf = async () => {
+    try {
+      const filename = await pdfActions.exportPdf();
+      if (filename) showToast('success', `Report exported successfully as ${filename}.`);
+    } catch {
+      showToast('error', 'Unable to generate the PDF report. Please try again.');
+    }
   };
 
   if (!profile?.shelter_id) {
@@ -198,6 +223,18 @@ export function ShelterAnalyticsPage() {
         )}
       </div>
 
+      <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || pdfActions.busy}>
+          <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
+        </button>
+        <button className="btn btn-primary btn-sm" onClick={handleExportPdf} disabled={loading || pdfActions.busy}>
+          <FileText size={13} /> {pdfActions.state === 'exporting' ? 'Generating…' : 'Export PDF'}
+        </button>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.printPdf} disabled={loading || pdfActions.busy}>
+          <Printer size={13} /> {pdfActions.state === 'printing' ? 'Preparing…' : 'Print PDF'}
+        </button>
+      </div>
+
       <h3 style={{ fontSize: 16, marginBottom: 4 }}>Shelter Requests Analytics</h3>
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>Direct survivor requests for this shelter — a request is not a case and not a referral.</p>
       <div className="dash-kpi-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginBottom: 16 }}>
@@ -211,20 +248,15 @@ export function ShelterAnalyticsPage() {
         )}
       </div>
       <div className="dash-chart-row dash-chart-row-2" style={{ marginBottom: 20 }}>
-        <ChartCard title="Requests by Status" data={requestsByStatus} options={doughnutOptions} loading={loading} emptyText="No shelter requests match the selected scope/period." />
+        <ChartCard title="Requests by Status" data={requestsByStatus} options={doughnutOptions} loading={loading} emptyText="No shelter requests match the selected scope/period." chartBoxRef={requestsChartRef} />
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15 }}>Status Breakdown</h3>
-            <button className="btn btn-outline btn-sm report-no-print" onClick={exportRequests} disabled={filteredRequests.length === 0}>
-              <Download size={13} /> Export CSV
-            </button>
-          </div>
+          <h3 style={{ fontSize: 15, marginBottom: 16 }}>Status Breakdown</h3>
           {loading ? (
             <div className="skeleton" style={{ height: 180 }} />
           ) : requestsByStatus.length === 0 ? (
             <div className="dash-chart-empty"><p>No shelter requests match the selected scope/period.</p></div>
           ) : (
-            <div className="chart-box" style={{ height: 180 }}>
+            <div className="chart-box" style={{ height: 180 }} ref={requestsBarRef}>
               <Bar data={{ labels: requestsByStatus.map((s) => s.label), datasets: [{ label: 'Requests', data: requestsByStatus.map((s) => s.count), backgroundColor: '#1456A0', borderRadius: 6, maxBarThickness: 56 }] }} options={chartBaseOptions(barOptions)} />
             </div>
           )}
@@ -246,22 +278,29 @@ export function ShelterAnalyticsPage() {
         )}
       </div>
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15 }}>Referral Detail</h3>
-          <button className="btn btn-outline btn-sm report-no-print" onClick={exportReferrals} disabled={filteredReferrals.length === 0}>
-            <Download size={13} /> Export CSV
-          </button>
-        </div>
+        <h3 style={{ fontSize: 15, marginBottom: 16 }}>Referral Detail</h3>
         {loading ? (
           <div className="skeleton" style={{ height: 180 }} />
         ) : filteredReferrals.length === 0 ? (
           <EmptyState title="No shelter referrals match the selected scope/period." />
         ) : (
-          <div className="chart-box" style={{ height: 180 }}>
+          <div className="chart-box" style={{ height: 180 }} ref={referralsBarRef}>
             <Bar data={{ labels: referralsByStatus.map((s) => s.label), datasets: [{ label: 'Referrals', data: referralsByStatus.map((s) => s.count), backgroundColor: '#4C82B3', borderRadius: 6, maxBarThickness: 56 }] }} options={chartBaseOptions(barOptions)} />
           </div>
         )}
       </div>
+
+      {pdfActions.viewerOpen && (
+        <PdfViewerModal
+          title="Shelter Operations Analytics"
+          pdfUrl={pdfActions.viewerUrl}
+          error={pdfActions.viewerError}
+          onClose={pdfActions.closeViewer}
+          onExport={handleExportPdf}
+          onPrint={pdfActions.printViewerDoc}
+          printing={pdfActions.printing}
+        />
+      )}
     </div>
   );
 }

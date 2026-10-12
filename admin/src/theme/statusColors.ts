@@ -54,4 +54,15 @@ export const STATUS_COLORS: Record<string, string> = {
   EXPERT_ASSIGNED: '#4C82B3',
   EXPERT_ACTIVE: '#1456A0',
   CLOSED: '#4D9272',
+
+  // module28 — announcement lifecycle status + priority. 'Urgent' and
+  // 'Expired' are already defined above (shelter_request_urgency /
+  // backup verification, respectively) and reused as-is.
+  Draft: '#526070',
+  Scheduled: '#4C82B3',
+  Published: '#4D9272',
+  Archived: '#526070',
+  Unpublished: '#D98A24',
+  Important: '#D98A24',
+  Normal: '#526070',
 };

@@ -53,6 +53,17 @@ export const statusColors: Record<string, string> = {
   'Pending Review': '#D98A24',
   'Not Verified': '#526070',
   Rejected: '#D94B63',
+
+  // module28 — announcement lifecycle + priority. 'Scheduled' above is
+  // reused as-is.
+  Draft: '#526070',
+  Published: '#4D9272',
+  Expired: '#526070',
+  Archived: '#526070',
+  Unpublished: '#D98A24',
+  Normal: '#526070',
+  Important: '#D98A24',
+  Urgent: '#D94B63',
 };
 
 export const typography = {

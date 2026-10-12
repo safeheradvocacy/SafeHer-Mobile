@@ -32,6 +32,9 @@ import { CaseReferralsPage } from './pages/lawEnforcement/CaseReferralsPage';
 import { AuditLogPage } from './pages/audit/AuditLogPage';
 import { BackupRestorePage } from './pages/backups/BackupRestorePage';
 import { RolesPermissionsPage } from './pages/roles/RolesPermissionsPage';
+import { AnnouncementsPage } from './pages/announcements/AnnouncementsPage';
+import { BarangayRequestsPage } from './pages/barangayRequests/BarangayRequestsPage';
+import { PoliceManagementPage } from './pages/police/PoliceManagementPage';
 
 export default function App() {
   return (
@@ -84,7 +87,10 @@ export default function App() {
             <Route
               path="sos"
               element={
-                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                // module31 — barangay_admin removed (master prompt: "Redesign
+                // Barangay Admin Access"): no standalone SOS Monitoring for this
+                // role, enforced here, not merely hidden from the sidebar.
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff']}>
                   <SosMonitoringPage />
                 </ProtectedRoute>
               }
@@ -92,7 +98,8 @@ export default function App() {
             <Route
               path="shelters"
               element={
-                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff', 'barangay_admin']}>
+                // module31 — barangay_admin removed, same reasoning as /sos above.
+                <ProtectedRoute requireRole={['municipal_admin', 'provincial_staff']}>
                   <ShelterReferralPage />
                 </ProtectedRoute>
               }
@@ -118,6 +125,22 @@ export default function App() {
               element={
                 <ProtectedRoute requireRole={['provincial_staff', 'municipal_admin']}>
                   <ShelterManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* module32 — Police Management. provincial_admin/super_admin added
+                here even though "Administrator Management" above deliberately
+                excludes provincial_staff — this is a different, narrower
+                surface (Police Officer accounts only) that both province-admin
+                tier AND provincial_staff may reach. Deliberately province-tier
+                ONLY — municipal_admin (MSWDO) does not get this module; see
+                PoliceManagementPage.tsx and create-admin-user/index.ts for the
+                real, server-side enforcement of what each role may do inside it. */}
+            <Route
+              path="police-management"
+              element={
+                <ProtectedRoute requireRole={['provincial_staff', 'provincial_admin', 'super_admin']}>
+                  <PoliceManagementPage />
                 </ProtectedRoute>
               }
             />
@@ -164,7 +187,7 @@ export default function App() {
                 them too (identical underlying RLS access to
                 provincial_staff's — see permissions.ts). The four new
                 roles each get their own assignment/shelter-scoped
-                Reports (PDF/CSV) and Analytics (charts/KPIs) pages. */}
+                Reports (PDF) and Analytics (charts/KPIs) pages. */}
             <Route
               path="reports"
               element={
@@ -283,6 +306,31 @@ export default function App() {
               element={
                 <ProtectedRoute requireRole={['shelter_admin']}>
                   <ShelterRequestsReferralsPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* module28 — Provincial Staff only. Route guard mirrors
+                support-queue/faqs above (the same provincial_staff-only
+                shape); real enforcement is module28's is_provincial_staff()
+                RLS, not this guard. */}
+            <Route
+              path="announcements"
+              element={
+                <ProtectedRoute requireRole={['provincial_staff']}>
+                  <AnnouncementsPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* module31 — barangay_admin's inbox for MSWDO/PSWDO/Police-
+                originated action requests (e.g. BPO). The requesting
+                agency tracks status from the case itself (CaseDetailPage),
+                not a second copy of this page — see that page's own
+                "Barangay Requests" section. */}
+            <Route
+              path="barangay-requests"
+              element={
+                <ProtectedRoute requireRole={['barangay_admin']}>
+                  <BarangayRequestsPage />
                 </ProtectedRoute>
               }
             />

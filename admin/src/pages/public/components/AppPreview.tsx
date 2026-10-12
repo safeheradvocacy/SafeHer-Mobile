@@ -182,7 +182,7 @@ function HomeScreenMock() {
       </div>
       <div style={{ background: '#fff', border: '1px solid var(--lp-border)', borderRadius: 10, padding: '9px 10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--lp-text-primary)' }}>CN-2026-0148</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--lp-text-primary)' }}>BAL-20260214-7392</span>
           <span
             style={{
               fontSize: 7,
@@ -196,7 +196,7 @@ function HomeScreenMock() {
             Under Review
           </span>
         </div>
-        <div style={{ fontSize: 8, color: 'var(--lp-text-secondary)', marginTop: 3 }}>Harassment</div>
+        <div style={{ fontSize: 8, color: 'var(--lp-text-secondary)', marginTop: 3 }}>Stalking</div>
       </div>
     </div>
   );
@@ -289,10 +289,15 @@ function SosScreenMock() {
   );
 }
 
+// Case numbers follow the real generateCaseNumber() format
+// (mobile/src/lib/audit.ts: <3-letter municipality code>-<YYYYMMDD>-
+// <4-digit random>) and case types are drawn from the real case_type
+// enum (case_reports.case_type) — synthetic sample data, never an
+// actual case.
 const MOCK_CASES = [
-  { number: 'CN-2026-0148', type: 'Harassment', status: 'Under Review', color: '#4C7EA8', bg: '#EAF1F7' },
-  { number: 'CN-2026-0121', type: 'Physical Abuse', status: 'Assigned', color: '#1456A0', bg: '#EAF3FB' },
-  { number: 'CN-2026-0098', type: 'Economic Abuse', status: 'Resolved', color: '#4F9D78', bg: '#EAF5EE' },
+  { number: 'BAL-20260214-7392', type: 'Stalking', status: 'Under Review', color: '#4C7EA8', bg: '#EAF1F7' },
+  { number: 'BAL-20260129-5017', type: 'Physical Abuse', status: 'Assigned', color: '#1456A0', bg: '#EAF3FB' },
+  { number: 'DIN-20260108-2284', type: 'Economic Abuse', status: 'Resolved', color: '#4F9D78', bg: '#EAF5EE' },
 ];
 
 function CaseTrackingMock() {

@@ -82,7 +82,13 @@ async function handleRequest(req: Request): Promise<Response> {
   // Same caller set as create-admin-user's "who manages admin accounts
   // at all" gate, minus shelter_admin (this endpoint backs
   // UserManagementPage.tsx only, which shelter_admin never opens).
-  if (!callerProfile || !['municipal_admin', 'provincial_admin', 'super_admin'].includes(callerProfile.role)) {
+  //
+  // 'provincial_staff' (Police Management module) added here too — it
+  // only ever requests profile_ids for law_enforcement officers (see
+  // PoliceManagementPage.tsx), and the authorization re-derivation
+  // below already re-checks scope per target rather than trusting the
+  // client's own filtering, same as every other caller.
+  if (!callerProfile || !['municipal_admin', 'provincial_admin', 'super_admin', 'provincial_staff'].includes(callerProfile.role)) {
     return new Response(JSON.stringify({ error: 'Not authorized' }), { status: 403 });
   }
 
@@ -94,7 +100,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  const isProvincial = ['provincial_admin', 'super_admin'].includes(callerProfile.role);
+  const isProvincial = ['provincial_admin', 'super_admin', 'provincial_staff'].includes(callerProfile.role);
   const { data: targets } = await adminClient
     .from('user_profiles')
     .select('profile_id, auth_user_id, municipality_id')

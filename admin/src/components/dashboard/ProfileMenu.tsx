@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, Settings, User } from 'lucide-react';
+import { ChevronDown, Home, LogOut, Settings, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmModal } from '../ConfirmModal';
 import { ROLE_LABEL } from '../../lib/roleLabels';
@@ -71,6 +71,18 @@ export function ProfileMenu() {
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{roleLabel}</div>
           </div>
           <div style={{ padding: '6px 0' }}>
+            {/* Navigation, not logout — the public landing page route
+                ('/', App.tsx), reached with a plain client-side navigate().
+                No signOut(), no session/token clearing: the Supabase
+                session stays exactly as it was, so "Admin Portal" on
+                that public page (or browser back) returns the admin
+                straight to an authenticated dashboard. Placed first and
+                set apart by its own border so it reads as ordinary
+                navigation, never mistaken for the destructive actions
+                below it. */}
+            <button type="button" className="dash-profile-item" onClick={() => { setOpen(false); navigate('/'); }} style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <Home size={15} /> Return to Landing Page
+            </button>
             <button type="button" className="dash-profile-item" onClick={() => { setOpen(false); navigate('/admin/settings'); }}>
               <Settings size={15} /> Account settings
             </button>

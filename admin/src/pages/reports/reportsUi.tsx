@@ -107,6 +107,7 @@ export function ChartCard({
   loading,
   emptyText = 'No data available for the selected filters.',
   height = 220,
+  chartBoxRef,
 }: {
   title: string;
   data: { label: string; count: number }[];
@@ -114,6 +115,11 @@ export function ChartCard({
   loading: boolean;
   emptyText?: string;
   height?: number;
+  /** Optional — lets a caller (the Analytics PDF export) read the real
+   * rendered <canvas> back out of this card via captureChartImage().
+   * Purely additive: omitting it changes nothing about how this card
+   * renders or behaves. */
+  chartBoxRef?: React.RefObject<HTMLDivElement>;
 }) {
   return (
     <div className="card">
@@ -125,7 +131,7 @@ export function ChartCard({
           <p>{emptyText}</p>
         </div>
       ) : (
-        <div className="chart-box" style={{ height }}>
+        <div className="chart-box" style={{ height }} ref={chartBoxRef}>
           <Doughnut
             data={{ labels: data.map((d) => d.label), datasets: [{ data: data.map((d) => d.count), backgroundColor: CHART_COLORS }] }}
             options={chartBaseOptions(options)}

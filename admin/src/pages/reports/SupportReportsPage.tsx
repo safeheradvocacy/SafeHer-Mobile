@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Eye, FileText, Printer } from 'lucide-react';
+import { Eye, FileText, Printer } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
-import { downloadCsv } from '../../lib/exportCsv';
 import { buildReportFilename } from '../../lib/reportFilename';
-import { generateRoleReportPdf, loadSafeherLogoDataUrl, reportingPeriodLabel } from '../../lib/reportDocument';
+import { generateRoleReportPdf, reportingPeriodLabel } from '../../lib/reportDocument';
 import { usePdfReportActions } from '../../hooks/usePdfReportActions';
 import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
@@ -14,6 +13,7 @@ import { DashboardHeaderActions } from '../../components/dashboard/DashboardHead
 import { PageHeader } from '../../components/ui';
 import { groupCount } from './reportsUi';
 import { ROLE_LABEL } from '../../lib/roleLabels';
+import { isWithinDateFilter } from '../../lib/reportFilters';
 import type { ExpertSupportRequest } from '../../types/database.types';
 
 const CLOSED: ExpertSupportRequest['status'][] = ['CLOSED'];
@@ -54,13 +54,7 @@ export function SupportReportsPage() {
 
   useAutoRefresh(() => load(true));
 
-  const inRange = (iso: string) => {
-    if (dateFrom && iso < `${dateFrom}T00:00:00`) return false;
-    if (dateTo && iso >= `${dateTo}T23:59:59.999`) return false;
-    return true;
-  };
-
-  const filtered = useMemo(() => requests.filter((r) => inRange(r.requested_at)), [requests, dateFrom, dateTo]);
+  const filtered = useMemo(() => requests.filter((r) => isWithinDateFilter(r.requested_at, dateFrom, dateTo)), [requests, dateFrom, dateTo]);
   const byStatus = useMemo(() => groupCount(filtered, (r) => r.status), [filtered]);
   const byPriority = useMemo(() => groupCount(filtered, (r) => r.priority), [filtered]);
   const closedCount = filtered.filter((r) => CLOSED.includes(r.status)).length;
@@ -82,7 +76,6 @@ export function SupportReportsPage() {
   }, [dateFrom, dateTo]);
 
   const buildPdfDocument = async () => {
-    const logoDataUrl = await loadSafeherLogoDataUrl();
     return generateRoleReportPdf({
       documentKicker: 'SUPPORT ACTIVITY REPORT',
       reportTitle,
@@ -114,7 +107,6 @@ export function SupportReportsPage() {
           emptyMessage: 'No assigned conversations match the selected period.',
         },
       ],
-      logoDataUrl,
     });
   };
 
@@ -134,23 +126,6 @@ export function SupportReportsPage() {
     } catch {
       showToast('error', 'Unable to generate the PDF report. Please try again.');
     }
-  };
-
-  const exportCsv = () => {
-    const filename = buildReportFilename(reportTitle, 'csv');
-    downloadCsv(
-      filename,
-      filtered.map((r) => ({ request_id: r.request_id, status: r.status, priority: r.priority, requested_at: r.requested_at, closed_at: r.closed_at ?? '' })),
-      [
-        { key: 'request_id', label: 'Request ID' },
-        { key: 'status', label: 'Status' },
-        { key: 'priority', label: 'Priority' },
-        { key: 'requested_at', label: 'Requested At' },
-        { key: 'closed_at', label: 'Closed At' },
-      ]
-    );
-    if (profile) logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'expert_support_requests', recordId: profile.profile_id, newValues: { filename, rowCount: filtered.length } });
-    showToast('success', `Exported ${filename}.`);
   };
 
   const busy = pdfActions.busy;
@@ -200,9 +175,6 @@ export function SupportReportsPage() {
         <div className="report-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ fontSize: 15.5 }}>Generate Report</h3>
           <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-outline btn-sm" onClick={exportCsv} disabled={loading || busy || filtered.length === 0}>
-              <Download size={13} /> Export CSV
-            </button>
             <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || busy}>
               <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
             </button>

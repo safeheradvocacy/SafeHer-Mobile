@@ -29,7 +29,11 @@ export function usePdfReportActions({
   buildDoc: () => Promise<jsPDF>;
   /** Computed fresh at call time (report titles/filters can change between actions). */
   filename: () => string;
-  onAudit?: (action: 'REPORT_VIEW_PDF' | 'REPORT_EXPORT_PDF' | 'REPORT_PRINT_PDF', filename: string) => void;
+  // ANALYTICS_* added alongside the existing REPORT_* literals so the
+  // Analytics PDF feature can log distinguishable audit actions through
+  // this same shared hook, rather than either losing that distinction
+  // or forking a second copy of this hook just to widen one type.
+  onAudit?: (action: 'REPORT_VIEW_PDF' | 'REPORT_EXPORT_PDF' | 'REPORT_PRINT_PDF' | 'ANALYTICS_VIEW_PDF' | 'ANALYTICS_EXPORT_PDF' | 'ANALYTICS_PRINT_PDF', filename: string) => void;
 }) {
   const [state, setState] = useState<PdfActionState>('idle');
   const [viewerOpen, setViewerOpen] = useState(false);

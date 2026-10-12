@@ -5,7 +5,6 @@ import {
   Activity,
   CheckCircle2,
   ArrowLeftRight,
-  Download,
   Printer,
   Save,
   Trash2,
@@ -21,15 +20,13 @@ import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import { ROLE_LABEL } from '../../lib/roleLabels';
-import { downloadCsv } from '../../lib/exportCsv';
 import { buildReportFilename } from '../../lib/reportFilename';
 import { type ReportRow } from '../../lib/reportRows';
-import { generateReportPdf, loadSafeherLogoDataUrl, reportingPeriodLabel } from '../../lib/reportDocument';
+import { generateReportPdf, reportingPeriodLabel } from '../../lib/reportDocument';
 import { buildGovernmentReportFilename } from '../../lib/reportFilename';
 import { EMPTY_FILTERS, clampFiltersToScope, hasActiveFilters, type CaseReportFilters, type GovernmentReportType, type ReportingPeriodPreset } from '../../lib/reportFilters';
 import { useGovernmentReportRows, type GovernmentReportRow } from '../../lib/governmentReportRows';
 import { generateWedcReportPdf, generateCnspReportPdf, generateCiclReportPdf, type Signatories } from '../../lib/governmentReportDocument';
-import { exportGovernmentReportCsv } from '../../lib/governmentReportCsv';
 import { SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE, CICL_NOT_AVAILABLE_NOTE } from '../../lib/governmentReportMapping';
 import { usePdfReportActions, type PdfActionState } from '../../hooks/usePdfReportActions';
 import { hasPermission } from '../../lib/permissions';
@@ -112,43 +109,7 @@ export function ReportsPage() {
     controllerResetFilters();
   };
 
-  const exportCsvNow = () => {
-    const filename = buildReportFilename(reportTitle, 'csv');
-    downloadCsv(
-      filename,
-      reportRows.map((r) => ({
-        case_number: r.caseNumber,
-        date_reported: r.dateReportedIso,
-        case_type: r.caseType,
-        status: r.status,
-        priority: r.priority,
-        municipality: r.municipality,
-        barangay: r.barangay,
-        assigned_staff: r.assignedStaff,
-        referral_status: r.referralStatus,
-        source: r.sourceChannel,
-      })),
-      [
-        { key: 'case_number', label: 'Case ID' },
-        { key: 'date_reported', label: 'Date Reported' },
-        { key: 'case_type', label: 'Case Type' },
-        { key: 'status', label: 'Status' },
-        { key: 'priority', label: 'Priority' },
-        { key: 'municipality', label: 'Municipality' },
-        { key: 'barangay', label: 'Barangay' },
-        { key: 'assigned_staff', label: 'Assigned Office' },
-        { key: 'referral_status', label: 'Referral Status' },
-        { key: 'source', label: 'Report Source' },
-      ]
-    );
-    if (profile) {
-      logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'case_reports', recordId: activeSavedReportId ?? profile.profile_id, newValues: { filename, filters, rowCount: reportRows.length } });
-    }
-    showToast('success', `Report exported successfully as ${filename}.`);
-  };
-
   const buildPdfDocument = async () => {
-    const logoDataUrl = await loadSafeherLogoDataUrl();
     return generateReportPdf({
       reportTitle,
       reportId: activeSavedReportId,
@@ -173,7 +134,6 @@ export function ReportsPage() {
       referralDistribution: referralByStatus,
       sosSummary: roleTier === 'barangay' ? null : { total: sos.length, byStatus: sosByStatus },
       rows: reportRows,
-      logoDataUrl,
     });
   };
 
@@ -252,7 +212,6 @@ export function ReportsPage() {
               reportTitle={reportTitle}
               setReportTitle={(v) => { setReportTitle(v); setActiveSavedReportId(null); }}
               pdfState={pdfActions.state}
-              onExportCsv={exportCsvNow}
               onViewPdf={pdfActions.view}
               onExportPdf={handleExportPdf}
               onPrintPdf={pdfActions.printPdf}
@@ -318,7 +277,6 @@ function ReportsTab({
   reportTitle,
   setReportTitle,
   pdfState,
-  onExportCsv,
   onViewPdf,
   onExportPdf,
   onPrintPdf,
@@ -337,7 +295,6 @@ function ReportsTab({
   reportTitle: string;
   setReportTitle: (v: string) => void;
   pdfState: PdfActionState;
-  onExportCsv: () => void;
   onViewPdf: () => void;
   onExportPdf: () => void;
   onPrintPdf: () => void;
@@ -359,7 +316,7 @@ function ReportsTab({
           />
         </div>
         <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
-          Used as the document title and export filename for PDF/CSV below.
+          Used as the document title and export filename for the PDF below.
         </p>
       </div>
 
@@ -381,17 +338,13 @@ function ReportsTab({
         <div className="report-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ fontSize: 15.5 }}>Case Detail</h3>
           <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {/* CSV stays gated on having at least one row (an empty CSV
-                is pointless) but View/Export/Print PDF are available
-                even at zero cases — the document itself already renders
-                a clear "No case records match the selected filters."
-                section rather than an empty table, so generating it is
-                both safe and useful (confirms the filtered scope is
-                genuinely empty, not broken). Matches the same choice
-                made for every new role-specific Reports page. */}
-            <button className="btn btn-outline btn-sm" onClick={onExportCsv} disabled={cases.length === 0 || busy}>
-              <Download size={13} /> Export CSV
-            </button>
+            {/* View/Export/Print PDF are available even at zero cases —
+                the document itself already renders a clear "No case
+                records match the selected filters." section rather than
+                an empty table, so generating it is both safe and useful
+                (confirms the filtered scope is genuinely empty, not
+                broken). Matches the same choice made for every
+                role-specific Reports page. */}
             <button className="btn btn-outline btn-sm" onClick={onViewPdf} disabled={busy}>
               <Eye size={13} /> {pdfState === 'viewing' ? 'Generating…' : 'View PDF'}
             </button>
@@ -504,14 +457,12 @@ function GovernmentReportSection({
   const templateTitle = reportType === 'WEDC' ? 'WEDC / VAW — Consolidated Cases' : reportType === 'CNSP' ? 'CNSP — Consolidated Cases' : 'CICL / CAR — Consolidated Cases';
 
   const buildPdf = async () => {
-    const logoDataUrl = await loadSafeherLogoDataUrl();
     const signatories: Signatories = { preparedBy: filters.preparedBy, certifiedCorrectBy: filters.certifiedCorrectBy, notedBy: filters.notedBy };
     const params = {
       jurisdictionLabel: scopeLabel.toUpperCase(),
       periodLabel,
       rows: templateRows,
       signatories,
-      logoDataUrl,
       generatedByName: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown',
       generatedByRole: profile ? ROLE_LABEL[profile.role] : '',
     };
@@ -536,20 +487,6 @@ function GovernmentReportSection({
     } catch {
       showToast('error', 'Unable to generate the PDF report. Please try again.');
     }
-  };
-
-  const exportCsvNow = () => {
-    const filename = exportGovernmentReportCsv(reportType, templateRows, filters.dateFrom, filters.dateTo);
-    if (profile) {
-      logAudit({
-        profileId: profile.profile_id,
-        action: 'REPORT_EXPORT_CSV',
-        tableName: 'case_reports',
-        recordId: activeSavedReportId ?? profile.profile_id,
-        newValues: { filename, reportType, filters, rowCount: templateRows.length },
-      });
-    }
-    showToast('success', `Report exported successfully as ${filename}.`);
   };
 
   const busy = pdfActions.busy;
@@ -621,9 +558,6 @@ function GovernmentReportSection({
         <div className="report-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ fontSize: 15.5 }}>Case Detail ({templateRows.length})</h3>
           <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-outline btn-sm" onClick={exportCsvNow} disabled={busy}>
-              <Download size={13} /> Export CSV
-            </button>
             <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={busy}>
               <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
             </button>

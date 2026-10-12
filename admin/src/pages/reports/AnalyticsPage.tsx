@@ -1,10 +1,18 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Bar, Line } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
-import { ClipboardList, Clock, Activity, CheckCircle2, ArrowLeftRight } from 'lucide-react';
+import { ClipboardList, Clock, Activity, CheckCircle2, ArrowLeftRight, Eye, FileText, Printer } from 'lucide-react';
 import '../../lib/chartSetup';
 import { chartBaseOptions } from '../../lib/chartSetup';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import { useToast } from '../../contexts/ToastContext';
+import { logAudit } from '../../lib/audit';
+import { ROLE_LABEL } from '../../lib/roleLabels';
+import { captureChartImage } from '../../lib/captureChartImage';
+import { generateAnalyticsPdf, type AnalyticsChartSection } from '../../lib/analyticsReportDocument';
+import { buildAnalyticsReportFilename } from '../../lib/reportFilename';
+import { usePdfReportActions } from '../../hooks/usePdfReportActions';
+import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { PageHeader } from '../../components/ui';
 import { AnimatedNumber } from '../../components/AnimatedNumber';
@@ -54,9 +62,24 @@ export function AnalyticsPage() {
     referralByStatus,
     sosByStatus,
     scopeLabel,
+    appliedFilterLines,
   } = useReportsController();
 
+  const { showToast } = useToast();
   const reducedMotion = usePrefersReducedMotion();
+
+  // module-pdf — refs onto the real rendered <canvas> for each chart,
+  // read via captureChartImage() only at PDF-build time (never during
+  // render). ChartCard forwards chartBoxRef onto its own .chart-box
+  // div; the inline Bar/Line charts below get the same ref directly on
+  // their wrapping div.
+  const trendChartRef = useRef<HTMLDivElement>(null);
+  const statusChartRef = useRef<HTMLDivElement>(null);
+  const typeChartRef = useRef<HTMLDivElement>(null);
+  const sourceChartRef = useRef<HTMLDivElement>(null);
+  const geoChartRef = useRef<HTMLDivElement>(null);
+  const referralChartRef = useRef<HTMLDivElement>(null);
+  const sosChartRef = useRef<HTMLDivElement>(null);
 
   const doughnutOptions: ChartOptions<'doughnut'> = useMemo(
     () => ({
@@ -128,6 +151,74 @@ export function AnalyticsPage() {
 
   const sosList = sos as SosAlert[];
 
+  // module-pdf — the Analytics PDF reuses every number already computed
+  // above (total/pending/active/closed/referredCount, byStatus/byType/
+  // bySource/geographicDistribution/referralByStatus/sosByStatus, trend)
+  // — nothing here is recalculated independently of the dashboard, so
+  // the exported document can never disagree with what's on screen.
+  // Chart images are captured from the real <canvas> only at build
+  // time, right before generating, so they always reflect whatever is
+  // currently rendered for the current filters.
+  const buildPdfDocument = async () => {
+    const trendRows = trend.labels.map((label, i) => ({ label, count: trend.values[i] }));
+
+    const charts: AnalyticsChartSection[] = [
+      { title: 'Case Trend', image: captureChartImage(trendChartRef.current), tableRows: trend.labels.length > 0 ? trendRows : [] },
+      { title: 'Case Status', image: captureChartImage(statusChartRef.current), tableRows: byStatus },
+      { title: 'Case Classification', image: captureChartImage(typeChartRef.current), tableRows: byType },
+      { title: 'Report Source', image: captureChartImage(sourceChartRef.current), tableRows: bySource },
+    ];
+    if (geographicDistribution) {
+      charts.push({ title: `Geographic Distribution — ${geographicLabel}`, image: captureChartImage(geoChartRef.current), tableRows: geographicDistribution, valueLabel: 'Cases' });
+    }
+    charts.push({ title: 'Referral Analytics', image: captureChartImage(referralChartRef.current), tableRows: referralByStatus, valueLabel: 'Referrals' });
+    // SOS is deliberately excluded from the barangay tier's PDF, same as
+    // the on-screen section just below (roleTier !== 'barangay') — never
+    // introduced into a scope that doesn't already see it on screen.
+    if (roleTier !== 'barangay') {
+      charts.push({ title: 'SOS / Emergency Analytics', image: captureChartImage(sosChartRef.current), tableRows: sosByStatus, valueLabel: 'Alerts' });
+    }
+
+    return generateAnalyticsPdf({
+      documentKicker: 'CASE ANALYTICS REPORT',
+      reportTitle: 'Case Analytics',
+      runningHeaderTitle: 'SAFESPACE — CASE ANALYTICS REPORT',
+      footerLabel: 'SafeSpace — Case Analytics Report · Confidential — For Authorized Use Only',
+      generatedByName: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown',
+      generatedByRole: profile ? ROLE_LABEL[profile.role] : '',
+      scopeLabel,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      appliedFilterLines,
+      kpis: [
+        { label: 'Total Cases', count: total },
+        { label: 'Pending', count: pending },
+        { label: 'Active', count: active },
+        { label: 'Resolved / Closed', count: closed },
+        { label: 'Referred', count: referredCount },
+      ],
+      charts,
+    });
+  };
+
+  const pdfActions = usePdfReportActions({
+    buildDoc: buildPdfDocument,
+    filename: () => buildAnalyticsReportFilename(scopeLabel, filters.dateFrom, filters.dateTo),
+    onAudit: (action, filename) => {
+      if (!profile) return;
+      logAudit({ profileId: profile.profile_id, action, tableName: 'case_reports', recordId: profile.profile_id, newValues: { filename, dateFrom: filters.dateFrom, dateTo: filters.dateTo, scopeLabel } });
+    },
+  });
+
+  const handleExportPdf = async () => {
+    try {
+      const filename = await pdfActions.exportPdf();
+      if (filename) showToast('success', `Report exported successfully as ${filename}.`);
+    } catch {
+      showToast('error', 'Unable to generate the PDF report. Please try again.');
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -146,6 +237,18 @@ export function AnalyticsPage() {
         barangays={barangays}
         staffOptions={staffOptions}
       />
+
+      <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || pdfActions.busy}>
+          <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
+        </button>
+        <button className="btn btn-primary btn-sm" onClick={handleExportPdf} disabled={loading || pdfActions.busy}>
+          <FileText size={13} /> {pdfActions.state === 'exporting' ? 'Generating…' : 'Export PDF'}
+        </button>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.printPdf} disabled={loading || pdfActions.busy}>
+          <Printer size={13} /> {pdfActions.state === 'printing' ? 'Preparing…' : 'Print PDF'}
+        </button>
+      </div>
 
       {error ? (
         <div className="card dash-error-state">
@@ -179,16 +282,16 @@ export function AnalyticsPage() {
                 <p>Insufficient data for trend analysis.</p>
               </div>
             ) : (
-              <div className="chart-box" style={{ height: 240 }}>
+              <div className="chart-box" style={{ height: 240 }} ref={trendChartRef}>
                 <Line data={{ labels: trend.labels, datasets: [{ label: 'Cases', data: trend.values, borderColor: '#1456A0', backgroundColor: 'rgba(20,86,160,0.12)', fill: true, tension: 0.3 }] }} options={chartBaseOptions(lineOptions)} />
               </div>
             )}
           </div>
 
           <div className="dash-chart-row dash-chart-row-3" style={{ marginBottom: 20 }}>
-            <ChartCard title="Case Status" data={byStatus} options={doughnutOptions} loading={loading} />
-            <ChartCard title="Case Classification" data={byType} options={doughnutOptions} loading={loading} />
-            <ChartCard title="Report Source" data={bySource} options={doughnutOptions} loading={loading} />
+            <ChartCard title="Case Status" data={byStatus} options={doughnutOptions} loading={loading} chartBoxRef={statusChartRef} />
+            <ChartCard title="Case Classification" data={byType} options={doughnutOptions} loading={loading} chartBoxRef={typeChartRef} />
+            <ChartCard title="Report Source" data={bySource} options={doughnutOptions} loading={loading} chartBoxRef={sourceChartRef} />
           </div>
 
           {geographicDistribution && (
@@ -200,7 +303,7 @@ export function AnalyticsPage() {
                 <div className="dash-chart-empty"><p>No cases match the selected filters.</p></div>
               ) : (
                 <div className="table-responsive">
-                  <div className="chart-box" style={{ height: 220, minWidth: Math.max(480, geographicDistribution.length * 90) }}>
+                  <div className="chart-box" style={{ height: 220, minWidth: Math.max(480, geographicDistribution.length * 90) }} ref={geoChartRef}>
                     <Bar
                       data={{ labels: geographicDistribution.map((m) => m.label), datasets: [{ label: 'Cases', data: geographicDistribution.map((m) => m.count), backgroundColor: '#1456A0', borderRadius: 6, maxBarThickness: 40 }] }}
                       options={chartBaseOptions(barOptions)}
@@ -218,7 +321,7 @@ export function AnalyticsPage() {
             ) : referralByStatus.length === 0 ? (
               <div className="dash-chart-empty"><p>No shelter referrals match the selected filters.</p></div>
             ) : (
-              <div className="chart-box" style={{ height: 200 }}>
+              <div className="chart-box" style={{ height: 200 }} ref={referralChartRef}>
                 <Bar data={{ labels: referralByStatus.map((r) => r.label), datasets: [{ label: 'Referrals', data: referralByStatus.map((r) => r.count), backgroundColor: '#4C82B3', borderRadius: 6, maxBarThickness: 56 }] }} options={chartBaseOptions(barOptions)} />
               </div>
             )}
@@ -242,7 +345,7 @@ export function AnalyticsPage() {
                     </div>
                     <div className="dash-kpi-label">Total SOS alerts</div>
                   </div>
-                  <div className="chart-box" style={{ height: 180 }}>
+                  <div className="chart-box" style={{ height: 180 }} ref={sosChartRef}>
                     <Bar data={{ labels: sosByStatus.map((s) => s.label), datasets: [{ label: 'SOS Alerts', data: sosByStatus.map((s) => s.count), backgroundColor: '#D94B63', borderRadius: 6, maxBarThickness: 56 }] }} options={chartBaseOptions(barOptions)} />
                   </div>
                 </div>
@@ -250,6 +353,18 @@ export function AnalyticsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {pdfActions.viewerOpen && (
+        <PdfViewerModal
+          title="Case Analytics"
+          pdfUrl={pdfActions.viewerUrl}
+          error={pdfActions.viewerError}
+          onClose={pdfActions.closeViewer}
+          onExport={handleExportPdf}
+          onPrint={pdfActions.printViewerDoc}
+          printing={pdfActions.printing}
+        />
       )}
     </div>
   );

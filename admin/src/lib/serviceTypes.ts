@@ -2,10 +2,9 @@ import type { ServiceStatus, ServiceType } from '../types/database.types';
 
 /**
  * The ONE place the Services Provided vocabulary (module22) is
- * defined — reused by the CaseDetailPage UI, governmentReportDocument.ts's
- * PDF legend, and governmentReportCsv.ts, so the code/label pairing can
- * never drift between the case-management screen and the government
- * report output.
+ * defined — reused by the CaseDetailPage UI and governmentReportDocument.ts's
+ * PDF legend, so the code/label pairing can never drift between the
+ * case-management screen and the government report output.
  */
 export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   CS: 'Counseling Services',

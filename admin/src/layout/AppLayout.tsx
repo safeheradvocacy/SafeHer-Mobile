@@ -23,6 +23,9 @@ import {
   KeyRound,
   QrCode,
   DatabaseBackup,
+  Megaphone,
+  ClipboardCheck,
+  Shield,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -38,16 +41,24 @@ import type { UserRole } from '../types/database.types';
 // 'utility' items (Notifications/Settings) are the same for every role and
 // render below a thin divider instead of a text label, since they aren't
 // really "a category of work" the way the others are.
-// 'shelter'/'occupancy'/'requests'/'communication'/'account' are
-// exclusively used by SHELTER_ADMIN_NAV_ITEMS below (no other role's
-// NAV_ITEMS entry ever sets them) — safe to add without affecting any
-// other role's section order or labels. 'communication'/'account' render
+// 'shelter'/'occupancy'/'requests'/'account' are exclusively used by
+// SHELTER_ADMIN_NAV_ITEMS below. 'communication' is used there AND (as
+// of module28) by the shared NAV_ITEMS' Announcements item — both are
+// safe, since GROUP_ORDER/GROUP_LABEL are rendered identically no
+// matter which array supplies the items, and Announcements is gated by
+// the 'announcements.manage' permission (provincial_staff only), so no
+// other role's sidebar gains a 'communication' section from this.
+// 'communication'/'account' render
 // as normal labeled groups (not the unlabeled 'utility' divider every
 // other role uses for Notifications/Settings) — a deliberate,
 // role-scoped exception: this master prompt explicitly asked for
 // COMMUNICATION/ACCOUNT labels twice, unambiguously, unlike the first
 // shelter_admin nav pass where the accompanying mockup actually showed
 // no labels there at all.
+// 'barangayOps' (module31) is used ONLY by the shared NAV_ITEMS'
+// Barangay Requests item, gated by 'barangayRequests.manage'
+// (barangay_admin only) — same safe-to-add-a-new-key precedent as
+// 'communication' above.
 type NavGroup =
   | 'overview'
   | 'cases'
@@ -57,6 +68,7 @@ type NavGroup =
   | 'occupancy'
   | 'requests'
   | 'communication'
+  | 'barangayOps'
   | 'account'
   | 'reporting'
   | 'administration'
@@ -72,6 +84,7 @@ const GROUP_LABEL: Partial<Record<NavGroup, string>> = {
   occupancy: 'Occupancy & Placement',
   requests: 'Requests & Referrals',
   communication: 'Communication',
+  barangayOps: 'Barangay Operations',
   account: 'Account',
   reporting: 'Reporting',
   administration: 'Administration',
@@ -127,9 +140,19 @@ const NAV_ITEMS: NavItemDef[] = [
   { to: '/admin/case-access', label: 'Case Access Verification', icon: QrCode, permission: 'cases.view', group: 'cases' },
   { to: '/admin/sos', label: 'SOS Monitoring', icon: Siren, permission: 'sos.monitor', group: 'emergency' },
   { to: '/admin/shelters', label: 'Shelters & Referrals', icon: MapPin, permission: 'shelters.refer', group: 'services' },
-  { to: '/admin/shelter-management', label: 'Shelter Management', icon: Home, permission: 'shelters.manage', group: 'services' },
   { to: '/admin/support-queue', label: 'Expert Support Queue', icon: MessageCircleHeart, permission: 'support.manage', group: 'services' },
   { to: '/admin/faqs', label: 'FAQ Management', icon: HelpCircle, permission: 'faqs.manage', group: 'services' },
+  // module32 — Shelter Management moved from 'services' to
+  // 'administration' (master prompt: "Reorganize Shelter Management
+  // and Implement Police Management"). Same route, same
+  // 'shelters.manage' permission gate — a pure nav reclassification,
+  // not a new capability or a different page.
+  { to: '/admin/shelter-management', label: 'Shelter Management', icon: Home, permission: 'shelters.manage', group: 'administration' },
+  // module32 — new Police Management module. 'police.manage' is held
+  // by municipal_admin, provincial_staff, provincial_admin, and
+  // super_admin (see permissions.ts); law_enforcement itself never
+  // sees this item (it reaches only its own profile via Settings).
+  { to: '/admin/police-management', label: 'Police Management', icon: Shield, permission: 'police.manage', group: 'administration' },
   { to: '/admin/municipalities', label: 'Municipality Management', icon: Building2, permission: 'municipalities.manage', group: 'administration' },
   { to: '/admin/barangays', label: 'Barangay Management', icon: Building2, permission: 'barangays.manage', group: 'administration' },
   // module25 — Reports and Analytics are independently accessible pages
@@ -142,6 +165,17 @@ const NAV_ITEMS: NavItemDef[] = [
   // function rather than the operational/analytical one it actually is).
   { to: '/admin/reports', label: 'Reports', icon: BarChart3, permission: 'reports.view', group: 'reporting' },
   { to: '/admin/analytics', label: 'Analytics', icon: LineChart, permission: 'reports.view', group: 'reporting' },
+  // module28 — Provincial Staff only (announcements.manage), per the
+  // explicit role split: Provincial Admin must not automatically gain
+  // this just because it shares other province-wide permissions.
+  { to: '/admin/announcements', label: 'Provincial Announcements', icon: Megaphone, permission: 'announcements.manage', group: 'communication' },
+  // module31 — barangay_admin only. Inter-agency (MSWDO/PSWDO/Police)
+  // action requests that actually need barangay participation (e.g.
+  // Barangay Protection Order) — never mixed with ordinary SOS,
+  // shelter, or incident-report navigation, both of which this role no
+  // longer has (see the removed sos.monitor/shelters.refer keys this
+  // module's permissions.ts change documents).
+  { to: '/admin/barangay-requests', label: 'Barangay Requests', icon: ClipboardCheck, permission: 'barangayRequests.manage', group: 'barangayOps' },
   { to: '/admin/users', label: 'Administrator Management', labelByRole: { municipal_admin: 'User Management' }, icon: Users, permission: 'admins.manage', group: 'administration' },
   { to: '/admin/audit-log', label: 'Audit Log', icon: History, permission: 'audit.view', group: 'system' },
   { to: '/admin/backups', label: 'Backup & Restore', icon: DatabaseBackup, permission: 'backups.manage', group: 'system' },
@@ -232,6 +266,7 @@ function readSidebarCollapsed(): boolean {
 const GROUP_ORDER: NavGroup[] = [
   'overview',
   'cases',
+  'barangayOps',
   'shelter',
   'requests',
   'occupancy',

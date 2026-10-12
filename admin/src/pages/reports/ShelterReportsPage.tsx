@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Eye, FileText, Printer } from 'lucide-react';
+import { Eye, FileText, Printer } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
-import { downloadCsv } from '../../lib/exportCsv';
 import { buildReportFilename } from '../../lib/reportFilename';
-import { generateRoleReportPdf, loadSafeherLogoDataUrl, reportingPeriodLabel } from '../../lib/reportDocument';
+import { generateRoleReportPdf, reportingPeriodLabel } from '../../lib/reportDocument';
 import { usePdfReportActions } from '../../hooks/usePdfReportActions';
 import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
@@ -14,6 +13,7 @@ import { DashboardHeaderActions } from '../../components/dashboard/DashboardHead
 import { EmptyState, PageHeader } from '../../components/ui';
 import { groupCount } from './reportsUi';
 import { ROLE_LABEL } from '../../lib/roleLabels';
+import { isWithinDateFilter } from '../../lib/reportFilters';
 import type { Shelter, ShelterRequest, ShelterReferral } from '../../types/database.types';
 
 type ReferralRow = ShelterReferral & { case_reports?: { case_number: string } | null };
@@ -78,14 +78,8 @@ export function ShelterReportsPage() {
 
   useAutoRefresh(() => load(true));
 
-  const inRange = (iso: string) => {
-    if (dateFrom && iso < `${dateFrom}T00:00:00`) return false;
-    if (dateTo && iso >= `${dateTo}T23:59:59.999`) return false;
-    return true;
-  };
-
-  const filteredRequests = useMemo(() => requests.filter((r) => inRange(r.created_at)), [requests, dateFrom, dateTo]);
-  const filteredReferrals = useMemo(() => referrals.filter((r) => inRange(r.referred_at)), [referrals, dateFrom, dateTo]);
+  const filteredRequests = useMemo(() => requests.filter((r) => isWithinDateFilter(r.created_at, dateFrom, dateTo)), [requests, dateFrom, dateTo]);
+  const filteredReferrals = useMemo(() => referrals.filter((r) => isWithinDateFilter(r.referred_at, dateFrom, dateTo)), [referrals, dateFrom, dateTo]);
 
   const requestsByStatus = useMemo(() => groupCount(filteredRequests, (r) => r.status), [filteredRequests]);
   const referralsByStatus = useMemo(() => groupCount(filteredReferrals, (r) => r.referral_status), [filteredReferrals]);
@@ -99,7 +93,6 @@ export function ShelterReportsPage() {
   }, [dateFrom, dateTo]);
 
   const buildPdfDocument = async () => {
-    const logoDataUrl = await loadSafeherLogoDataUrl();
     const capacityLine = shelter ? [{ label: 'Capacity', count: shelter.capacity }, { label: 'Current Occupancy', count: shelter.current_occupancy }, { label: 'Available Beds', count: Math.max(shelter.capacity - shelter.current_occupancy, 0) }] : [];
     const services = (shelter?.services_available ?? '')
       .split(',')
@@ -181,7 +174,6 @@ export function ShelterReportsPage() {
         { label: 'Certified Correct:', name: certifiedBy, roleLabel: 'Reviewing / Approving Official' },
         { label: 'Noted by:', name: notedBy, roleLabel: 'Authorized Reviewing Official' },
       ],
-      logoDataUrl,
     });
   };
 
@@ -201,24 +193,6 @@ export function ShelterReportsPage() {
     } catch {
       showToast('error', 'Unable to generate the PDF report. Please try again.');
     }
-  };
-
-  const exportCsv = () => {
-    const filename = buildReportFilename(`${reportTitle} - Requests`, 'csv');
-    downloadCsv(
-      filename,
-      filteredRequests.map((r) => ({ request_id: r.request_id, status: r.status, urgency: r.urgency, people_count: r.people_count, children_count: r.children_count, created_at: r.created_at })),
-      [
-        { key: 'request_id', label: 'Request ID' },
-        { key: 'status', label: 'Status' },
-        { key: 'urgency', label: 'Urgency' },
-        { key: 'people_count', label: 'People' },
-        { key: 'children_count', label: 'Children' },
-        { key: 'created_at', label: 'Requested At' },
-      ]
-    );
-    if (profile) logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'shelter_requests', recordId: profile.profile_id, newValues: { filename, rowCount: filteredRequests.length } });
-    showToast('success', `Exported ${filename}.`);
   };
 
   const busy = pdfActions.busy;
@@ -300,9 +274,6 @@ export function ShelterReportsPage() {
         <div className="report-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ fontSize: 15.5 }}>Generate Report</h3>
           <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-outline btn-sm" onClick={exportCsv} disabled={loading || busy || filteredRequests.length === 0}>
-              <Download size={13} /> Export CSV
-            </button>
             <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || busy}>
               <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
             </button>

@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
-import { BORDER, BRAND_ACCENT, BRAND_PRIMARY, MARGIN, PAGE_WIDTH, TEXT_MUTED, loadSafeherLogoDataUrl } from './reportDocument';
+import { BORDER, BRAND_ACCENT, BRAND_PRIMARY, MARGIN, PAGE_WIDTH, TEXT_MUTED, drawWatermarkFooter, setSafeSpaceDocumentMetadata } from './reportDocument';
 
 /**
  * Builds the printable "Client Case Access" QR sheet — a real,
@@ -24,20 +24,13 @@ export async function buildClientAccessQrSheet(params: {
   scopeLabel: string; // e.g. "Baler — MSWDO" or "Barangay Sabang"
 }): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const [logoDataUrl, qrDataUrl] = await Promise.all([
-    loadSafeherLogoDataUrl(),
-    QRCode.toDataURL(params.deepLink, { errorCorrectionLevel: 'M', margin: 1, width: 480 }),
-  ]);
+  setSafeSpaceDocumentMetadata(doc, 'Client Case Access', 'SafeSpace client case-access QR sheet');
+  const qrDataUrl = await QRCode.toDataURL(params.deepLink, { errorCorrectionLevel: 'M', margin: 1, width: 480 });
 
+  // Deliberately text-only — the old SafeHer brand mark previously drawn
+  // here has been removed outright, not replaced with any image asset.
   let y = MARGIN;
-  if (logoDataUrl) {
-    try {
-      doc.addImage(logoDataUrl, 'PNG', MARGIN, y, 18, 18 * (381 / 482));
-    } catch {
-      // enhancement only — never block the document over an image error
-    }
-  }
-  const textX = logoDataUrl ? MARGIN + 22 : MARGIN;
+  const textX = MARGIN;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.setTextColor(BRAND_PRIMARY);
@@ -118,6 +111,9 @@ export async function buildClientAccessQrSheet(params: {
   doc.text('CONFIDENTIAL — For authorized client use only. Do not photograph or share this code publicly.', PAGE_WIDTH / 2, 283, {
     align: 'center',
   });
+  // Watermark — its own row below the confidentiality notice, same
+  // shared helper every other PDF generator in this codebase uses.
+  drawWatermarkFooter(doc, PAGE_WIDTH, 289);
 
   return doc;
 }

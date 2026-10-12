@@ -306,6 +306,17 @@ export function HomeScreen() {
                   onPress={() => navigation.navigate('SheltersTab')}
                 />
               </View>
+              <View style={styles.actionsRow}>
+                <QuickActionCard
+                  icon="megaphone"
+                  tint={palette.primary}
+                  title="Announcements"
+                  description="Provincial updates"
+                  reduced={reduced}
+                  onPress={() => navigation.navigate('Announcements')}
+                />
+                <View style={{ flex: 1 }} />
+              </View>
             </View>
           </FadeInUp>
 

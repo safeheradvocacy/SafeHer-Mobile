@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { dateFilterUpperBound, type CaseReportFilters } from '../lib/reportFilters';
+import { dateFilterLowerBoundIso, dateFilterUpperBoundIso, type CaseReportFilters } from '../lib/reportFilters';
 import type { CaseAssignment, CaseReport, ShelterReferral, SosAlert } from '../types/database.types';
 
 /**
@@ -59,8 +59,13 @@ export function useCaseReportData(filters: CaseReportFilters) {
     if (filters.caseType) caseQuery = caseQuery.eq('case_type', filters.caseType);
     if (filters.priority) caseQuery = caseQuery.eq('priority_level', filters.priority);
     if (filters.source) caseQuery = caseQuery.eq('source_channel', filters.source);
-    if (filters.dateFrom) caseQuery = caseQuery.gte('reported_at', filters.dateFrom);
-    if (filters.dateTo) caseQuery = caseQuery.lt('reported_at', dateFilterUpperBound(filters.dateTo));
+    // Manila-midnight-anchored UTC instants (see reportFilters.ts) — a
+    // bare 'yyyy-mm-dd' string sent to .gte() would otherwise be cast by
+    // Postgres/PostgREST using the DB session's own timezone (UTC by
+    // default), not Manila's, silently shifting both boundaries by up
+    // to 8 hours.
+    if (filters.dateFrom) caseQuery = caseQuery.gte('reported_at', dateFilterLowerBoundIso(filters.dateFrom));
+    if (filters.dateTo) caseQuery = caseQuery.lt('reported_at', dateFilterUpperBoundIso(filters.dateTo));
 
     caseQuery = caseQuery.order('reported_at', { ascending: false });
 
@@ -134,8 +139,8 @@ export function useCaseReportData(filters: CaseReportFilters) {
         // (see ReportsPage.tsx AnalyticsTab).
         sosRows = [];
       }
-      if (filters.dateFrom) sosRows = sosRows.filter((s) => s.triggered_at >= filters.dateFrom);
-      if (filters.dateTo) sosRows = sosRows.filter((s) => s.triggered_at < dateFilterUpperBound(filters.dateTo));
+      if (filters.dateFrom) sosRows = sosRows.filter((s) => s.triggered_at >= dateFilterLowerBoundIso(filters.dateFrom));
+      if (filters.dateTo) sosRows = sosRows.filter((s) => s.triggered_at < dateFilterUpperBoundIso(filters.dateTo));
       setSos(sosRows);
     }
 

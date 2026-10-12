@@ -132,11 +132,59 @@ export function hasActiveFilters(filters: CaseReportFilters): boolean {
   return (Object.entries(filters) as [keyof CaseReportFilters, string][]).some(([key, v]) => !NON_FILTER_KEYS.has(key) && v !== '');
 }
 
-/** End-of-day exclusive boundary for a yyyy-mm-dd date filter, so a
- * "to" date is inclusive of records reported ON that date rather than
- * silently excluding them (the classic date-range boundary bug). */
-export function dateFilterUpperBound(dateTo: string): string {
-  const d = new Date(`${dateTo}T00:00:00`);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+// Aurora Province, Philippines operates in a single zone (Asia/Manila,
+// UTC+8, no DST). Every dateFrom/dateTo value in this app is a plain
+// yyyy-mm-dd CIVIL date the user picked, meant as a Manila calendar day
+// — so its boundaries must be anchored to MANILA midnight, not the
+// browser's local midnight (an admin's OS clock/timezone is unverified)
+// and not UTC midnight (what Postgres/PostgREST casts a bare date
+// literal to by default, and what `new Date(\`${d}T00:00:00\`)` resolves
+// to only when the browser itself happens to be UTC). Getting this
+// wrong silently shifts every date-range boundary by up to 8 hours —
+// e.g. a case reported at 3 AM Manila time on the 2nd is actually
+// 7 PM UTC on the 1st, so a naive UTC-anchored "from the 2nd" filter
+// drops it even though, to the person who reported it, it plainly
+// happened "on the 2nd." This was the root cause behind several
+// Analytics/Reports pages appearing to filter correctly in testing
+// (same-timezone browser) while silently losing records near midnight
+// for anyone else, or when compared against the PDF's own count.
+const PH_OFFSET = '+08:00';
+
+/** Inclusive LOWER bound, as a real UTC instant — Manila-local midnight
+ * of `dateFrom`. Empty string in, empty string back (caller should
+ * check for an unset filter before calling, same as before). */
+export function dateFilterLowerBoundIso(dateFrom: string): string {
+  return new Date(`${dateFrom}T00:00:00${PH_OFFSET}`).toISOString();
+}
+
+/** Exclusive UPPER bound, as a real UTC instant — Manila-local midnight
+ * of the day AFTER `dateTo`, so a record timestamped anywhere during
+ * `dateTo` (as a Manila calendar day) is included rather than silently
+ * excluded (the classic date-range boundary bug), without the timezone
+ * error described above. */
+export function dateFilterUpperBoundIso(dateTo: string): string {
+  const d = new Date(`${dateTo}T00:00:00${PH_OFFSET}`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
+
+/**
+ * The one correct way to test whether an ISO timestamp (as returned by
+ * Postgres, in whatever valid ISO 8601 form it comes back in) falls
+ * within a Manila-calendar-day [dateFrom, dateTo] window. Always parses
+ * to a real instant and compares numerically — never compare ISO
+ * timestamp STRINGS directly with `<`/`>=` (lexicographic string order
+ * is only reliable when both sides share the exact same format/
+ * precision/timezone suffix, which a hand-built browser string and a
+ * Postgres-returned string do not). Replaces the `iso <
+ * \`${dateFrom}T00:00:00\`` pattern previously duplicated — with the
+ * same timezone bug — across every role-specific Analytics/Reports page.
+ */
+export function isWithinDateFilter(iso: string | null | undefined, dateFrom: string, dateTo: string): boolean {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  if (dateFrom && t < Date.parse(dateFilterLowerBoundIso(dateFrom))) return false;
+  if (dateTo && t >= Date.parse(dateFilterUpperBoundIso(dateTo))) return false;
+  return true;
 }

@@ -37,7 +37,10 @@ export type PermissionKey =
   | 'admins.manage'
   | 'audit.view'
   | 'roles.view'
-  | 'backups.manage';
+  | 'backups.manage'
+  | 'announcements.manage'
+  | 'barangayRequests.manage'
+  | 'police.manage';
 
 export const PERMISSION_LABEL: Record<PermissionKey, string> = {
   'cases.view': 'View and manage case reports',
@@ -54,6 +57,9 @@ export const PERMISSION_LABEL: Record<PermissionKey, string> = {
   'audit.view': 'View the province-wide audit log',
   'roles.view': 'View the role/permission model',
   'backups.manage': 'Manage system backups and the backup schedule',
+  'announcements.manage': 'Create, publish, and manage provincial announcements',
+  'barangayRequests.manage': 'Review and respond to inter-agency barangay action requests',
+  'police.manage': 'View and manage Police Officer accounts and assignments',
 };
 
 // Deliberately grouped to mirror the module list a reader would
@@ -62,6 +68,9 @@ export const PERMISSION_MODULES: { module: string; keys: PermissionKey[] }[] = [
   { module: 'Case & Emergency Operations', keys: ['cases.view', 'sos.monitor', 'identity.verify'] },
   { module: 'Geographic & Shelter Coordination', keys: ['municipalities.manage', 'barangays.manage', 'shelters.refer', 'shelters.manage'] },
   { module: 'Support Services', keys: ['support.manage', 'faqs.manage'] },
+  { module: 'Communication', keys: ['announcements.manage'] },
+  { module: 'Barangay Operations', keys: ['barangayRequests.manage'] },
+  { module: 'Personnel Administration', keys: ['police.manage'] },
   { module: 'Reporting', keys: ['reports.view'] },
   { module: 'System Administration', keys: ['admins.manage', 'audit.view', 'roles.view', 'backups.manage'] },
 ];
@@ -78,20 +87,51 @@ export const PERMISSION_MODULES: { module: string; keys: PermissionKey[] }[] = [
 const ROLE_PERMISSIONS: Record<UserRole, ReadonlySet<PermissionKey>> = {
   survivor: new Set(),
   // reports.view added here (module13) — barangay-scoped Case
-  // Management Reports & Analytics, enforced by the same
-  // admin_can_access_case_active() barangay branch already live on
-  // case_reports. Mirrors the access it already has on cases.view/
-  // sos.monitor rather than granting anything new in kind.
-  barangay_admin: new Set<PermissionKey>(['cases.view', 'sos.monitor', 'identity.verify', 'shelters.refer', 'reports.view']),
+  // Management Reports & Analytics, enforced by admin_can_access_
+  // case_active()'s barangay branch, already live on case_reports.
+  //
+  // module31 — sos.monitor and shelters.refer REMOVED here (master
+  // prompt: "Redesign Barangay Admin Access"). Audit confirmed
+  // barangay_admin never had shelters.manage/support.manage/
+  // faqs.manage to begin with, so this is the entire nav-reduction
+  // this role needed — no standalone SOS Monitoring or Shelters &
+  // Referrals page, and (per App.tsx's route guards, not just this
+  // hidden nav item) no reachable route either. identity.verify and
+  // cases.view are UNCHANGED — this role still does ordinary case
+  // work, just not SOS/shelter operations, which were never genuinely
+  // barangay-tier functions. barangayRequests.manage (module31) is
+  // the one new capability added: the dedicated Barangay Requests
+  // page for MSWDO/PSWDO/Police-originated action requests, held by
+  // this role alone.
+  // police.manage (module32) is deliberately NOT granted here — Police
+  // Officer account administration is a province-tier-only module
+  // (provincial_staff/provincial_admin/super_admin); Municipal Admin
+  // (MSWDO) does not get a Police Management surface at all.
+  barangay_admin: new Set<PermissionKey>(['cases.view', 'identity.verify', 'reports.view', 'barangayRequests.manage']),
   municipal_admin: new Set<PermissionKey>([
     'cases.view', 'sos.monitor', 'identity.verify', 'barangays.manage', 'shelters.refer', 'shelters.manage', 'reports.view', 'admins.manage',
   ]),
   // Province-wide OPERATIONAL access — the exact same modules
   // provincial_admin's UI used to expose, minus admins.manage/audit.view/
   // roles.view (technical-only, stay with provincial_admin).
+  // announcements.manage (module28) added here ONLY — Provincial Staff
+  // is the sole announcement publisher by explicit design. It is
+  // deliberately NOT added to provincial_admin/super_admin below, even
+  // though is_provincial_admin() at the database layer already includes
+  // provincial_staff for other operational tables: announcements use
+  // their OWN narrower is_provincial_staff() RLS helper (module28),
+  // which excludes provincial_admin/super_admin entirely — so this
+  // isn't just a hidden UI gate, the database itself denies them.
+  // police.manage (module32) — province-wide Police Officer directory
+  // view + the narrow update capability create-admin-user actually
+  // grants this role (reassign municipality, name/phone, activate/
+  // deactivate) — never account creation, which stays province-
+  // ADMIN-tier-only (see that Edge Function's own comments). Police
+  // Management is a PROVINCE-TIER-ONLY module — Municipal Admin (MSWDO)
+  // does not hold this key (see that role's own set above).
   provincial_staff: new Set<PermissionKey>([
     'cases.view', 'sos.monitor', 'identity.verify', 'municipalities.manage', 'barangays.manage',
-    'shelters.refer', 'shelters.manage', 'support.manage', 'faqs.manage', 'reports.view',
+    'shelters.refer', 'shelters.manage', 'support.manage', 'faqs.manage', 'reports.view', 'announcements.manage', 'police.manage',
   ]),
   // Redefined as technical/system administration only — no operational
   // modules by default (confirmed design decision). Underlying database
@@ -112,8 +152,14 @@ const ROLE_PERMISSIONS: Record<UserRole, ReadonlySet<PermissionKey>> = {
   // Reports page was simply never reachable from this role's UI before.
   // No new conditional logic needed — ReportsRouter.tsx gives both the
   // exact same province-wide ReportsPage provincial_staff already uses.
-  provincial_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'reports.view']),
-  super_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'reports.view']),
+  // police.manage added here too (module32) — provincial_admin/
+  // super_admin already have full create+update reach over
+  // law_enforcement accounts via admins.manage/create-admin-user; this
+  // key only gates the NEW dedicated Police Management nav item/page,
+  // a focused alternative to the generic Administrator Management
+  // table, not a new capability.
+  provincial_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'reports.view', 'police.manage']),
+  super_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'reports.view', 'police.manage']),
   // reports.view only (module24) — each gets its own role-scoped
   // Reports & Analytics page (ReportsRouter.tsx), not the shared
   // case_reports-centric ReportsPage above.

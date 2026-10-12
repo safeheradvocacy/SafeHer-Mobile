@@ -55,7 +55,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
   resendVerificationEmail: (email: string) => Promise<{ error: string | null }>;
-  /** Verifies the 6-digit code emailed after signUp() and, on success,
+  /** Verifies the 8-digit code emailed after signUp() and, on success,
    * establishes a real session the same way signing in does — the caller
    * doesn't need a separate login step afterward. */
   verifyEmailOtp: (email: string, token: string) => Promise<{ error: string | null }>;
@@ -254,9 +254,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // no session, so any client-side query right after this would run
       // as an anonymous request and get correctly rejected by RLS.
       //
-      // No `emailRedirectTo` — verification is a 6-digit code entered in
+      // No `emailRedirectTo` — verification is an 8-digit code entered in
       // the app (see EmailVerificationScreen + verifyEmailOtp below), not
       // a clickable link, so there's nothing for a redirect URL to do here.
+      // (OtpInput's DEFAULT_CODE_LENGTH is 8 and neither this screen nor
+      // ChangePasswordScreen overrides it — confirmed by reading both
+      // call sites, not assumed; the actual Supabase project's Email OTP
+      // Length setting, dashboard-only, must match this.)
       // Password recovery still uses the link-based flow and still sets
       // this option (see requestPasswordReset).
       const { data, error } = await supabase.auth.signUp({

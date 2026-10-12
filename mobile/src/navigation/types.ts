@@ -52,6 +52,9 @@ export type AppStackParamList = {
   CaseAccess: { token: string };
   ScanCaseQr: undefined;
   LinkedCaseDetail: { caseId: string };
+  // module28 — Provincial Announcements live feed.
+  Announcements: undefined;
+  AnnouncementDetail: { announcementId: string };
   // Authenticated entry point (Profile > Legal & Privacy). Shows
   // acceptance status/re-consent in addition to the same document
   // AuthStackParamList's pre-auth Terms route renders.

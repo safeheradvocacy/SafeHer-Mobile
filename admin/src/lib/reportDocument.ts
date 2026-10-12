@@ -1,6 +1,5 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import safeherLogoUrl from '../assets/branding/safeher-logo.png';
 import type { ReportRow } from './reportRows';
 
 /**
@@ -54,38 +53,6 @@ export interface ReportPdfParams {
   referralDistribution: DistributionRow[];
   sosSummary: { total: number; byStatus: DistributionRow[] } | null;
   rows: ReportRow[];
-  logoDataUrl: string | null;
-}
-
-let cachedLogoDataUrl: string | null | undefined;
-
-/** Loads the existing SafeHer brand mark (admin/src/assets/branding/
- * safeher-logo.png) into a data URL jsPDF can embed — Vite serves it as
- * a hashed static-asset URL, which addImage() can't consume directly,
- * so it's drawn to an offscreen canvas once and cached. Purely an
- * enhancement: if this fails for any reason, the PDF still generates
- * with a text-only header rather than blocking export. */
-export async function loadSafeherLogoDataUrl(): Promise<string | null> {
-  if (cachedLogoDataUrl !== undefined) return cachedLogoDataUrl;
-  try {
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('SafeHer logo failed to load'));
-      img.src = safeherLogoUrl;
-    });
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('canvas 2D context unavailable');
-    ctx.drawImage(img, 0, 0);
-    cachedLogoDataUrl = canvas.toDataURL('image/png');
-  } catch (e) {
-    console.warn('[reportDocument] logo failed to load, continuing without it:', e);
-    cachedLogoDataUrl = null;
-  }
-  return cachedLogoDataUrl;
 }
 
 function formatDisplayDate(iso: string): string {
@@ -100,7 +67,7 @@ export function reportingPeriodLabel(dateFrom: string, dateTo: string): string {
   return `Through ${formatDisplayDate(dateTo)}`;
 }
 
-function distributionTable(doc: jsPDF, y: number, title: string, data: DistributionRow[], valueLabel = 'Count'): number {
+export function distributionTable(doc: jsPDF, y: number, title: string, data: DistributionRow[], valueLabel = 'Count'): number {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(BRAND_PRIMARY);
@@ -134,7 +101,95 @@ function distributionTable(doc: jsPDF, y: number, title: string, data: Distribut
   return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
 }
 
-function ensureSpace(doc: jsPDF, y: number, needed: number): number {
+/**
+ * Embeds an ALREADY-RENDERED chart (captured from the live Chart.js
+ * <canvas> on the Analytics page via its native toDataURL(), never
+ * redrawn or recalculated here) plus an optional compact data table
+ * underneath it — the one new drawing primitive this file didn't need
+ * before Analytics PDFs existed (the original design note above,
+ * "analytics are rendered as tables, not chart images," was a
+ * deliberate choice for the Reports module specifically; the Analytics
+ * PDF is a different document with a different brief). Shared by
+ * analyticsReportDocument.ts exactly like every other primitive here is
+ * shared by generateReportPdf/generateRoleReportPdf — one drawing
+ * routine, never copy-pasted per role's analytics page.
+ *
+ * `image` carries the chart's REAL captured pixel dimensions so the
+ * aspect ratio is preserved exactly (never stretched/squashed); a null
+ * `image` (capture failed, or the chart was empty on screen) falls back
+ * to the data table alone rather than drawing a broken/blank image —
+ * matching the brief's "if a chart cannot be reliably embedded, provide
+ * an accurate data table... rather than an empty or broken chart."
+ */
+export function chartImageSection(
+  doc: jsPDF,
+  startY: number,
+  title: string,
+  image: { dataUrl: string; width: number; height: number } | null,
+  tableRows: DistributionRow[] | null,
+  valueLabel = 'Count'
+): number {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const contentWidth = pageWidth - MARGIN * 2;
+  let y = startY;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(BRAND_PRIMARY);
+  doc.text(title, MARGIN, y);
+  y += 6;
+
+  if (image && image.width > 0 && image.height > 0) {
+    // Capped so a wide canvas never dwarfs the page, and never upscaled
+    // past its own captured size (no fabricated resolution).
+    const maxDisplayWidth = Math.min(contentWidth, 150);
+    const displayWidth = Math.min(maxDisplayWidth, (image.width / image.height) * 90);
+    const displayHeight = displayWidth * (image.height / image.width);
+    y = ensureSpace(doc, y, displayHeight + 6);
+    const x = MARGIN + (contentWidth - displayWidth) / 2;
+    try {
+      doc.addImage(image.dataUrl, 'PNG', x, y, displayWidth, displayHeight);
+      y += displayHeight + 6;
+    } catch (e) {
+      console.warn('[reportDocument] chartImageSection: addImage failed, falling back to table only:', e);
+    }
+  } else {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(TEXT_MUTED);
+    doc.text('Chart image unavailable for this section — see the data table below.', MARGIN, y);
+    y += 6;
+  }
+
+  if (tableRows && tableRows.length > 0) {
+    y = ensureSpace(doc, y, 20);
+    autoTable(doc, {
+      startY: y,
+      margin: { left: MARGIN, right: MARGIN },
+      head: [['Category', valueLabel]],
+      body: tableRows.map((r) => [r.label, String(r.count)]),
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 1.8, textColor: TEXT_BODY, lineColor: BORDER, lineWidth: 0.1 },
+      headStyles: { fillColor: HEADER_FILL_LIGHT, textColor: BRAND_PRIMARY, fontStyle: 'bold', fontSize: 8.5 },
+      alternateRowStyles: { fillColor: ROW_ALT_FILL },
+      columnStyles: { 1: { halign: 'right', cellWidth: 30 } },
+      tableWidth: Math.min(contentWidth, 120),
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  } else if (!tableRows) {
+    y += 4;
+  } else {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8.5);
+    doc.setTextColor(TEXT_MUTED);
+    doc.text('No records match the selected filters.', MARGIN, y);
+    y += 10;
+  }
+
+  return y;
+}
+
+export function ensureSpace(doc: jsPDF, y: number, needed: number): number {
   // Reads the real page height off `doc` rather than the module-level
   // PAGE_HEIGHT (fixed portrait A4) — generateRoleReportPdf can now
   // construct doc as landscape (via its new `orientation` param), and
@@ -153,22 +208,23 @@ export const DEFAULT_CONFIDENTIALITY_NOTE =
   'CONFIDENTIAL — For authorized use only. This report contains sensitive case-management information and must be handled in accordance with SafeSpace data-handling practices.';
 
 /**
- * The branded masthead (logo + SAFESPACE wordmark + a one-line document
+ * The branded masthead (SAFESPACE wordmark + a one-line document
  * kicker) — identical first-page block every report shares, now shared
  * by generateReportPdf (below) and generateRoleReportPdf (module25, see
- * end of file) so neither re-implements it independently. Pulled out
- * verbatim from the original generateReportPdf body — no visual change.
+ * end of file) so neither re-implements it independently.
+ *
+ * Deliberately text-only, no logo image — the old SafeHer brand mark
+ * (safeher-logo.png) previously drawn here has been removed outright
+ * (see the "Remove Outdated SafeHer and Legacy Logos" pass): it names
+ * the retired product and was never replaced with an approved current
+ * SafeSpace image asset, per that pass's own "do not invent a
+ * replacement logo" instruction. A clean text wordmark is the entire
+ * header identity now; see drawWatermarkFooter below for the
+ * document's provenance mark instead.
  */
-function drawBrandHeader(doc: jsPDF, startY: number, logoDataUrl: string | null, documentKicker: string): number {
+export function drawBrandHeader(doc: jsPDF, startY: number, documentKicker: string): number {
   let y = startY;
-  if (logoDataUrl) {
-    try {
-      doc.addImage(logoDataUrl, 'PNG', MARGIN, y, 16, 16 * (381 / 482));
-    } catch {
-      // enhancement only — never block the document over an image error
-    }
-  }
-  const textX = logoDataUrl ? MARGIN + 20 : MARGIN;
+  const textX = MARGIN;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(BRAND_PRIMARY);
@@ -189,9 +245,52 @@ function drawBrandHeader(doc: jsPDF, startY: number, logoDataUrl: string | null,
   return y + 8;
 }
 
+// =====================================================================
+// SafeSpace PDF watermark system — a subtle, consistent FOOTER mark
+// (never a large diagonal overlay), applied to every generated page via
+// finalizePagination below, governmentReportDocument.ts's own
+// finalizePages, and qrSheet.ts's single-page footer. Branding/
+// provenance information only — NOT a security, signature, or
+// tamper-evidence mechanism; never described as one anywhere this is
+// used.
+// =====================================================================
+export const WATERMARK_TEXT = 'Computer-generated by SafeSpace';
+export const WATERMARK_COLOR = '#6B7280'; // muted blue-gray, ~WCAG-legible on white at this size
+
+/** Draws the standardized watermark line on whichever page is CURRENTLY
+ * selected on `doc` (caller loops pages via doc.setPage(i) first) — one
+ * shared implementation so the exact text/size/color/placement can
+ * never drift between the three independent PDF generators in this
+ * codebase. Small (7.5pt), muted, bottom-center, in its own reserved
+ * footer row below any existing footer line/page-number text — never
+ * overlapping them. */
+export function drawWatermarkFooter(doc: jsPDF, pageWidth: number, y: number): void {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(WATERMARK_COLOR);
+  doc.text(WATERMARK_TEXT, pageWidth / 2, y, { align: 'center' });
+}
+
+/** Populates standard PDF metadata (Title/Subject/Author/Creator) in
+ * addition to the visible watermark — never a replacement for it (see
+ * the brief: "Metadata complements the visible watermark; it does not
+ * replace it"). `title`/`subject` must never carry survivor names, case
+ * identifiers, or other sensitive data — every caller here passes only
+ * the document's own generic title/kind, the same text already shown
+ * on the page itself and used in its filename, never a case-level
+ * value. */
+export function setSafeSpaceDocumentMetadata(doc: jsPDF, title: string, subject: string): void {
+  doc.setProperties({
+    title,
+    subject,
+    author: 'SafeSpace',
+    creator: 'SafeSpace Administrative System',
+  });
+}
+
 /** Document title + the label/value metadata rows + the confidentiality
  * notice — shared the same way as drawBrandHeader above. */
-function drawMetaBlock(doc: jsPDF, startY: number, title: string, metaLines: [string, string][], confidentialityNote: string): number {
+export function drawMetaBlock(doc: jsPDF, startY: number, title: string, metaLines: [string, string][], confidentialityNote: string): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = startY;
   doc.setFont('helvetica', 'bold');
@@ -261,7 +360,7 @@ function detailTable(doc: jsPDF, startY: number, title: string, columns: string[
 
 /** The plain-theme label/value "EXECUTIVE SUMMARY" table — shared
  * verbatim between generateReportPdf and generateRoleReportPdf. */
-function executiveSummaryTable(doc: jsPDF, startY: number, summary: DistributionRow[]): number {
+export function executiveSummaryTable(doc: jsPDF, startY: number, summary: DistributionRow[]): number {
   let y = startY;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
@@ -284,7 +383,7 @@ function executiveSummaryTable(doc: jsPDF, startY: number, summary: Distribution
  * position so a caller can draw something after it (generateReportPdf
  * never needed to; generateRoleReportPdf's signatory block, below,
  * does). */
-function drawAppliedFilters(doc: jsPDF, startY: number, lines: string[]): number {
+export function drawAppliedFilters(doc: jsPDF, startY: number, lines: string[]): number {
   let y = startY;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
@@ -377,7 +476,7 @@ function drawSignatoryBlock(doc: jsPDF, startY: number, signatories: RoleReportS
 /** Repeated compact running header (page 2+) and the footer/page-number
  * stamp applied to every page once the full document is built — shared
  * by generateReportPdf and generateRoleReportPdf. */
-function finalizePagination(doc: jsPDF, opts: { runningHeaderTitle: string; runningHeaderRight: string; footerLeft: string }): void {
+export function finalizePagination(doc: jsPDF, opts: { runningHeaderTitle: string; runningHeaderRight: string; footerLeft: string }): void {
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -408,15 +507,21 @@ function finalizePagination(doc: jsPDF, opts: { runningHeaderTitle: string; runn
     doc.setTextColor(TEXT_MUTED);
     doc.text(opts.footerLeft, MARGIN, pageHeight - 7);
     doc.text(`Page ${i} of ${pageCount}`, pageWidth - MARGIN, pageHeight - 7, { align: 'right' });
+    // Watermark sits in its OWN reserved row below the confidentiality/
+    // page-number line — on every page, first through last, including
+    // ones created by autoTable's own pagination (this loop runs after
+    // the full document, including every table, is already built).
+    drawWatermarkFooter(doc, pageWidth, pageHeight - 3);
   }
 }
 
 export function generateReportPdf(params: ReportPdfParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const generatedAt = new Date();
+  setSafeSpaceDocumentMetadata(doc, params.reportTitle, 'SafeSpace case management report');
 
   // ---- Header block (first page) ----
-  let y = drawBrandHeader(doc, MARGIN, params.logoDataUrl, 'CASE MANAGEMENT REPORT');
+  let y = drawBrandHeader(doc, MARGIN, 'CASE MANAGEMENT REPORT');
 
   // ---- Title + metadata block ----
   const metaLines: [string, string][] = [
@@ -544,7 +649,6 @@ export interface RoleReportPdfParams {
   sections: RoleReportSection[];
   /** Zero or more generic multi-column detail tables, in order, after the sections. */
   detailTables?: RoleReportDetailTable[];
-  logoDataUrl: string | null;
   confidentialityNote?: string;
   /** Omit entirely for no signatory section (e.g. Shelter/Support
    * reports keep their current, unchanged layout). When present, drawn
@@ -565,8 +669,9 @@ export interface RoleReportPdfParams {
 export function generateRoleReportPdf(params: RoleReportPdfParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: params.orientation ?? 'portrait' });
   const generatedAt = new Date();
+  setSafeSpaceDocumentMetadata(doc, params.reportTitle, `SafeSpace ${params.documentKicker.toLowerCase()}`);
 
-  let y = drawBrandHeader(doc, MARGIN, params.logoDataUrl, params.documentKicker);
+  let y = drawBrandHeader(doc, MARGIN, params.documentKicker);
 
   const metaLines: [string, string][] = [
     ['Reporting Period', reportingPeriodLabel(params.dateFrom, params.dateTo)],

@@ -1,20 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
 import '../../lib/chartSetup';
 import { chartBaseOptions } from '../../lib/chartSetup';
-import { ClipboardList, Siren, Download, Clock3, Activity, CheckCircle2 } from 'lucide-react';
+import { ClipboardList, Siren, Eye, FileText, Printer, Clock3, Activity, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { logAudit } from '../../lib/audit';
-import { downloadCsv } from '../../lib/exportCsv';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { usePoliceSosAlerts, sosElapsedMinutes } from '../../hooks/usePoliceSosAlerts';
 import { bucketOf as caseBucketOf, useLawEnforcementReferrals } from '../../hooks/useLawEnforcementReferrals';
+import { isWithinDateFilter } from '../../lib/reportFilters';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { PageHeader, StatusBadge } from '../../components/ui';
 import { groupCount, KpiCard, KpiSkeletonCard, ChartCard } from './reportsUi';
-import type { SosAlert } from '../../types/database.types';
+import { ROLE_LABEL } from '../../lib/roleLabels';
+import { captureChartImage } from '../../lib/captureChartImage';
+import { generateAnalyticsPdf, type AnalyticsChartSection } from '../../lib/analyticsReportDocument';
+import { buildAnalyticsReportFilename } from '../../lib/reportFilename';
+import { usePdfReportActions } from '../../hooks/usePdfReportActions';
+import { PdfViewerModal } from '../../components/reports/PdfViewerModal';
 
 /**
  * Police Officer Reports & Analytics (module24).
@@ -57,14 +62,8 @@ export function PoliceAnalyticsPage() {
     reloadRef(true);
   };
 
-  const inRange = (iso: string) => {
-    if (dateFrom && iso < `${dateFrom}T00:00:00`) return false;
-    if (dateTo && iso >= `${dateTo}T23:59:59.999`) return false;
-    return true;
-  };
-
-  const filteredAlerts = useMemo(() => alerts.filter((a) => inRange(a.triggered_at)), [alerts, dateFrom, dateTo]);
-  const filteredReferrals = useMemo(() => caseReferrals.filter((r) => inRange(r.created_at)), [caseReferrals, dateFrom, dateTo]);
+  const filteredAlerts = useMemo(() => alerts.filter((a) => isWithinDateFilter(a.triggered_at, dateFrom, dateTo)), [alerts, dateFrom, dateTo]);
+  const filteredReferrals = useMemo(() => caseReferrals.filter((r) => isWithinDateFilter(r.created_at, dateFrom, dateTo)), [caseReferrals, dateFrom, dateTo]);
 
   const sosBuckets = useMemo(() => {
     let active = 0, completed = 0;
@@ -100,62 +99,68 @@ export function PoliceAnalyticsPage() {
     [reducedMotion]
   );
 
-  const exportSos = () => {
-    const filename = `police-sos-alerts-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadCsv(
-      filename,
-      filteredAlerts.map((a: SosAlert) => ({
-        sos_id: a.sos_id,
-        status: a.status,
-        triggered_at: a.triggered_at,
-        acknowledged_at: a.acknowledged_at ?? '',
-        resolved_at: a.resolved_at ?? '',
-        location_address: a.location_address ?? '',
-      })),
-      [
-        { key: 'sos_id', label: 'SOS ID' },
-        { key: 'status', label: 'Status' },
-        { key: 'triggered_at', label: 'Triggered At' },
-        { key: 'acknowledged_at', label: 'Acknowledged At' },
-        { key: 'resolved_at', label: 'Resolved At' },
-        { key: 'location_address', label: 'Location' },
-      ]
-    );
-    if (profile) {
-      logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'sos_alerts', recordId: profile.profile_id, newValues: { filename, rowCount: filteredAlerts.length } });
-    }
-    showToast('success', `Exported ${filename}.`);
-  };
-
-  const exportReferrals = () => {
-    const filename = `police-incident-referrals-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadCsv(
-      filename,
-      filteredReferrals.map((r) => ({
-        referral_id: r.referral_id,
-        case_number: r.case_reports?.case_number ?? '',
-        status: r.status,
-        created_at: r.created_at,
-        action_taken_at: r.action_taken_at ?? '',
-      })),
-      [
-        { key: 'referral_id', label: 'Referral ID' },
-        { key: 'case_number', label: 'Case #' },
-        { key: 'status', label: 'Status' },
-        { key: 'created_at', label: 'Referred At' },
-        { key: 'action_taken_at', label: 'Action Taken At' },
-      ]
-    );
-    if (profile) {
-      logAudit({ profileId: profile.profile_id, action: 'REPORT_EXPORT_CSV', tableName: 'law_enforcement_referrals', recordId: profile.profile_id, newValues: { filename, rowCount: filteredReferrals.length } });
-    }
-    showToast('success', `Exported ${filename}.`);
-  };
-
   const barOptions: ChartOptions<'bar'> = useMemo(
     () => ({ animation: reducedMotion ? false : { duration: 700 }, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }),
     [reducedMotion]
   );
+
+  const sosChartRef = useRef<HTMLDivElement>(null);
+  const sosBarRef = useRef<HTMLDivElement>(null);
+
+  const buildPdfDocument = async () => {
+    const charts: AnalyticsChartSection[] = [
+      { title: 'SOS Alerts by Status', image: captureChartImage(sosChartRef.current), tableRows: sosByStatus },
+      { title: 'SOS Alerts — Status Breakdown', image: captureChartImage(sosBarRef.current), tableRows: sosByStatus },
+      // No chart exists on screen for referrals (just the Referral
+      // Detail table) — image: null correctly falls back to the table
+      // alone rather than fabricating a chart that was never rendered.
+      { title: 'Incident Referrals by Status', image: null, tableRows: referralsByStatus, valueLabel: 'Referrals' },
+    ];
+    return generateAnalyticsPdf({
+      documentKicker: 'POLICE ANALYTICS REPORT',
+      reportTitle: 'Emergency Response & Police Analytics',
+      runningHeaderTitle: 'SAFESPACE — POLICE ANALYTICS REPORT',
+      footerLabel: 'SafeSpace — Police Analytics Report · Confidential — For Authorized Use Only',
+      generatedByName: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown',
+      generatedByRole: profile ? ROLE_LABEL[profile.role] : '',
+      // No precinct/station/unit concept exists anywhere in this schema
+      // for law_enforcement (module9) — SOS access is province-wide and
+      // referral access is assignment-only, exactly as the on-screen
+      // page's own header note says; this scope label states that
+      // rather than fabricating a jurisdiction this role doesn't have.
+      scopeLabel: 'Aurora Province (Emergency SOS) · Assigned Incident Referrals',
+      dateFrom,
+      dateTo,
+      appliedFilterLines: [dateFrom && `From: ${dateFrom}`, dateTo && `To: ${dateTo}`].filter(Boolean) as string[],
+      kpis: [
+        { label: 'Total SOS Alerts', count: sosBuckets.total },
+        { label: 'Active / Unresolved SOS', count: sosBuckets.active },
+        { label: 'Resolved SOS', count: sosBuckets.completed },
+        { label: 'Total Referrals (Assigned to Me)', count: referralBuckets.total },
+        { label: 'Pending / In Progress Referrals', count: referralBuckets.active },
+        { label: 'Completed / Declined Referrals', count: referralBuckets.completed },
+      ],
+      charts,
+    });
+  };
+
+  const pdfActions = usePdfReportActions({
+    buildDoc: buildPdfDocument,
+    filename: () => buildAnalyticsReportFilename('Police', dateFrom, dateTo),
+    onAudit: (action, filename) => {
+      if (!profile) return;
+      logAudit({ profileId: profile.profile_id, action, tableName: 'sos_alerts', recordId: profile.profile_id, newValues: { filename, dateFrom, dateTo } });
+    },
+  });
+
+  const handleExportPdf = async () => {
+    try {
+      const filename = await pdfActions.exportPdf();
+      if (filename) showToast('success', `Report exported successfully as ${filename}.`);
+    } catch {
+      showToast('error', 'Unable to generate the PDF report. Please try again.');
+    }
+  };
 
   return (
     <div>
@@ -185,6 +190,18 @@ export function PoliceAnalyticsPage() {
         )}
       </div>
 
+      <div className="report-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.view} disabled={loading || pdfActions.busy}>
+          <Eye size={13} /> {pdfActions.state === 'viewing' ? 'Generating…' : 'View PDF'}
+        </button>
+        <button className="btn btn-primary btn-sm" onClick={handleExportPdf} disabled={loading || pdfActions.busy}>
+          <FileText size={13} /> {pdfActions.state === 'exporting' ? 'Generating…' : 'Export PDF'}
+        </button>
+        <button className="btn btn-outline btn-sm" onClick={pdfActions.printPdf} disabled={loading || pdfActions.busy}>
+          <Printer size={13} /> {pdfActions.state === 'printing' ? 'Preparing…' : 'Print PDF'}
+        </button>
+      </div>
+
       <h3 style={{ fontSize: 16, marginBottom: 4 }}>Emergency SOS Analytics</h3>
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
         Every active SOS alert is visible to every police officer (module19) — this is independent of, and never automatically converted into, a case referral.
@@ -211,20 +228,15 @@ export function PoliceAnalyticsPage() {
         )}
       </div>
       <div className="dash-chart-row dash-chart-row-2" style={{ marginBottom: 12 }}>
-        <ChartCard title="SOS Alerts by Status" data={sosByStatus} options={doughnutOptions} loading={loading} emptyText="No SOS alerts match the selected period." />
+        <ChartCard title="SOS Alerts by Status" data={sosByStatus} options={doughnutOptions} loading={loading} emptyText="No SOS alerts match the selected period." chartBoxRef={sosChartRef} />
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15 }}>Status Breakdown</h3>
-            <button className="btn btn-outline btn-sm report-no-print" onClick={exportSos} disabled={filteredAlerts.length === 0}>
-              <Download size={13} /> Export CSV
-            </button>
-          </div>
+          <h3 style={{ fontSize: 15, marginBottom: 16 }}>Status Breakdown</h3>
           {loading ? (
             <div className="skeleton" style={{ height: 180 }} />
           ) : sosByStatus.length === 0 ? (
             <div className="dash-chart-empty"><p>No SOS alerts match the selected period.</p></div>
           ) : (
-            <div className="chart-box" style={{ height: 180 }}>
+            <div className="chart-box" style={{ height: 180 }} ref={sosBarRef}>
               <Bar data={{ labels: sosByStatus.map((s) => s.label), datasets: [{ label: 'SOS Alerts', data: sosByStatus.map((s) => s.count), backgroundColor: '#D94B63', borderRadius: 6, maxBarThickness: 56 }] }} options={chartBaseOptions(barOptions)} />
             </div>
           )}
@@ -249,12 +261,7 @@ export function PoliceAnalyticsPage() {
         )}
       </div>
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15 }}>Referral Detail</h3>
-          <button className="btn btn-outline btn-sm report-no-print" onClick={exportReferrals} disabled={filteredReferrals.length === 0}>
-            <Download size={13} /> Export CSV
-          </button>
-        </div>
+        <h3 style={{ fontSize: 15, marginBottom: 16 }}>Referral Detail</h3>
         {loading ? (
           <div className="skeleton" style={{ height: 180 }} />
         ) : filteredReferrals.length === 0 ? (
@@ -282,6 +289,18 @@ export function PoliceAnalyticsPage() {
           </div>
         )}
       </div>
+
+      {pdfActions.viewerOpen && (
+        <PdfViewerModal
+          title="Emergency Response & Police Analytics"
+          pdfUrl={pdfActions.viewerUrl}
+          error={pdfActions.viewerError}
+          onClose={pdfActions.closeViewer}
+          onExport={handleExportPdf}
+          onPrint={pdfActions.printViewerDoc}
+          printing={pdfActions.printing}
+        />
+      )}
     </div>
   );
 }

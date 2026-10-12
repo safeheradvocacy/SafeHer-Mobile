@@ -359,7 +359,19 @@ export interface CaseReport {
   walkin_created_by: string | null; // FK -> user_profiles.profile_id (the admin who created this walk-in case)
   reported_at: string;
   updated_at: string;
+  // module30 — third-party reporting. survivor_id above always stays
+  // the REPORTING account's own survivor row; these describe who the
+  // incident actually happened to when that's someone else. All
+  // nullable except reported_for — never required, never a fabricated
+  // exact age/birthdate.
+  reported_for: ReportSubject;
+  third_party_name: string | null;
+  third_party_relationship: string | null;
+  third_party_age_range: string | null;
+  third_party_contact_number: string | null;
 }
+
+export type ReportSubject = 'Self' | 'Other';
 
 export interface CaseReferral {
   referral_id: string; // uuid, PK
@@ -524,11 +536,74 @@ export interface SosAlert {
   acknowledged_at: string | null;
 }
 
+// module28 — Provincial Announcements Management. target_audience is a
+// real enum with exactly ONE value today ('All Survivors') — the
+// mobile app has exactly one role that reads announcements at all, so
+// this deliberately isn't a free-text/JSON "audience config" the UI
+// would have to invent meaning for. published_at/updated_at are set
+// only by set_announcement_timestamps() (server-side trigger) — never
+// client-writable; see the column grant in module28's own SQL.
+export type AnnouncementCategory =
+  | 'General Announcement' | 'Public Advisory' | 'Service Update'
+  | 'Program or Activity' | 'Safety Information' | 'Emergency Advisory' | 'Other';
+export type AnnouncementPriority = 'Normal' | 'Important' | 'Urgent';
+export type AnnouncementStatus = 'Draft' | 'Scheduled' | 'Published' | 'Expired' | 'Archived' | 'Unpublished';
+export type AnnouncementAudience = 'All Survivors';
+
+export interface Announcement {
+  announcement_id: string; // uuid, PK
+  title: string;
+  summary: string | null;
+  content: string;
+  category: AnnouncementCategory;
+  priority: AnnouncementPriority;
+  status: AnnouncementStatus;
+  target_audience: AnnouncementAudience;
+  external_link: string | null;
+  author_id: string; // FK -> user_profiles.profile_id — never client-editable after creation
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  scheduled_at: string | null;
+  expires_at: string | null;
+}
+
+// module31 — inter-agency Barangay Action Requests. request_type is
+// plain text (see admin/src/lib/barangayRouting.ts), not an enum — the
+// catalog of "things a barangay can be asked to do" is explicitly
+// meant to grow without a migration each time. case_id/service_id/
+// requesting_role/requested_by/target_barangay_id/priority/notes are
+// all immutable after creation (no authenticated UPDATE grant on
+// them) — only status/decline_reason/response_notes/
+// assigned_handler_id are ever client-writable, and even those are
+// further restricted by a server-side transition trigger.
+export type BarangayRequestStatus = 'Pending' | 'Acknowledged' | 'In Progress' | 'Completed' | 'Declined' | 'Cancelled' | 'Returned';
+
+export interface BarangayActionRequest {
+  request_id: string; // uuid, PK
+  case_id: string; // FK -> case_reports.case_id
+  service_id: string | null; // FK -> case_services.service_id
+  request_type: string; // e.g. 'BPO' — see barangayRouting.ts
+  requesting_role: UserRole;
+  requested_by: string; // FK -> user_profiles.profile_id
+  target_barangay_id: string; // FK -> barangays.barangay_id
+  status: BarangayRequestStatus;
+  priority: PriorityLevel;
+  notes: string | null;
+  decline_reason: string | null;
+  response_notes: string | null;
+  assigned_handler_id: string | null; // FK -> user_profiles.profile_id
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Notification {
   notification_id: string; // uuid, PK
   profile_id: string; // FK -> user_profiles.profile_id
   case_id: string | null; // FK -> case_reports.case_id
   sos_id: string | null; // FK -> sos_alerts.sos_id
+  announcement_id: string | null; // FK -> announcements.announcement_id (module28)
+  barangay_request_id: string | null; // FK -> barangay_action_requests.request_id (module31)
   notification_type: NotificationType;
   title: string;
   message: string;
@@ -833,6 +908,8 @@ export interface Database {
       system_backups: { Row: SystemBackup; Insert: Partial<SystemBackup>; Update: Partial<SystemBackup> } & NoRelationships;
       backup_schedule: { Row: BackupSchedule; Insert: Partial<BackupSchedule>; Update: Partial<BackupSchedule> } & NoRelationships;
       system_restores: { Row: SystemRestore; Insert: Partial<SystemRestore>; Update: Partial<SystemRestore> } & NoRelationships;
+      announcements: { Row: Announcement; Insert: Partial<Announcement>; Update: Partial<Announcement> } & NoRelationships;
+      barangay_action_requests: { Row: BarangayActionRequest; Insert: Partial<BarangayActionRequest>; Update: Partial<BarangayActionRequest> } & NoRelationships;
     };
     Views: Record<string, never>;
     // module14 RPCs — see supabase/module14_walkin_case_qr_access.sql.

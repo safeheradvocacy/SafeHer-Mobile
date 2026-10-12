@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable, { type RowInput } from 'jspdf-autotable';
-import { BRAND_PRIMARY, TEXT_BODY, TEXT_MUTED, BORDER, HEADER_FILL_LIGHT } from './reportDocument';
+import { BRAND_PRIMARY, TEXT_BODY, TEXT_MUTED, BORDER, HEADER_FILL_LIGHT, drawWatermarkFooter, setSafeSpaceDocumentMetadata } from './reportDocument';
 import { SOURCE_OF_DATA_NOTE, SERVICES_PROVIDED_NOTE, CICL_NOT_AVAILABLE_NOTE } from './governmentReportMapping';
 import { SERVICE_TYPE_LABELS } from './serviceTypes';
 import type { GovernmentReportRow } from './governmentReportRows';
@@ -31,7 +31,7 @@ const PAGE_WIDTH = 297; // A4 landscape, mm
 const PAGE_HEIGHT = 210;
 const MARGIN = 10;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-const FOOTER_RESERVE = 14;
+const FOOTER_RESERVE = 16; // +2mm over the prior 14 to reserve its own watermark row
 
 export interface Signatories {
   preparedBy: string; // Secretariat/Social Worker
@@ -44,20 +44,15 @@ export interface GovernmentReportParams {
   periodLabel: string; // "January 1-31, 2026"
   rows: GovernmentReportRow[];
   signatories: Signatories;
-  logoDataUrl: string | null;
   generatedByName: string;
   generatedByRole: string;
 }
 
+// Deliberately text-only — the old SafeHer brand mark previously drawn
+// here has been removed outright (see the "Remove Outdated SafeHer and
+// Legacy Logos" pass) and not replaced with any image asset.
 function drawHeader(doc: jsPDF, title: string, params: GovernmentReportParams): number {
   let y = MARGIN;
-  if (params.logoDataUrl) {
-    try {
-      doc.addImage(params.logoDataUrl, 'PNG', MARGIN, y, 12, 12 * (381 / 482));
-    } catch {
-      // enhancement only
-    }
-  }
   const textX = PAGE_WIDTH / 2;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -173,12 +168,17 @@ function finalizePages(doc: jsPDF, footerTitle: string) {
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setDrawColor(BORDER);
-    doc.line(MARGIN, PAGE_HEIGHT - 10, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10);
+    doc.line(MARGIN, PAGE_HEIGHT - 11, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 11);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(TEXT_MUTED);
-    doc.text(`SafeSpace — ${footerTitle} · Confidential — For Authorized Use Only`, MARGIN, PAGE_HEIGHT - 6);
-    doc.text(`Page ${i} of ${pageCount}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 6, { align: 'right' });
+    doc.text(`SafeSpace — ${footerTitle} · Confidential — For Authorized Use Only`, MARGIN, PAGE_HEIGHT - 7);
+    doc.text(`Page ${i} of ${pageCount}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 7, { align: 'right' });
+    // Watermark — its own reserved row below the confidentiality/page-
+    // number line, on every page (first through last, including ones
+    // created by autoTable's own pagination for the consolidated-cases
+    // table).
+    drawWatermarkFooter(doc, PAGE_WIDTH, PAGE_HEIGHT - 3);
   }
 }
 
@@ -210,6 +210,7 @@ function serviceCell(row: GovernmentReportRow, type: ServiceType): string {
  * Attainment) in the official template; has PPO/TPO/BPO in services. */
 export function generateWedcReportPdf(params: GovernmentReportParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  setSafeSpaceDocumentMetadata(doc, 'Consolidated Cases of WEDC/VAW', 'Official WEDC/VAW consolidated case report');
   let y = drawHeader(doc, 'CONSOLIDATED CASES of WEDC/VAW', params);
 
   const head: RowInput[] = [
@@ -266,6 +267,7 @@ export function generateWedcReportPdf(params: GovernmentReportParams): jsPDF {
  * Age/Sex/Educational Attainment); services use EA not PPO/TPO/BPO. */
 export function generateCnspReportPdf(params: GovernmentReportParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  setSafeSpaceDocumentMetadata(doc, 'Consolidated Cases of CNSP', 'Official CNSP consolidated case report');
   let y = drawHeader(doc, 'CONSOLIDATED CASES of CNSP', params);
 
   const head: RowInput[] = [
@@ -333,6 +335,7 @@ export function generateCnspReportPdf(params: GovernmentReportParams): jsPDF {
  * table with no explanation. */
 export function generateCiclReportPdf(params: GovernmentReportParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  setSafeSpaceDocumentMetadata(doc, 'Consolidated Cases of CICL/CAR', 'Official CICL/CAR consolidated case report');
   let y = drawHeader(doc, 'CONSOLIDATED CASES of CICL/CAR', params);
 
   const head: RowInput[] = [

@@ -124,7 +124,15 @@ async function handleRequest(req: Request): Promise<Response> {
   // shelter_staff creation (module7) — removed now that shelter_staff is
   // retired (module24_retire_shelter_staff_role.sql); shelter_admin has
   // no other authorized action through this endpoint.
-  if (!callerProfile || !['municipal_admin', 'provincial_admin', 'super_admin'].includes(callerProfile.role)) {
+  //
+  // 'provincial_staff' (Police Management module) is a NEW, deliberately
+  // narrow addition — see the dedicated check right below. It is NOT a
+  // general Administrator Management caller: it may never create an
+  // account of any kind, and may only update an EXISTING law_enforcement
+  // profile. This preserves the existing, deliberate "Administrator
+  // Management is a technical-admin-only surface" boundary (see this
+  // function's own file header) for every other role/action.
+  if (!callerProfile || !['municipal_admin', 'provincial_admin', 'super_admin', 'provincial_staff'].includes(callerProfile.role)) {
     return new Response(JSON.stringify({ error: 'Not authorized to create admin accounts' }), { status: 403 });
   }
 
@@ -150,6 +158,20 @@ async function handleRequest(req: Request): Promise<Response> {
   const barangayId: string | null = body.barangayId || null;
   const shelterId: string | null = body.shelterId || null;
   const targetProfileId: string | null = body.profileId || null;
+
+  // Police Management — provincial_staff's ENTIRE reach through this
+  // endpoint: updating an existing law_enforcement profile's permitted
+  // fields (name/phone/municipality assignment). It can never create
+  // any account (of any role) and can never touch any other role's
+  // profile. Checked before any other role-specific branch below so a
+  // request that fails this can never fall through to a path meant for
+  // provincial_admin/super_admin/municipal_admin.
+  if (callerProfile.role === 'provincial_staff' && (action !== 'update' || role !== 'law_enforcement')) {
+    return new Response(
+      JSON.stringify({ error: 'Provincial Staff may only update an existing Police Officer account through this endpoint.' }),
+      { status: 403 }
+    );
+  }
 
   if (action === 'update') {
     if (!targetProfileId) {
@@ -222,17 +244,35 @@ async function handleRequest(req: Request): Promise<Response> {
     );
   }
 
-  // law_enforcement is province-tier-only to create, matching the
-  // shelter_admin/support_expert precedent — per the explicit RBAC
-  // design decision for this role (Provincial Admin -> Authorized Law
-  // Enforcement Account). Like support_expert, it carries no
-  // municipality/barangay/shelter jurisdiction (see
-  // module9_law_enforcement.sql's file header): access is granted
-  // per-referral by whichever case-admin currently owns a case, not by
-  // geography, so there is nothing to resolve/validate here either.
-  if (role === 'law_enforcement' && !['provincial_admin', 'super_admin'].includes(callerProfile.role)) {
+  // law_enforcement account CREATION stays province-ADMIN-tier-only,
+  // matching the shelter_admin/support_expert precedent — per the
+  // explicit RBAC design decision for this role (Provincial Admin ->
+  // Authorized Law Enforcement Account). provincial_staff is correctly
+  // excluded from 'provincial_admin'/'super_admin' here too (it was
+  // already forced to action==='update' by the check above, so this
+  // only ever fires for provincial_staff on a 'create' attempt, which
+  // is exactly what should be rejected).
+  //
+  // Police Management (module32) now lets provincial_staff UPDATE an
+  // existing officer's municipality assignment (reusing the existing
+  // user_profiles.municipality_id column — see module32's own header
+  // for why no schema change was needed). Municipality/barangay/shelter
+  // jurisdiction otherwise remains N/A for this role: access to case
+  // work is still granted per-referral, never by geography — the
+  // assignment added here is for PERSONNEL ADMINISTRATION/oversight
+  // scoping only (who manages/sees which officer), never a dispatch or
+  // case-access mechanism. Police Management is province-tier ONLY —
+  // municipal_admin is deliberately never a caller for role ===
+  // 'law_enforcement', for either action.
+  if (role === 'law_enforcement' && action === 'create' && !['provincial_admin', 'super_admin'].includes(callerProfile.role)) {
     return new Response(
       JSON.stringify({ error: 'Only provincial administrators can create Law Enforcement accounts' }),
+      { status: 403 }
+    );
+  }
+  if (role === 'law_enforcement' && action === 'update' && !['provincial_admin', 'super_admin', 'provincial_staff'].includes(callerProfile.role)) {
+    return new Response(
+      JSON.stringify({ error: 'Only provincial administrators or Provincial Staff can update Law Enforcement accounts' }),
       { status: 403 }
     );
   }
