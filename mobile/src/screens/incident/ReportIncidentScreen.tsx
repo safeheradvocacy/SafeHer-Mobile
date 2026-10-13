@@ -203,74 +203,88 @@ export function ReportIncidentScreen() {
 
     const caseNumber = generateCaseNumber(municipalityName || 'GEN');
 
-    const { data: caseRow, error: insertErr } = await supabase
-      .from('case_reports')
-      .insert({
-        survivor_id: survivorId,
-        municipality_id: municipalityId,
-        case_number: caseNumber,
-        case_type: caseType,
-        description,
-        incident_date: incidentDateFor(incidentTiming),
-        incident_location: incidentLocation,
-        // Descriptive-only enrichment (module12) — never affects case
-        // routing/jurisdiction, which stays driven by municipality_id
-        // above exactly as before. incident_barangay_id is only ever
-        // populated for the "registered address" choice, since that's
-        // the only path with a real barangay behind it — a raw GPS fix
-        // (current/different) has no barangay derivation available.
-        incident_barangay_id: locationChoice === 'registered' ? survivorBarangayId : null,
-        incident_latitude: incidentCoords?.latitude ?? null,
-        incident_longitude: incidentCoords?.longitude ?? null,
-        incident_formatted_address: incidentCoords?.formattedAddress ?? null,
-        incident_location_source: incidentCoords?.source ?? null,
-        priority_level: priority,
-        status: 'Pending',
-        is_anonymous: false,
-        reported_for: reportedFor,
-        third_party_name: reportedFor === 'Other' ? thirdPartyName.trim() : null,
-        third_party_relationship: reportedFor === 'Other' ? thirdPartyRelationship.trim() : null,
-        third_party_age_range: reportedFor === 'Other' ? thirdPartyAgeRange : null,
-        third_party_contact_number: reportedFor === 'Other' ? thirdPartyContact.trim() || null : null,
-      })
-      .select()
-      .single();
+    // Wrapped in try/catch — a genuine network failure (no connectivity,
+    // DNS failure, request timeout) can make the insert call THROW
+    // instead of resolving with {error}. Without this, that path left
+    // `submitting` stuck at true forever — a silent hang with the submit
+    // button permanently disabled and no error shown, no way to retry
+    // without restarting the app. Mirrors the try/catch pattern
+    // AuthContext.tsx already uses consistently for every one of its own
+    // Supabase calls.
+    try {
+      const { data: caseRow, error: insertErr } = await supabase
+        .from('case_reports')
+        .insert({
+          survivor_id: survivorId,
+          municipality_id: municipalityId,
+          case_number: caseNumber,
+          case_type: caseType,
+          description,
+          incident_date: incidentDateFor(incidentTiming),
+          incident_location: incidentLocation,
+          // Descriptive-only enrichment (module12) — never affects case
+          // routing/jurisdiction, which stays driven by municipality_id
+          // above exactly as before. incident_barangay_id is only ever
+          // populated for the "registered address" choice, since that's
+          // the only path with a real barangay behind it — a raw GPS fix
+          // (current/different) has no barangay derivation available.
+          incident_barangay_id: locationChoice === 'registered' ? survivorBarangayId : null,
+          incident_latitude: incidentCoords?.latitude ?? null,
+          incident_longitude: incidentCoords?.longitude ?? null,
+          incident_formatted_address: incidentCoords?.formattedAddress ?? null,
+          incident_location_source: incidentCoords?.source ?? null,
+          priority_level: priority,
+          status: 'Pending',
+          is_anonymous: false,
+          reported_for: reportedFor,
+          third_party_name: reportedFor === 'Other' ? thirdPartyName.trim() : null,
+          third_party_relationship: reportedFor === 'Other' ? thirdPartyRelationship.trim() : null,
+          third_party_age_range: reportedFor === 'Other' ? thirdPartyAgeRange : null,
+          third_party_contact_number: reportedFor === 'Other' ? thirdPartyContact.trim() || null : null,
+        })
+        .select()
+        .single();
 
-    if (insertErr || !caseRow) {
-      setSubmitting(false);
-      // This was previously silent — the generic message below gave no
-      // way to tell a real RLS rejection apart from, say, a migration
-      // that hadn't been run yet (a missing column surfaces here as a
-      // PGRST204 error, not 42501). Logging the raw error is what makes
-      // that diagnosable from the Metro/Expo console.
-      console.error('[ReportIncidentScreen] case_reports insert failed:', insertErr?.code, insertErr?.message, insertErr?.details);
-      if (insertErr?.code === '42501' || insertErr?.message?.toLowerCase().includes('row-level security')) {
-        setError('Please verify your account before submitting an incident report.');
-      } else {
-        setError('Could not submit your report. Please try again.');
+      if (insertErr || !caseRow) {
+        setSubmitting(false);
+        // This was previously silent — the generic message below gave no
+        // way to tell a real RLS rejection apart from, say, a migration
+        // that hadn't been run yet (a missing column surfaces here as a
+        // PGRST204 error, not 42501). Logging the raw error is what makes
+        // that diagnosable from the Metro/Expo console.
+        console.error('[ReportIncidentScreen] case_reports insert failed:', insertErr?.code, insertErr?.message, insertErr?.details);
+        if (insertErr?.code === '42501' || insertErr?.message?.toLowerCase().includes('row-level security')) {
+          setError('Please verify your account before submitting an incident report.');
+        } else {
+          setError('Could not submit your report. Please try again.');
+        }
+        return;
       }
-      return;
+
+      await logAudit({
+        profileId: profile.profile_id,
+        action: 'INSERT',
+        tableName: 'case_reports',
+        recordId: caseRow.case_id,
+        newValues: caseRow,
+      });
+
+      // Seed the status timeline so Case Tracking has something to show immediately.
+      await supabase.from('case_status_history').insert({
+        case_id: caseRow.case_id,
+        changed_by: profile.profile_id,
+        previous_status: null,
+        new_status: 'Pending',
+        remarks: 'Report submitted.',
+      });
+
+      setSubmitting(false);
+      setSubmittedCaseNumber(caseRow.case_number);
+    } catch (e) {
+      setSubmitting(false);
+      console.error('[ReportIncidentScreen] onSubmit: request never reached Supabase', e);
+      setError('Unable to connect to SafeSpace. Your report has NOT been submitted — please check your connection and try again.');
     }
-
-    await logAudit({
-      profileId: profile.profile_id,
-      action: 'INSERT',
-      tableName: 'case_reports',
-      recordId: caseRow.case_id,
-      newValues: caseRow,
-    });
-
-    // Seed the status timeline so Case Tracking has something to show immediately.
-    await supabase.from('case_status_history').insert({
-      case_id: caseRow.case_id,
-      changed_by: profile.profile_id,
-      previous_status: null,
-      new_status: 'Pending',
-      remarks: 'Report submitted.',
-    });
-
-    setSubmitting(false);
-    setSubmittedCaseNumber(caseRow.case_number);
   };
 
   if (submittedCaseNumber) {

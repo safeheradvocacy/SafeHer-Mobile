@@ -54,32 +54,51 @@ export function useSosTrigger(profileId: string | undefined) {
         }
       }
 
-      const { data: sosRow, error } = await supabase
-        .from('sos_alerts')
-        .insert({
-          profile_id: profileId,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          location_address: address,
-          location_accuracy: location.accuracy,
-          location_timestamp: location.timestamp != null ? new Date(location.timestamp).toISOString() : null,
-          location_source: location.source,
-          status: 'Triggered',
-        })
-        .select()
-        .single();
+      // Wrapped in try/catch — unlike a resolved {error} (handled below),
+      // a genuine network failure (no connectivity, DNS failure, request
+      // timeout) can make this call THROW instead of resolving. Without
+      // this, that path left `phase` stuck at 'saving' forever — a silent
+      // hang with no error shown, in the one flow where that's least
+      // acceptable. Mirrors the try/catch pattern AuthContext.tsx already
+      // uses consistently for every one of its own Supabase calls.
+      try {
+        const { data: sosRow, error } = await supabase
+          .from('sos_alerts')
+          .insert({
+            profile_id: profileId,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            location_address: address,
+            location_accuracy: location.accuracy,
+            location_timestamp: location.timestamp != null ? new Date(location.timestamp).toISOString() : null,
+            location_source: location.source,
+            status: 'Triggered',
+          })
+          .select()
+          .single();
 
-      busyRef.current = false;
-      if (error || !sosRow) {
-        setErrorMessage(error?.message ?? 'Please try again or call emergency services directly.');
+        busyRef.current = false;
+        if (error || !sosRow) {
+          // Never the raw Postgres/PostgREST error text in this
+          // safety-critical flow — log it for debugging, show a
+          // generic, actionable message. error.message can name real
+          // tables/columns/constraints.
+          if (error) console.error('[useSosTrigger] save:', error.message);
+          setErrorMessage('Please try again or call emergency services directly.');
+          setPhase('error');
+          return;
+        }
+
+        await logAudit({ profileId, action: 'INSERT', tableName: 'sos_alerts', recordId: sosRow.sos_id, newValues: sosRow });
+
+        setSos(sosRow as SosAlert);
+        setPhase('done');
+      } catch (e) {
+        busyRef.current = false;
+        console.error('[useSosTrigger] save: request never reached Supabase', e);
+        setErrorMessage('Unable to connect to SafeSpace. Your alert has NOT been sent — please check your connection and try again, or call emergency services directly.');
         setPhase('error');
-        return;
       }
-
-      await logAudit({ profileId, action: 'INSERT', tableName: 'sos_alerts', recordId: sosRow.sos_id, newValues: sosRow });
-
-      setSos(sosRow as SosAlert);
-      setPhase('done');
     },
     [profileId]
   );

@@ -42,15 +42,25 @@ export function VerifyIdentityScreen() {
   useEffect(() => {
     if (!profile) return;
     (async () => {
-      const { data } = await supabase
-        .from('user_verifications')
-        .select('*')
-        .eq('profile_id', profile.profile_id)
-        .order('submitted_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setLatest(data ?? null);
-      setLoadingLatest(false);
+      try {
+        const { data } = await supabase
+          .from('user_verifications')
+          .select('*')
+          .eq('profile_id', profile.profile_id)
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setLatest(data ?? null);
+      } catch (e) {
+        // Without this, a thrown exception left loadingLatest stuck true
+        // forever — the rest of this screen (submit a new verification)
+        // still works fine with no prior record known, so this fails
+        // open to "no prior submission" rather than blocking the screen.
+        console.error('[VerifyIdentityScreen] load latest verification:', e);
+        setLatest(null);
+      } finally {
+        setLoadingLatest(false);
+      }
     })();
   }, [profile]);
 

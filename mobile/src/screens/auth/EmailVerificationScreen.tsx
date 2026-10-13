@@ -63,9 +63,17 @@ export function EmailVerificationScreen() {
     // terms_version) in the database), so a retried verification can
     // never create a duplicate row — 23505 just means it's already
     // recorded.
-    const { error: termsError } = await supabase.from('terms_acceptances').insert({ terms_version: CURRENT_TERMS_VERSION });
-    if (termsError && (termsError as { code?: string }).code !== '23505') {
-      console.error('[EmailVerificationScreen] recording terms acceptance failed:', termsError.message);
+    // Wrapped — this is explicitly best-effort/non-blocking (see comment
+    // above), so a THROWN exception here (not just a returned {error})
+    // must not propagate out of onVerify and risk disrupting a
+    // genuinely-already-successful verification.
+    try {
+      const { error: termsError } = await supabase.from('terms_acceptances').insert({ terms_version: CURRENT_TERMS_VERSION });
+      if (termsError && (termsError as { code?: string }).code !== '23505') {
+        console.error('[EmailVerificationScreen] recording terms acceptance failed:', termsError.message);
+      }
+    } catch (e) {
+      console.error('[EmailVerificationScreen] recording terms acceptance failed:', e);
     }
 
     // Survivor Information collected during registration (RegisterScreen)
@@ -84,40 +92,46 @@ export function EmailVerificationScreen() {
     // RLS only lets this touch the caller's own just-created row).
     const survivorInfo = route.params?.survivorInfo;
     if (survivorInfo) {
-      const { data: survivorRow, error: survivorFetchError } = await supabase
-        .from('survivors')
-        .select('survivor_id, profile_id')
-        .maybeSingle();
-      if (survivorFetchError || !survivorRow) {
-        console.error('[EmailVerificationScreen] could not locate new survivor row:', survivorFetchError?.message);
-      } else {
-        const { error: survivorUpdateError } = await supabase
+      // Same reasoning as the terms-acceptance block above — best-effort,
+      // wrapped so a thrown exception can't propagate out of onVerify.
+      try {
+        const { data: survivorRow, error: survivorFetchError } = await supabase
           .from('survivors')
-          .update({
-            date_of_birth: survivorInfo.dateOfBirth,
-            gender: survivorInfo.gender,
-            educational_attainment: survivorInfo.educationalAttainment,
-          })
-          .eq('survivor_id', survivorRow.survivor_id);
-        if (survivorUpdateError) {
-          console.error('[EmailVerificationScreen] saving survivor info failed:', survivorUpdateError.message);
+          .select('survivor_id, profile_id')
+          .maybeSingle();
+        if (survivorFetchError || !survivorRow) {
+          console.error('[EmailVerificationScreen] could not locate new survivor row:', survivorFetchError?.message);
         } else {
-          // Same redaction convention as ProfileScreen.saveSurvivorInfo —
-          // date of birth is never written to audit_logs as a literal
-          // value, only whether it's now set.
-          await logAudit({
-            profileId: survivorRow.profile_id,
-            action: 'UPDATE',
-            tableName: 'survivors',
-            recordId: survivorRow.survivor_id,
-            oldValues: { date_of_birth_set: false, gender: null, educational_attainment: null },
-            newValues: {
-              date_of_birth_set: true,
+          const { error: survivorUpdateError } = await supabase
+            .from('survivors')
+            .update({
+              date_of_birth: survivorInfo.dateOfBirth,
               gender: survivorInfo.gender,
               educational_attainment: survivorInfo.educationalAttainment,
-            },
-          });
+            })
+            .eq('survivor_id', survivorRow.survivor_id);
+          if (survivorUpdateError) {
+            console.error('[EmailVerificationScreen] saving survivor info failed:', survivorUpdateError.message);
+          } else {
+            // Same redaction convention as ProfileScreen.saveSurvivorInfo —
+            // date of birth is never written to audit_logs as a literal
+            // value, only whether it's now set.
+            await logAudit({
+              profileId: survivorRow.profile_id,
+              action: 'UPDATE',
+              tableName: 'survivors',
+              recordId: survivorRow.survivor_id,
+              oldValues: { date_of_birth_set: false, gender: null, educational_attainment: null },
+              newValues: {
+                date_of_birth_set: true,
+                gender: survivorInfo.gender,
+                educational_attainment: survivorInfo.educationalAttainment,
+              },
+            });
+          }
         }
+      } catch (e) {
+        console.error('[EmailVerificationScreen] saving survivor info failed:', e);
       }
     }
 

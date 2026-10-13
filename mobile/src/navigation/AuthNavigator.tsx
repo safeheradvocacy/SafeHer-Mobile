@@ -5,7 +5,7 @@ import { OnboardingScreen, WelcomeScreen, SplashScreen } from '../screens/auth/S
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { EmailVerificationScreen } from '../screens/auth/EmailVerificationScreen';
-import { ForgotPasswordScreen, ResetPasswordScreen } from '../screens/auth/PasswordRecovery';
+import { ForgotPasswordScreen, RecoveryCodeScreen, ResetPasswordScreen } from '../screens/auth/PasswordRecovery';
 import { AuthCaseAccessScreen } from '../screens/caseAccess/AuthCaseAccessScreen';
 import { TermsAndConditionsScreen } from '../screens/legal/TermsAndConditionsScreen';
 import { hasCompletedOnboarding } from '../lib/onboarding';
@@ -46,6 +46,7 @@ export function AuthNavigator() {
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen name="RecoveryCode" component={RecoveryCodeScreen} />
       <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
       <Stack.Screen name="CaseAccess" component={AuthCaseAccessScreen} />
       <Stack.Screen name="Terms" component={TermsAndConditionsScreen} />

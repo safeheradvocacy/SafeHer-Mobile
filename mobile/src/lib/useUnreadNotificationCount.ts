@@ -21,16 +21,23 @@ export function useUnreadNotificationCount() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    let unreadQuery = supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('profile_id', profile.profile_id)
-      .eq('is_read', false);
-    if (!prefs.emergencyAlertsEnabled) {
-      unreadQuery = unreadQuery.neq('notification_type', 'SOS');
+    // Just a header badge — a failure here isn't worth a user-facing
+    // error state, but it must not throw unhandled; the count simply
+    // stays at its last known value.
+    try {
+      let unreadQuery = supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_id', profile.profile_id)
+        .eq('is_read', false);
+      if (!prefs.emergencyAlertsEnabled) {
+        unreadQuery = unreadQuery.neq('notification_type', 'SOS');
+      }
+      const { count } = await unreadQuery;
+      setUnreadCount(count ?? 0);
+    } catch (e) {
+      console.error('[useUnreadNotificationCount] load:', e);
     }
-    const { count } = await unreadQuery;
-    setUnreadCount(count ?? 0);
   }, [profile, prefs.emergencyAlertsEnabled]);
 
   useFocusEffect(

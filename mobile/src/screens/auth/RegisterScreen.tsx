@@ -157,25 +157,30 @@ export function RegisterScreen() {
 
   const loadMunicipalities = useCallback(async () => {
     setMunicipalityState('loading');
-    // Reads from the EXISTING, already-populated municipalities table —
-    // never inserted or seeded by this app.
-    const { data, error: fetchErr } = await supabase
-      .from('municipalities')
-      .select('*')
-      .eq('is_active', true)
-      .order('municipality_name');
+    try {
+      // Reads from the EXISTING, already-populated municipalities table —
+      // never inserted or seeded by this app.
+      const { data, error: fetchErr } = await supabase
+        .from('municipalities')
+        .select('*')
+        .eq('is_active', true)
+        .order('municipality_name');
 
-    if (fetchErr) {
+      if (fetchErr) {
+        setMunicipalityState('error');
+        return;
+      }
+      if (!data || data.length === 0) {
+        setMunicipalities([]);
+        setMunicipalityState('empty');
+        return;
+      }
+      setMunicipalities(data);
+      setMunicipalityState('success');
+    } catch (e) {
+      console.error('[RegisterScreen] loadMunicipalities:', e);
       setMunicipalityState('error');
-      return;
     }
-    if (!data || data.length === 0) {
-      setMunicipalities([]);
-      setMunicipalityState('empty');
-      return;
-    }
-    setMunicipalities(data);
-    setMunicipalityState('success');
   }, []);
 
   useEffect(() => {

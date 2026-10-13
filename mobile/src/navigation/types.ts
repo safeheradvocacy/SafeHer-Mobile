@@ -12,6 +12,9 @@ export type AuthStackParamList = {
     survivorInfo?: { dateOfBirth: string; gender: string; educationalAttainment: string };
   };
   ForgotPassword: undefined;
+  // Reached after requestPasswordReset() succeeds — the email is carried
+  // forward so the user never re-types it.
+  RecoveryCode: { email: string };
   ResetPassword: { email?: string } | undefined;
   // Pre-auth informational variant (module14) — shown when a
   // case-access QR/deep link is opened before the user is signed in.

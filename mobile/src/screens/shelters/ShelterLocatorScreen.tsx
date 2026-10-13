@@ -7,7 +7,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
-import { Card, EmptyState, PrimaryButton } from '../../components/ui';
+import { AlertMessage, Card, EmptyState, PrimaryButton } from '../../components/ui';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { FirstVisitTip } from '../../components/FirstVisitTip';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -25,10 +25,14 @@ export function ShelterLocatorScreen() {
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('shelters').select('*').eq('is_active', true);
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const { data, error } = await supabase.from('shelters').select('*').eq('is_active', true);
+      if (error) throw error;
       setShelters(data ?? []);
 
       // Foreground location is purely an optional convenience for
@@ -44,9 +48,17 @@ export function ShelterLocatorScreen() {
       } catch {
         // Location unavailable — shelters still show, just unsorted by distance.
       }
+    } catch (e) {
+      console.error('[ShelterLocatorScreen] load:', e);
+      setLoadError(true);
+    } finally {
       setLoading(false);
-    })();
+    }
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const sorted = userLocation
     ? [...shelters].sort(
@@ -94,7 +106,13 @@ export function ShelterLocatorScreen() {
         contentContainerStyle={{ padding: spacing.lg }}
         data={sorted}
         keyExtractor={(s) => s.shelter_id}
-        ListEmptyComponent={!loading ? <EmptyState title="No shelters found" /> : null}
+        ListEmptyComponent={
+          loading ? null : loadError ? (
+            <AlertMessage variant="error" title="We couldn't load shelters" message="Please check your connection and try again." onRetry={load} />
+          ) : (
+            <EmptyState title="No shelters found" />
+          )
+        }
         renderItem={({ item }) => (
           <Card style={{ marginBottom: spacing.md }}>
             <Text style={[styles.name, { color: palette.text }]}>{item.shelter_name}</Text>

@@ -113,17 +113,27 @@ export interface ForgotPasswordStrings {
   subtitle: string;
   emailLabel: string;
   emailInvalid: string;
-  sendResetLink: string;
+  sendCode: string;
   sending: string;
   somethingWrongTitle: string;
   backToLogin: string;
   privacyHeading: string;
   privacyBody: string;
-  successTitle: string;
-  successBody: string;
+}
+
+export interface RecoveryCodeStrings {
+  title: string;
+  explanation: string;
+  errorTitle: string;
+  verify: string;
+  verifying: string;
   didntReceive: string;
-  resendEmail: string;
+  resendCode: string;
+  resending: string;
+  resendSentBody: string;
   resendInSeconds: (seconds: number) => string;
+  tooManyAttempts: string;
+  backToLogin: string;
 }
 
 export interface ResetPasswordStrings {
@@ -346,37 +356,58 @@ const REGISTER: Record<AppLanguage, RegisterStrings> = {
 const FORGOT_PASSWORD: Record<AppLanguage, ForgotPasswordStrings> = {
   en: {
     title: 'Forgot your password?',
-    subtitle: "Enter your email and we'll send a secure reset link.",
+    subtitle: "Enter your email and we'll send a verification code to reset your password.",
     emailLabel: 'Email',
     emailInvalid: 'Enter a valid email address.',
-    sendResetLink: 'Send reset link',
+    sendCode: 'Send verification code',
     sending: 'Sending...',
     somethingWrongTitle: 'Something went wrong',
     backToLogin: 'Back to log in',
     privacyHeading: 'Your privacy matters',
     privacyBody: 'Your information is handled securely.',
-    successTitle: 'Check your email',
-    successBody: "If an account exists for this email, we'll send reset instructions.",
-    didntReceive: "Didn't receive it?",
-    resendEmail: 'Resend email',
-    resendInSeconds: (s: number) => `Resend in ${s}s`,
   },
   fil: {
     title: 'Nakalimutan ang password?',
-    subtitle: 'Ilagay ang iyong email at magpapadala kami ng secure na reset link.',
+    subtitle: 'Ilagay ang iyong email at magpapadala kami ng verification code para i-reset ang iyong password.',
     emailLabel: 'Email',
     emailInvalid: 'Maglagay ng tamang email address.',
-    sendResetLink: 'Ipadala ang reset link',
+    sendCode: 'Ipadala ang verification code',
     sending: 'Nagpapadala...',
     somethingWrongTitle: 'May nangyaring mali',
     backToLogin: 'Bumalik sa pag-log in',
     privacyHeading: 'Mahalaga ang iyong privacy',
     privacyBody: 'Ligtas na hinahawakan ang iyong impormasyon.',
-    successTitle: 'Tingnan ang iyong email',
-    successBody: 'Kung may umiiral na account para sa email na ito, magpapadala kami ng mga instruksyon sa pag-reset.',
+  },
+};
+
+const RECOVERY_CODE: Record<AppLanguage, RecoveryCodeStrings> = {
+  en: {
+    title: 'Enter recovery code',
+    explanation: "We've sent a password recovery code to",
+    errorTitle: "Couldn't verify code",
+    verify: 'Verify code',
+    verifying: 'Verifying...',
+    didntReceive: "Didn't receive it?",
+    resendCode: 'Resend code',
+    resending: 'Sending...',
+    resendSentBody: 'A new code has been sent.',
+    resendInSeconds: (s: number) => `Resend in ${s}s`,
+    tooManyAttempts: 'Too many incorrect attempts. Please request a new code.',
+    backToLogin: 'Back to Login',
+  },
+  fil: {
+    title: 'Ilagay ang recovery code',
+    explanation: 'Nagpadala kami ng password recovery code sa',
+    errorTitle: 'Hindi na-verify ang code',
+    verify: 'I-verify ang code',
+    verifying: 'Vine-verify...',
     didntReceive: 'Hindi natanggap?',
-    resendEmail: 'Ipadala ulit ang email',
+    resendCode: 'Ipadala ulit ang code',
+    resending: 'Nagpapadala...',
+    resendSentBody: 'Naipadala na ang bagong code.',
     resendInSeconds: (s: number) => `Ipadala ulit sa ${s}s`,
+    tooManyAttempts: 'Sobra na ang maling pagsubok. Pakihiling ng bagong code.',
+    backToLogin: 'Bumalik sa Pag-log in',
   },
 };
 
@@ -446,6 +477,10 @@ export function getRegisterStrings(lang: AppLanguage): RegisterStrings {
 
 export function getForgotPasswordStrings(lang: AppLanguage): ForgotPasswordStrings {
   return FORGOT_PASSWORD[lang];
+}
+
+export function getRecoveryCodeStrings(lang: AppLanguage): RecoveryCodeStrings {
+  return RECOVERY_CODE[lang];
 }
 
 export function getResetPasswordStrings(lang: AppLanguage): ResetPasswordStrings {

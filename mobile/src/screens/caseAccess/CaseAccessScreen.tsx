@@ -39,14 +39,23 @@ export function CaseAccessScreen() {
 
   const redeem = useCallback(async () => {
     setChecking(true);
-    const { data, error } = await supabase.rpc('redeem_case_access_token', { p_token: token });
-    if (error || !data) {
-      console.error('[CaseAccessScreen] redeem_case_access_token:', error?.message);
+    try {
+      const { data, error } = await supabase.rpc('redeem_case_access_token', { p_token: token });
+      if (error || !data) {
+        console.error('[CaseAccessScreen] redeem_case_access_token:', error?.message);
+        setResult({ state: 'invalid' });
+      } else {
+        setResult(data as RedeemResult);
+      }
+    } catch (e) {
+      // Fails safe, same as a returned {error} above — a network failure
+      // is never distinguishable from "invalid" here, by the same
+      // deliberate anti-enumeration design this screen already uses.
+      console.error('[CaseAccessScreen] redeem_case_access_token:', e);
       setResult({ state: 'invalid' });
-    } else {
-      setResult(data as RedeemResult);
+    } finally {
+      setChecking(false);
     }
-    setChecking(false);
   }, [token]);
 
   useEffect(() => {

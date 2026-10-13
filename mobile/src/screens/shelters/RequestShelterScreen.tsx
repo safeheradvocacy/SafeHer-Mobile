@@ -37,23 +37,28 @@ export function RequestShelterScreen() {
 
     // General area only, from the survivor's own profile — never GPS.
     // Loading it here is purely a convenience default; a request can be
-    // submitted with no municipality at all.
-    supabase
-      .from('survivors')
-      .select('municipality_id')
-      .eq('profile_id', profile.profile_id)
-      .single()
-      .then(({ data }) => {
+    // submitted with no municipality at all. Wrapped in try/catch (not a
+    // blocking load, just fire-and-forget from this effect) so a thrown
+    // exception can't become an unhandled promise rejection; failing
+    // just means the default stays unset, same as before this fix.
+    (async () => {
+      try {
+        const { data } = await supabase.from('survivors').select('municipality_id').eq('profile_id', profile.profile_id).single();
         if (data?.municipality_id) setMunicipalityId(data.municipality_id as string);
-      });
+      } catch (e) {
+        console.error('[RequestShelterScreen] municipality default load:', e);
+      }
+    })();
 
     if (!route.params?.shelterId) {
-      supabase
-        .from('shelters')
-        .select('*')
-        .eq('is_active', true)
-        .order('shelter_name')
-        .then(({ data }) => setShelters(data ?? []));
+      (async () => {
+        try {
+          const { data } = await supabase.from('shelters').select('*').eq('is_active', true).order('shelter_name');
+          setShelters(data ?? []);
+        } catch (e) {
+          console.error('[RequestShelterScreen] shelters load:', e);
+        }
+      })();
     }
   }, [profile, route.params?.shelterId]);
 
@@ -73,31 +78,40 @@ export function RequestShelterScreen() {
     setSubmitting(true);
     setError(null);
 
-    const { data, error: insertErr } = await supabase
-      .from('shelter_requests')
-      .insert({
-        shelter_id: shelterId,
-        profile_id: profile.profile_id,
-        municipality_id: municipalityId,
-        contact_name: contactName.trim(),
-        contact_preference: contactPreference.trim() || null,
-        people_count: people,
-        children_count: children,
-        urgency,
-        message: message.trim() || null,
-        status: 'Submitted',
-      })
-      .select()
-      .single();
+    try {
+      const { data, error: insertErr } = await supabase
+        .from('shelter_requests')
+        .insert({
+          shelter_id: shelterId,
+          profile_id: profile.profile_id,
+          municipality_id: municipalityId,
+          contact_name: contactName.trim(),
+          contact_preference: contactPreference.trim() || null,
+          people_count: people,
+          children_count: children,
+          urgency,
+          message: message.trim() || null,
+          status: 'Submitted',
+        })
+        .select()
+        .single();
 
-    setSubmitting(false);
-    if (insertErr || !data) {
-      setError(insertErr?.message ?? 'Could not submit your request. Please try again.');
-      return;
+      if (insertErr || !data) {
+        // Never the raw Postgres/PostgREST error text — log it for
+        // debugging, show a generic, actionable message instead.
+        if (insertErr) console.error('[RequestShelterScreen] onSubmit:', insertErr.message);
+        setError('Could not submit your request. Please try again.');
+        return;
+      }
+      // No manual logAudit() call — trg_audit_shelter_requests (see
+      // supabase/module4_shelter_admin.sql) fires automatically.
+      setSubmittedRef(data.request_id.slice(0, 8).toUpperCase());
+    } catch (e) {
+      console.error('[RequestShelterScreen] onSubmit: request never reached Supabase', e);
+      setError('Unable to connect to SafeSpace. Your request has NOT been submitted — please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
     }
-    // No manual logAudit() call — trg_audit_shelter_requests (see
-    // supabase/module4_shelter_admin.sql) fires automatically.
-    setSubmittedRef(data.request_id.slice(0, 8).toUpperCase());
   };
 
   if (submittedRef) {

@@ -136,36 +136,41 @@ export function ChangePasswordScreen() {
 
     setLoading(true);
 
-    // Still require + verify the current password before the actual
-    // change, on top of the OTP step already completed — defense in
-    // depth, not a replacement for it.
-    const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
-    if (reauthError) {
+    try {
+      // Still require + verify the current password before the actual
+      // change, on top of the OTP step already completed — defense in
+      // depth, not a replacement for it.
+      const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+      if (reauthError) {
+        setError('Current password is incorrect.');
+        return;
+      }
+
+      const { error: updateError } = await updatePasswordAfterOtp(newPassword);
+      if (updateError) {
+        setError(updateError);
+        return;
+      }
+
+      if (profile) {
+        await logAudit({
+          profileId: profile.profile_id,
+          action: 'PASSWORD_CHANGED',
+          tableName: 'auth.users',
+          recordId: profile.profile_id,
+        });
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setSuccess(true);
+    } catch (e) {
+      console.error('[ChangePasswordScreen] onSubmit:', e);
+      setError('Unable to connect to SafeSpace. Please check your connection and try again.');
+    } finally {
       setLoading(false);
-      setError('Current password is incorrect.');
-      return;
     }
-
-    const { error: updateError } = await updatePasswordAfterOtp(newPassword);
-    setLoading(false);
-    if (updateError) {
-      setError(updateError);
-      return;
-    }
-
-    if (profile) {
-      await logAudit({
-        profileId: profile.profile_id,
-        action: 'PASSWORD_CHANGED',
-        tableName: 'auth.users',
-        recordId: profile.profile_id,
-      });
-    }
-
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setSuccess(true);
   };
 
   if (step === 'confirm') {

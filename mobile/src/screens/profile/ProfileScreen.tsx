@@ -193,35 +193,41 @@ export function ProfileScreen() {
     const doSave = async () => {
       setSavingAddress(true);
       const oldValues = { municipality_id: survivor.municipality_id, barangay_id: survivor.barangay_id, address: survivor.address };
-      const { error } = await supabase
-        .from('survivors')
-        .update({
-          municipality_id: addrMunicipalityId,
-          barangay_id: addrBarangayId,
-          address: streetAddress.trim(),
-          purok_sitio: purokSitio.trim() || null,
-          latitude: mapResult?.latitude ?? null,
-          longitude: mapResult?.longitude ?? null,
-          formatted_address: mapResult?.formattedAddress ?? null,
-          location_source: mapResult?.source ?? null,
-          address_updated_at: new Date().toISOString(),
-        })
-        .eq('survivor_id', survivor.survivor_id);
-      setSavingAddress(false);
-      if (error) {
-        Alert.alert('Unable to save', 'Please try again.');
-        return;
+      try {
+        const { error } = await supabase
+          .from('survivors')
+          .update({
+            municipality_id: addrMunicipalityId,
+            barangay_id: addrBarangayId,
+            address: streetAddress.trim(),
+            purok_sitio: purokSitio.trim() || null,
+            latitude: mapResult?.latitude ?? null,
+            longitude: mapResult?.longitude ?? null,
+            formatted_address: mapResult?.formattedAddress ?? null,
+            location_source: mapResult?.source ?? null,
+            address_updated_at: new Date().toISOString(),
+          })
+          .eq('survivor_id', survivor.survivor_id);
+        if (error) {
+          Alert.alert('Unable to save', 'Please try again.');
+          return;
+        }
+        await logAudit({
+          profileId: profile.profile_id,
+          action: 'UPDATE',
+          tableName: 'survivors',
+          recordId: survivor.survivor_id,
+          oldValues,
+          newValues: { municipality_id: addrMunicipalityId, barangay_id: addrBarangayId, address: streetAddress.trim() },
+        });
+        await refreshProfile();
+        Alert.alert('Saved', 'Your registered address has been updated.');
+      } catch (e) {
+        console.error('[ProfileScreen] saveAddress:', e);
+        Alert.alert('Unable to connect', 'Please check your internet connection and try again.');
+      } finally {
+        setSavingAddress(false);
       }
-      await logAudit({
-        profileId: profile.profile_id,
-        action: 'UPDATE',
-        tableName: 'survivors',
-        recordId: survivor.survivor_id,
-        oldValues,
-        newValues: { municipality_id: addrMunicipalityId, barangay_id: addrBarangayId, address: streetAddress.trim() },
-      });
-      await refreshProfile();
-      Alert.alert('Saved', 'Your registered address has been updated.');
     };
 
     // Changing the registered municipality changes which office's staff
@@ -326,23 +332,40 @@ export function ProfileScreen() {
     if (!profile) return;
     setSavingInfo(true);
     const oldValues = { first_name: profile.first_name, last_name: profile.last_name, phone_number: profile.phone_number };
-    await supabase
-      .from('user_profiles')
-      .update({ first_name: firstName, last_name: lastName, phone_number: phoneNumber })
-      .eq('profile_id', profile.profile_id);
+    // Previously never checked `error` (or even caught a thrown
+    // exception) — this update could silently fail (RLS rejection,
+    // constraint violation, lost connection) and the screen would still
+    // show "Saved" unconditionally. Now matches the pattern used
+    // elsewhere in this app (e.g. HomeScreen.load, pickAvatar above).
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ first_name: firstName, last_name: lastName, phone_number: phoneNumber })
+        .eq('profile_id', profile.profile_id);
 
-    await logAudit({
-      profileId: profile.profile_id,
-      action: 'UPDATE',
-      tableName: 'user_profiles',
-      recordId: profile.profile_id,
-      oldValues,
-      newValues: { first_name: firstName, last_name: lastName, phone_number: phoneNumber },
-    });
+      if (error) {
+        console.error('[ProfileScreen] saveProfile:', error.message);
+        Alert.alert('Unable to save', 'Your profile could not be updated. Please try again.');
+        return;
+      }
 
-    await refreshProfile();
-    setSavingInfo(false);
-    Alert.alert('Saved', 'Your profile has been updated.');
+      await logAudit({
+        profileId: profile.profile_id,
+        action: 'UPDATE',
+        tableName: 'user_profiles',
+        recordId: profile.profile_id,
+        oldValues,
+        newValues: { first_name: firstName, last_name: lastName, phone_number: phoneNumber },
+      });
+
+      await refreshProfile();
+      Alert.alert('Saved', 'Your profile has been updated.');
+    } catch (e) {
+      console.error('[ProfileScreen] saveProfile: request never reached Supabase', e);
+      Alert.alert('Unable to connect', 'Please check your internet connection and try again.');
+    } finally {
+      setSavingInfo(false);
+    }
   };
 
   const saveEmergencyContact = async () => {
@@ -359,13 +382,29 @@ export function ProfileScreen() {
     }
     setEmergencyError(null);
     setSavingEmergency(true);
-    await supabase
-      .from('survivors')
-      .update({ emergency_contact_name: trimmedName || null, emergency_contact_number: trimmedNumber || null })
-      .eq('survivor_id', survivor.survivor_id);
-    await refreshProfile();
-    setSavingEmergency(false);
-    Alert.alert('Saved', 'Your emergency contact has been updated.');
+    // Same fix as saveProfile above — this previously never checked
+    // `error` or caught an exception, so a silently-failed update still
+    // showed "Saved".
+    try {
+      const { error } = await supabase
+        .from('survivors')
+        .update({ emergency_contact_name: trimmedName || null, emergency_contact_number: trimmedNumber || null })
+        .eq('survivor_id', survivor.survivor_id);
+
+      if (error) {
+        console.error('[ProfileScreen] saveEmergencyContact:', error.message);
+        Alert.alert('Unable to save', 'Your emergency contact could not be updated. Please try again.');
+        return;
+      }
+
+      await refreshProfile();
+      Alert.alert('Saved', 'Your emergency contact has been updated.');
+    } catch (e) {
+      console.error('[ProfileScreen] saveEmergencyContact: request never reached Supabase', e);
+      Alert.alert('Unable to connect', 'Please check your internet connection and try again.');
+    } finally {
+      setSavingEmergency(false);
+    }
   };
 
   const saveSurvivorInfo = async () => {
@@ -379,31 +418,37 @@ export function ProfileScreen() {
     setSavingSurvivorInfo(true);
 
     const newDob = dobCheck.iso || null;
-    const { error } = await supabase
-      .from('survivors')
-      .update({ date_of_birth: newDob, gender: sex || null, educational_attainment: educAttainment || null })
-      .eq('survivor_id', survivor.survivor_id);
-    setSavingSurvivorInfo(false);
-    if (error) {
-      Alert.alert('Unable to save', 'Please try again.');
-      return;
+    try {
+      const { error } = await supabase
+        .from('survivors')
+        .update({ date_of_birth: newDob, gender: sex || null, educational_attainment: educAttainment || null })
+        .eq('survivor_id', survivor.survivor_id);
+      if (error) {
+        Alert.alert('Unable to save', 'Please try again.');
+        return;
+      }
+
+      // Date of birth is never written to audit_logs as a literal value —
+      // only whether it is now set. Sex/Educational Attainment are logged
+      // normally, same as every other profile field in this screen.
+      await logAudit({
+        profileId: profile.profile_id,
+        action: 'UPDATE',
+        tableName: 'survivors',
+        recordId: survivor.survivor_id,
+        oldValues: { date_of_birth_set: !!survivor.date_of_birth, gender: survivor.gender, educational_attainment: survivor.educational_attainment },
+        newValues: { date_of_birth_set: !!newDob, gender: sex || null, educational_attainment: educAttainment || null },
+      });
+
+      await refreshProfile();
+      setSurvivorEditMode(false);
+      Alert.alert('Saved', 'Your survivor information has been updated.');
+    } catch (e) {
+      console.error('[ProfileScreen] saveSurvivorInfo:', e);
+      Alert.alert('Unable to connect', 'Please check your internet connection and try again.');
+    } finally {
+      setSavingSurvivorInfo(false);
     }
-
-    // Date of birth is never written to audit_logs as a literal value —
-    // only whether it is now set. Sex/Educational Attainment are logged
-    // normally, same as every other profile field in this screen.
-    await logAudit({
-      profileId: profile.profile_id,
-      action: 'UPDATE',
-      tableName: 'survivors',
-      recordId: survivor.survivor_id,
-      oldValues: { date_of_birth_set: !!survivor.date_of_birth, gender: survivor.gender, educational_attainment: survivor.educational_attainment },
-      newValues: { date_of_birth_set: !!newDob, gender: sex || null, educational_attainment: educAttainment || null },
-    });
-
-    await refreshProfile();
-    setSurvivorEditMode(false);
-    Alert.alert('Saved', 'Your survivor information has been updated.');
   };
 
   const confirmLogout = () => {

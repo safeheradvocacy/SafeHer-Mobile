@@ -29,15 +29,27 @@ export function LinkedCaseDetailScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: projection, error } = await supabase.rpc('get_client_case', { p_case_id: caseId });
-    if (error || !projection) {
+    try {
+      const { data: projection, error } = await supabase.rpc('get_client_case', { p_case_id: caseId });
+      if (error || !projection) {
+        setNotAuthorized(true);
+        setData(null);
+      } else {
+        setNotAuthorized(false);
+        setData(projection as ClientCaseProjection);
+      }
+    } catch (e) {
+      // Same fail-safe behavior as a returned {error} above — this
+      // screen's own existing design never distinguishes "revoked" from
+      // a connection problem (module14's session-security requirement
+      // prioritizes never showing stale/cached case data over a more
+      // specific error message).
+      console.error('[LinkedCaseDetailScreen] load:', e);
       setNotAuthorized(true);
       setData(null);
-    } else {
-      setNotAuthorized(false);
-      setData(projection as ClientCaseProjection);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [caseId]);
 
   useFocusEffect(

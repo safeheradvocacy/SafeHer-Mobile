@@ -7,7 +7,7 @@ import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Card, EmptyState, StatusBadge } from '../../components/ui';
+import { AlertMessage, Card, EmptyState, StatusBadge } from '../../components/ui';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { FirstVisitTip } from '../../components/FirstVisitTip';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -38,30 +38,38 @@ export function CaseListScreen() {
   // another client's requests.
   const [links, setLinks] = useState<CaseClientLink[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const { data: survivorRow } = await supabase
-      .from('survivors')
-      .select('survivor_id')
-      .eq('profile_id', profile.profile_id)
-      .single();
+    setLoadError(false);
+    try {
+      const { data: survivorRow } = await supabase
+        .from('survivors')
+        .select('survivor_id')
+        .eq('profile_id', profile.profile_id)
+        .single();
 
-    const [caseRes, linkRes] = await Promise.all([
-      survivorRow
-        ? supabase.from('case_reports').select('*').eq('survivor_id', survivorRow.survivor_id).order('reported_at', { ascending: false })
-        : Promise.resolve({ data: [] as CaseReport[] }),
-      supabase.from('case_client_links').select('*').eq('profile_id', profile.profile_id).order('requested_at', { ascending: false }),
-    ]);
+      const [caseRes, linkRes] = await Promise.all([
+        survivorRow
+          ? supabase.from('case_reports').select('*').eq('survivor_id', survivorRow.survivor_id).order('reported_at', { ascending: false })
+          : Promise.resolve({ data: [] as CaseReport[] }),
+        supabase.from('case_client_links').select('*').eq('profile_id', profile.profile_id).order('requested_at', { ascending: false }),
+      ]);
 
-    const caseRows = caseRes.data ?? [];
-    const ownedCaseIds = new Set(caseRows.map((c) => c.case_id));
-    setCases(caseRows);
-    // Defensive de-dup only — in practice a case a survivor already owns
-    // outright never also needs a case_client_links row.
-    setLinks((linkRes.data ?? []).filter((l) => !ownedCaseIds.has(l.case_id)));
-    setLoading(false);
+      const caseRows = caseRes.data ?? [];
+      const ownedCaseIds = new Set(caseRows.map((c) => c.case_id));
+      setCases(caseRows);
+      // Defensive de-dup only — in practice a case a survivor already owns
+      // outright never also needs a case_client_links row.
+      setLinks((linkRes.data ?? []).filter((l) => !ownedCaseIds.has(l.case_id)));
+    } catch (e) {
+      console.error('[CaseListScreen] load:', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [profile]);
 
   useFocusEffect(
@@ -94,6 +102,17 @@ export function CaseListScreen() {
         <ScreenHeader title="My Cases" trailing={qrButton} />
         <View style={styles.center}>
           <ActivityIndicator color={palette.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.screen, { backgroundColor: palette.background }]}>
+        <ScreenHeader title="My Cases" trailing={qrButton} />
+        <View style={[styles.center, { padding: spacing.lg }]}>
+          <AlertMessage variant="error" title="We couldn't load your cases" message="Please check your connection and try again." onRetry={load} />
         </View>
       </View>
     );

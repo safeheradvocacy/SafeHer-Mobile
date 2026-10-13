@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
-import { Card, EmptyState, StatusBadge } from '../../components/ui';
+import { AlertMessage, Card, EmptyState, StatusBadge } from '../../components/ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
 import { serviceTypeLabel } from '../../lib/serviceTypes';
@@ -19,36 +19,48 @@ export function CaseDetailScreen() {
   const [referrals, setReferrals] = useState<(ShelterReferral & { shelters?: { shelter_name: string } })[]>([]);
   const [services, setServices] = useState<CaseService[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
-    const [caseRes, historyRes, referralRes, servicesRes] = await Promise.all([
-      supabase.from('case_reports').select('*').eq('case_id', caseId).single(),
-      supabase
-        .from('case_status_history')
-        .select('*')
-        .eq('case_id', caseId)
-        .order('changed_at', { ascending: true }),
-      supabase
-        .from('shelter_referrals')
-        .select('*, shelters(shelter_name)')
-        .eq('case_id', caseId)
-        .order('referred_at', { ascending: false }),
-      // Read-only on mobile — RLS (module22) grants a survivor SELECT on
-      // their own case's services via owns_case(), but INSERT/UPDATE only
-      // to case-owning staff. A referral above and a service below are
-      // deliberately rendered as separate sections — a referral never
-      // implies a service was provided.
-      supabase
-        .from('case_services')
-        .select('*')
-        .eq('case_id', caseId)
-        .order('created_at', { ascending: false }),
-    ]);
-    setCaseReport(caseRes.data ?? null);
-    setHistory(historyRes.data ?? []);
-    setReferrals((referralRes.data as any) ?? []);
-    setServices(servicesRes.data ?? []);
-    setLoading(false);
+    setLoadError(false);
+    try {
+      const [caseRes, historyRes, referralRes, servicesRes] = await Promise.all([
+        supabase.from('case_reports').select('*').eq('case_id', caseId).single(),
+        supabase
+          .from('case_status_history')
+          .select('*')
+          .eq('case_id', caseId)
+          .order('changed_at', { ascending: true }),
+        supabase
+          .from('shelter_referrals')
+          .select('*, shelters(shelter_name)')
+          .eq('case_id', caseId)
+          .order('referred_at', { ascending: false }),
+        // Read-only on mobile — RLS (module22) grants a survivor SELECT on
+        // their own case's services via owns_case(), but INSERT/UPDATE only
+        // to case-owning staff. A referral above and a service below are
+        // deliberately rendered as separate sections — a referral never
+        // implies a service was provided.
+        supabase
+          .from('case_services')
+          .select('*')
+          .eq('case_id', caseId)
+          .order('created_at', { ascending: false }),
+      ]);
+      if (!caseRes.data) {
+        setLoadError(true);
+        return;
+      }
+      setCaseReport(caseRes.data);
+      setHistory(historyRes.data ?? []);
+      setReferrals((referralRes.data as any) ?? []);
+      setServices(servicesRes.data ?? []);
+    } catch (e) {
+      console.error('[CaseDetailScreen] load:', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [caseId]);
 
   useFocusEffect(
@@ -57,10 +69,23 @@ export function CaseDetailScreen() {
     }, [load])
   );
 
-  if (loading || !caseReport) {
+  if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: palette.background }]}>
         <ActivityIndicator color={palette.primary} />
+      </View>
+    );
+  }
+
+  if (loadError || !caseReport) {
+    return (
+      <View style={[styles.center, { backgroundColor: palette.background, padding: spacing.lg }]}>
+        <AlertMessage
+          variant="error"
+          title="We couldn't load this case"
+          message="It may be unavailable, or there was a connection problem. Please check your connection and try again."
+          onRetry={load}
+        />
       </View>
     );
   }

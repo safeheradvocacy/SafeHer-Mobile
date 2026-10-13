@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { secureSessionStorage } from './secureSessionStorage';
 import type { Database } from '../types/database.types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -16,7 +16,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    // Hardware-backed (Android Keystore / iOS Keychain) instead of plain
+    // AsyncStorage — see secureSessionStorage.ts for why, and for the
+    // migration path that keeps existing signed-in users signed in.
+    storage: secureSessionStorage,
     autoRefreshToken: true,
     persistSession: true,
     // There's no browser address bar in React Native to parse a session

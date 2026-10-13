@@ -59,6 +59,12 @@ interface AuthContextValue {
    * establishes a real session the same way signing in does — the caller
    * doesn't need a separate login step afterward. */
   verifyEmailOtp: (email: string, token: string) => Promise<{ error: string | null }>;
+  /** Verifies the password-recovery code sent by requestPasswordReset and,
+   * on success, marks pendingPasswordRecovery so RootNavigator shows the
+   * isolated recovery stack (ResetPasswordScreen) instead of treating the
+   * newly-established session as a normal sign-in — see the comment on
+   * pendingPasswordRecovery above for why that distinction matters. */
+  verifyRecoveryOtp: (email: string, token: string) => Promise<{ error: string | null }>;
   /** Sends a fresh 8-digit code to the signed-in user's own email —
    * the first step of the Change Password flow (confirm email control
    * before allowing a sensitive change). Reuses the exact same
@@ -404,6 +410,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const verifyRecoveryOtp: AuthContextValue['verifyRecoveryOtp'] = async (email, token) => {
+    try {
+      // Never log `token` — a live, single-use credential, same handling
+      // as verifyEmailOtp above.
+      //
+      // type: 'recovery' — NOT 'email' or 'signup'. This is a distinct
+      // EmailOtpType from the one verifyEmailOtp uses: it tells Supabase
+      // this code came from the "Reset Password" template (resend below
+      // and requestPasswordReset trigger that template specifically), not
+      // "Confirm signup". Using the wrong type here would either be
+      // rejected outright or, worse, silently accepted against the wrong
+      // template's token namespace — Supabase treats these as separate
+      // token spaces precisely so a signup code can never double as a
+      // recovery code or vice versa.
+      const { error } = await supabase.auth.verifyOtp({ email, token, type: 'recovery' });
+      if (!error) {
+        // Mirrors exactly what handleAuthDeepLink's 'recovery' kind does
+        // for the old link-based flow (see the useEffect above) — a
+        // recovery OTP verification establishes a real session the same
+        // way exchanging a recovery link's code does, so RootNavigator
+        // must be told to show the isolated recovery stack instead of its
+        // normal `session && profile` check, which would otherwise drop
+        // the user straight into the authenticated app with their OLD
+        // password still active before they've set a new one.
+        setPendingPasswordRecovery(true);
+        return { error: null };
+      }
+      console.error('[AuthContext] verifyRecoveryOtp:', error.status, error.message);
+      const msg = error.message.toLowerCase();
+      if (msg.includes('expired')) {
+        return { error: 'This recovery code has expired. Please request a new one.' };
+      }
+      if (msg.includes('invalid') || msg.includes('token')) {
+        return { error: 'The recovery code is incorrect. Please try again.' };
+      }
+      if (msg.includes('rate limit') || error.status === 429) {
+        return { error: 'Too many attempts. Please wait a moment before trying again.' };
+      }
+      return { error: "We couldn't verify that code. Please try again." };
+    } catch (e) {
+      console.error('[AuthContext] verifyRecoveryOtp: request never reached Supabase', e);
+      return { error: NETWORK_ERROR };
+    }
+  };
+
   const sendPasswordChangeOtp: AuthContextValue['sendPasswordChangeOtp'] = async () => {
     const email = session?.user?.email;
     if (!email) return { error: NETWORK_ERROR };
@@ -467,6 +518,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         requestPasswordReset,
         resendVerificationEmail,
         verifyEmailOtp,
+        verifyRecoveryOtp,
         sendPasswordChangeOtp,
         updatePasswordAfterOtp,
         refreshProfile,

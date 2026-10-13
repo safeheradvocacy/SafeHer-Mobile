@@ -55,32 +55,39 @@ export function useSupportChat(profileId: string | undefined) {
   const loadOrCreateSession = useCallback(async () => {
     if (!profileId) return;
     setLoading(true);
-    // A CLOSED session's is_active is flipped to false server-side (see
-    // sync_chat_session_from_request in module6_ai_support.sql), so this
-    // naturally starts a fresh session for the next conversation instead
-    // of ever reopening a closed one.
-    const { data: existing } = await supabase
-      .from('chat_sessions')
-      .select('*')
-      .eq('profile_id', profileId)
-      .eq('is_active', true)
-      .order('started_at', { ascending: false })
-      .limit(1);
+    setLastError(null);
+    try {
+      // A CLOSED session's is_active is flipped to false server-side (see
+      // sync_chat_session_from_request in module6_ai_support.sql), so this
+      // naturally starts a fresh session for the next conversation instead
+      // of ever reopening a closed one.
+      const { data: existing } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .eq('profile_id', profileId)
+        .eq('is_active', true)
+        .order('started_at', { ascending: false })
+        .limit(1);
 
-    let s = existing?.[0] as ChatSession | undefined;
-    if (!s) {
-      const { data: created } = await supabase.from('chat_sessions').insert({ profile_id: profileId, is_active: true }).select().single();
-      s = created ?? undefined;
-    }
-    if (!s) {
+      let s = existing?.[0] as ChatSession | undefined;
+      if (!s) {
+        const { data: created } = await supabase.from('chat_sessions').insert({ profile_id: profileId, is_active: true }).select().single();
+        s = created ?? undefined;
+      }
+      if (!s) {
+        setLastError('Unable to start a conversation. Please try again.');
+        return;
+      }
+      setSession(s);
+
+      const { data: msgs } = await supabase.from('chat_messages').select('*').eq('session_id', s.session_id).order('created_at', { ascending: true });
+      setMessages(msgs ?? []);
+    } catch (e) {
+      console.error('[useSupportChat] loadOrCreateSession:', e);
+      setLastError('Unable to connect to SafeSpace. Please check your connection and try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-    setSession(s);
-
-    const { data: msgs } = await supabase.from('chat_messages').select('*').eq('session_id', s.session_id).order('created_at', { ascending: true });
-    setMessages(msgs ?? []);
-    setLoading(false);
   }, [profileId]);
 
   useEffect(() => {
@@ -128,14 +135,23 @@ export function useSupportChat(profileId: string | undefined) {
       setSending(true);
       setLastError(null);
 
-      const { data: userMsg, error: insertErr } = await supabase
-        .from('chat_messages')
-        .insert({ session_id: s.session_id, sender_type: 'User', sender_profile_id: profileId, message: trimmed })
-        .select()
-        .single();
-      if (insertErr || !userMsg) {
+      let userMsg: ChatMessage;
+      try {
+        const { data, error: insertErr } = await supabase
+          .from('chat_messages')
+          .insert({ session_id: s.session_id, sender_type: 'User', sender_profile_id: profileId, message: trimmed })
+          .select()
+          .single();
+        if (insertErr || !data) {
+          setSending(false);
+          setLastError("Couldn't send your message. Please try again.");
+          return;
+        }
+        userMsg = data;
+      } catch (e) {
+        console.error('[useSupportChat] sendMessage: user message insert:', e);
         setSending(false);
-        setLastError("Couldn't send your message. Please try again.");
+        setLastError('Unable to connect to SafeSpace. Please check your connection and try again.');
         return;
       }
       setMessages((prev) => [...prev, userMsg]);
@@ -211,17 +227,32 @@ export function useSupportChat(profileId: string | undefined) {
       if (s.status !== 'AI_ASSISTED') return { error: null };
 
       setRequestingExpert(true);
-      const { error } = await supabase
-        .from('expert_support_requests')
-        .insert({ conversation_id: s.session_id, profile_id: profileId, reason: reason || null });
-      setRequestingExpert(false);
-      if (error) return { error: error.message || 'Could not request an expert. Please try again.' };
+      try {
+        const { error } = await supabase
+          .from('expert_support_requests')
+          .insert({ conversation_id: s.session_id, profile_id: profileId, reason: reason || null });
+        // Never surface the raw Postgres/PostgREST error text to the UI
+        // (it can name real tables/columns/constraints) — log it for
+        // debugging, show a generic, actionable message instead. This
+        // previously returned error.message directly, and
+        // SafeHerAssistantScreen.tsx shows this string verbatim in an
+        // Alert.
+        if (error) {
+          console.error('[useSupportChat] requestExpertSupport:', error.message);
+          return { error: 'Could not request an expert. Please try again.' };
+        }
 
-      // Optimistic local update — the realtime chat_sessions subscription
-      // will confirm shortly, this just avoids a visible flash back to
-      // the old state in the meantime.
-      setSession((prev) => (prev ? { ...prev, status: 'WAITING_FOR_EXPERT' } : prev));
-      return { error: null };
+        // Optimistic local update — the realtime chat_sessions subscription
+        // will confirm shortly, this just avoids a visible flash back to
+        // the old state in the meantime.
+        setSession((prev) => (prev ? { ...prev, status: 'WAITING_FOR_EXPERT' } : prev));
+        return { error: null };
+      } catch (e) {
+        console.error('[useSupportChat] requestExpertSupport:', e);
+        return { error: 'Unable to connect to SafeSpace. Please check your connection and try again.' };
+      } finally {
+        setRequestingExpert(false);
+      }
     },
     [profileId]
   );

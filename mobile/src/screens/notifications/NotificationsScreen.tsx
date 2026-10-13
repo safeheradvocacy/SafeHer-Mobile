@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { EmptyState } from '../../components/ui';
+import { AlertMessage, EmptyState } from '../../components/ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
 import { AppStackParamList } from '../../navigation/types';
@@ -26,17 +26,28 @@ export function NotificationsScreen() {
   const { profile } = useAuth();
   const navigation = useNavigation<Nav>();
   const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     if (!profile) return;
-    let query = supabase.from('notifications').select('*').eq('profile_id', profile.profile_id).order('created_at', { ascending: false });
-    if (!prefs.emergencyAlertsEnabled) {
-      // Only hides them from this device's list — SOS triggering,
-      // creation, and responder dispatch never go through this screen.
-      query = query.neq('notification_type', 'SOS');
+    setLoadError(false);
+    try {
+      let query = supabase.from('notifications').select('*').eq('profile_id', profile.profile_id).order('created_at', { ascending: false });
+      if (!prefs.emergencyAlertsEnabled) {
+        // Only hides them from this device's list — SOS triggering,
+        // creation, and responder dispatch never go through this screen.
+        query = query.neq('notification_type', 'SOS');
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      setItems(data ?? []);
+    } catch (e) {
+      console.error('[NotificationsScreen] load:', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    const { data } = await query;
-    setItems(data ?? []);
   }, [profile, prefs.emergencyAlertsEnabled]);
 
   useFocusEffect(
@@ -67,7 +78,16 @@ export function NotificationsScreen() {
   const markRead = async (n: Notification) => {
     if (n.is_read) return;
     setItems((prev) => prev.map((i) => (i.notification_id === n.notification_id ? { ...i, is_read: true } : i)));
-    await supabase.from('notifications').update({ is_read: true }).eq('notification_id', n.notification_id);
+    try {
+      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('notification_id', n.notification_id);
+      if (error) throw error;
+    } catch (e) {
+      console.error('[NotificationsScreen] markRead:', e);
+      // Roll back the optimistic update — a silently-failed update
+      // previously left the dot permanently cleared even though the
+      // notification was still unread server-side.
+      setItems((prev) => prev.map((i) => (i.notification_id === n.notification_id ? { ...i, is_read: false } : i)));
+    }
   };
 
   const onPressNotification = (n: Notification) => {
@@ -96,7 +116,13 @@ export function NotificationsScreen() {
           ) : null}
         </>
       }
-      ListEmptyComponent={<EmptyState title="You're all caught up" subtitle="New updates about your cases and SOS alerts will show up here." />}
+      ListEmptyComponent={
+        loading ? null : loadError ? (
+          <AlertMessage variant="error" title="We couldn't load your notifications" message="Please check your connection and try again." onRetry={load} />
+        ) : (
+          <EmptyState title="You're all caught up" subtitle="New updates about your cases and SOS alerts will show up here." />
+        )
+      }
       renderItem={({ item }) => (
         <Pressable
           onPress={() => onPressNotification(item)}

@@ -53,17 +53,22 @@ export function TermsAndConditionsScreen() {
   const checkAcceptance = useCallback(async () => {
     if (!isAuthenticated) return;
     setChecking(true);
-    const { data, error } = await supabase
-      .from('terms_acceptances')
-      .select('accepted_at')
-      .eq('terms_version', CURRENT_TERMS_VERSION)
-      .maybeSingle();
-    setChecking(false);
-    if (error) {
-      console.error('[TermsAndConditionsScreen] checkAcceptance:', error.message);
-      return;
+    try {
+      const { data, error } = await supabase
+        .from('terms_acceptances')
+        .select('accepted_at')
+        .eq('terms_version', CURRENT_TERMS_VERSION)
+        .maybeSingle();
+      if (error) {
+        console.error('[TermsAndConditionsScreen] checkAcceptance:', error.message);
+        return;
+      }
+      setAcceptedAt(data?.accepted_at ?? null);
+    } catch (e) {
+      console.error('[TermsAndConditionsScreen] checkAcceptance:', e);
+    } finally {
+      setChecking(false);
     }
-    setAcceptedAt(data?.accepted_at ?? null);
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -74,26 +79,32 @@ export function TermsAndConditionsScreen() {
     if (recording) return;
     setRecording(true);
     setRecordError(null);
-    const { data, error } = await supabase
-      .from('terms_acceptances')
-      .insert({ terms_version: CURRENT_TERMS_VERSION })
-      .select('accepted_at')
-      .single();
-    setRecording(false);
-    if (!error) {
-      setAcceptedAt(data.accepted_at);
-      return;
+    try {
+      const { data, error } = await supabase
+        .from('terms_acceptances')
+        .insert({ terms_version: CURRENT_TERMS_VERSION })
+        .select('accepted_at')
+        .single();
+      if (!error) {
+        setAcceptedAt(data.accepted_at);
+        return;
+      }
+      // 23505 = unique_violation: a row for this version already exists
+      // (e.g. a prior attempt succeeded but this device never saw the
+      // response). Re-check the real record rather than claim a fresh
+      // acceptance happened.
+      if ((error as { code?: string }).code === '23505') {
+        checkAcceptance();
+        return;
+      }
+      console.error('[TermsAndConditionsScreen] record acceptance failed:', error.message);
+      setRecordError("We couldn't save your acceptance right now. Please check your connection and try again.");
+    } catch (e) {
+      console.error('[TermsAndConditionsScreen] record acceptance failed:', e);
+      setRecordError('Unable to connect to SafeSpace. Please check your connection and try again.');
+    } finally {
+      setRecording(false);
     }
-    // 23505 = unique_violation: a row for this version already exists
-    // (e.g. a prior attempt succeeded but this device never saw the
-    // response). Re-check the real record rather than claim a fresh
-    // acceptance happened.
-    if ((error as { code?: string }).code === '23505') {
-      checkAcceptance();
-      return;
-    }
-    console.error('[TermsAndConditionsScreen] record acceptance failed:', error.message);
-    setRecordError("We couldn't save your acceptance right now. Please check your connection and try again.");
   };
 
   return (

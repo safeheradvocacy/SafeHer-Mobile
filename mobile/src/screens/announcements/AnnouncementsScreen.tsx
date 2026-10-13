@@ -42,18 +42,24 @@ export function AnnouncementsScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('announcements')
-      .select('*')
-      .order('published_at', { ascending: false });
-    if (error) {
-      console.error('[AnnouncementsScreen] load:', error.message);
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('published_at', { ascending: false });
+      if (error) {
+        console.error('[AnnouncementsScreen] load:', error.message);
+        setLoadError(true);
+      } else {
+        setLoadError(false);
+        setItems(data ?? []);
+      }
+    } catch (e) {
+      console.error('[AnnouncementsScreen] load:', e);
       setLoadError(true);
-    } else {
-      setLoadError(false);
-      setItems(data ?? []);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const debouncedReload = useCallback(() => {

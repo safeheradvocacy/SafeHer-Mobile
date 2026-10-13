@@ -27,11 +27,20 @@ export function AnnouncementDetailScreen() {
   const load = useCallback(async () => {
     // RLS (module28) is the only gate here — a stale, unpublished,
     // expired, archived, or wrong id all resolve to the same "not
-    // found" state below; this screen never learns which.
-    const { data } = await supabase.from('announcements').select('*').eq('announcement_id', announcementId).maybeSingle();
-    setItem(data ?? null);
-    setNotFound(!data);
-    setLoading(false);
+    // found" state below; this screen never learns which. A thrown
+    // exception (e.g. total connection loss) now resolves to the same
+    // state too, rather than leaving `loading` stuck forever.
+    try {
+      const { data } = await supabase.from('announcements').select('*').eq('announcement_id', announcementId).maybeSingle();
+      setItem(data ?? null);
+      setNotFound(!data);
+    } catch (e) {
+      console.error('[AnnouncementDetailScreen] load:', e);
+      setItem(null);
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
   }, [announcementId]);
 
   useEffect(() => {
