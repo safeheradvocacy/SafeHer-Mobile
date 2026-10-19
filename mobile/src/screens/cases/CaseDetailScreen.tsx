@@ -1,9 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { AlertMessage, Card, EmptyState, StatusBadge } from '../../components/ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import { usePasscode } from '../../contexts/PasscodeContext';
 import { radius, spacing, typography } from '../../theme/theme';
 import { serviceTypeLabel } from '../../lib/serviceTypes';
 import { AppStackParamList } from '../../navigation/types';
@@ -11,8 +13,10 @@ import type { CaseReport, CaseService, CaseStatusHistory, ShelterReferral } from
 
 export function CaseDetailScreen() {
   const { palette } = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'CaseDetail'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'CaseDetail'>>();
   const { caseId } = route.params;
+  const { hasActiveGrant, refreshGrantStatus } = usePasscode();
 
   const [caseReport, setCaseReport] = useState<CaseReport | null>(null);
   const [history, setHistory] = useState<CaseStatusHistory[]>([]);
@@ -65,9 +69,37 @@ export function CaseDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      // Same pattern as CaseListScreen's own focus guard — see its
+      // comment for the full reasoning (fresh server re-check, RLS is
+      // the real boundary).
+      let cancelled = false;
+      refreshGrantStatus().then((active) => {
+        if (cancelled) return;
+        if (!active) {
+          navigation.navigate('VerifySecurityPasscode', { returnTo: { screen: 'CaseDetail', params: { caseId } } });
+          return;
+        }
+        load();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [load, refreshGrantStatus, navigation, caseId])
   );
+
+  // Phase 8: re-lock while this screen stays open and focused past the
+  // grant's own window (PasscodeContext's expiry timer, not just a
+  // background/focus edge) — clears the already-fetched content from
+  // memory rather than leaving it on screen past its authorized window.
+  useEffect(() => {
+    if (!hasActiveGrant && caseReport) {
+      setCaseReport(null);
+      setHistory([]);
+      setReferrals([]);
+      setServices([]);
+      navigation.navigate('VerifySecurityPasscode', { returnTo: { screen: 'CaseDetail', params: { caseId } } });
+    }
+  }, [hasActiveGrant]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (

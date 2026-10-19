@@ -5,8 +5,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
-import { Input, PasswordInput, PrimaryButton, Screen, AlertMessage, PrivacyNotice, FadeInUp, useReducedMotion } from '../../components/ui';
+import { Input, PasswordInput, PrimaryButton, Screen, AlertMessage, FadeInUp, useReducedMotion } from '../../components/ui';
 import { AuthHeader } from '../../components/auth/AuthHeader';
+import { LogoFull } from '../../components/branding/LogoMark';
 import { ShakeField } from '../../components/auth/ShakeField';
 import { SettingsSheet } from '../../components/SettingsSheet';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -107,11 +108,14 @@ export function LoginScreen() {
     <Screen>
       <AuthHeader onBack={() => navigation.goBack()} onSettings={() => setShowSettings(true)} />
 
-      <FadeInUp reduced={reduced} delay={0}>
-        <View style={styles.brandRow}>
-          <Text style={[styles.brandName, { color: palette.text }]}>SafeSpace</Text>
-        </View>
-        <Text style={[styles.reassurance, { color: bodyColor }]}>{strings.reassurance}</Text>
+      <FadeInUp reduced={reduced} delay={0} style={{ alignItems: 'flex-start' }}>
+        {/* The complete mark+wordmark lockup as one image — no separate
+            "SafeSpace" Text beside it, since the asset already bakes the
+            name in (see LogoMark.tsx for the two asset variants). No
+            tagline underneath either: "Welcome back" + its subtitle right
+            below already carry the screen's one supporting message —
+            a second slogan here would just be a duplicate intro line. */}
+        <LogoFull width={140} />
       </FadeInUp>
 
       <FadeInUp reduced={reduced} delay={70} style={styles.headingBlock}>
@@ -136,7 +140,7 @@ export function LoginScreen() {
                 if (emailError) setEmailError(null);
                 if (submitError) setSubmitError(null);
               }}
-              placeholder="you@example.com"
+              placeholder="Enter your email"
               error={emailError ?? undefined}
               rightElement={emailValid && email.length > 0 ? <Ionicons name="checkmark-circle" size={18} color={palette.success} /> : undefined}
             />
@@ -165,7 +169,7 @@ export function LoginScreen() {
 
         {submitError ? <AlertMessage variant="error" title={strings.loginErrorTitle} message={submitError} /> : null}
 
-        <FadeInUp reduced={reduced} delay={240} style={styles.optionsRow}>
+        <FadeInUp reduced={reduced} delay={240} style={[styles.optionsRow, { marginBottom: spacing.lg }]}>
           <Pressable
             onPress={() => setRememberMe((v) => !v)}
             style={styles.rememberTouch}
@@ -201,8 +205,12 @@ export function LoginScreen() {
           </Pressable>
         </FadeInUp>
 
-        <FadeInUp reduced={reduced} delay={410}>
-          <PrivacyNotice heading={strings.privacyHeading} text={strings.privacyBody} />
+        {/* Compact one-line reassurance, no card/icon/heading — was a
+            shadowed card with a lock icon, a heading, and a longer
+            sentence, which gave a login screen more visual weight than a
+            single already-clear fact needs. */}
+        <FadeInUp reduced={reduced} delay={410} style={{ marginTop: spacing.xl }}>
+          <Text style={[styles.privacyText, { color: bodyColor }]}>{strings.privacyBody}</Text>
         </FadeInUp>
       </View>
 
@@ -212,15 +220,15 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  brandName: { ...typography.heading },
-  reassurance: { ...typography.body, marginTop: spacing.sm },
   headingBlock: { marginTop: spacing.lg },
   title: { ...typography.display, fontSize: 26 },
   subtitle: { ...typography.body, marginTop: spacing.xs },
   form: { marginTop: spacing.lg },
 
-  optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  // flexWrap so "Forgot password?" drops to its own line on a narrow
+  // screen or with larger font scaling, rather than crowding/overlapping
+  // "Remember me" on one row.
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', rowGap: spacing.xs },
   rememberTouch: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   checkbox: {
     width: 20,
@@ -240,4 +248,5 @@ const styles = StyleSheet.create({
   createTouch: { paddingVertical: 10, paddingHorizontal: spacing.sm },
   link: { ...typography.bodyMedium },
   footerText: { ...typography.body, textAlign: 'center' },
+  privacyText: { ...typography.caption, textAlign: 'center' },
 });

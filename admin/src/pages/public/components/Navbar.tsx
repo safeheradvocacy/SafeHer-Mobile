@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CompactLogoLockup } from '../../../components/branding/Logo';
+import { LogoMark } from '../../../components/branding/Logo';
 
 const LINKS = [
   { id: 'about', label: 'About' },
@@ -68,7 +68,14 @@ export function Navbar() {
   return (
     <header ref={headerRef} className={`site-header${scrolled ? ' scrolled' : ''}`}>
       <div className="site-header-inner">
-        <CompactLogoLockup logoWidth={44} fontSize={23} />
+        {/* Symbol only, no "SafeSpace" text beside it — this header is only
+            ~68-88px tall, well under the ~140px+ the full mark+wordmark
+            asset needs for its baked-in text to stay legible (verified by
+            decoding the asset: the wordmark strip is only the bottom ~12%
+            of its square canvas). The hero immediately below names
+            SafeSpace in full-size text, so the icon alone doesn't leave a
+            first-time visitor guessing. */}
+        <LogoMark size={44} />
 
         <button
           className={`nav-menu-toggle${menuOpen ? ' open' : ''}`}

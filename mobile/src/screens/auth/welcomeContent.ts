@@ -31,9 +31,7 @@ interface WelcomeStrings {
   emergencySheetAppNote: string;
   createAccount: string;
   logIn: string;
-  privacyTitle: string;
   privacyBody: string;
-  settingsTitle: string;
 }
 
 // Same caveat as onboardingContent.ts: the Filipino copy here is
@@ -43,7 +41,7 @@ const STRINGS: Record<AppLanguage, WelcomeStrings> = {
   en: {
     heroTagline: 'Support when you need it.',
     headline: "You're safe here.",
-    supporting: 'Private support. Emergency help. Case tracking.',
+    supporting: 'Private support and case tracking.',
     howWeCanHelp: 'How we can help',
     features: {
       privacy: {
@@ -62,7 +60,7 @@ const STRINGS: Record<AppLanguage, WelcomeStrings> = {
         detail: 'Track your submitted requests and available support.',
       },
     },
-    emergencyTitle: 'Need help now?',
+    emergencyTitle: 'Need immediate help?',
     emergencyBody: 'In immediate danger? Call 911.',
     emergencySheetTitle: 'Emergency Help',
     emergencySheetCall: 'Call 911',
@@ -71,14 +69,12 @@ const STRINGS: Record<AppLanguage, WelcomeStrings> = {
       "SafeSpace doesn't replace emergency services. Create an account to access confidential SOS alerts and support once you're safe.",
     createAccount: 'Create an account',
     logIn: 'Log in',
-    privacyTitle: 'Your privacy comes first.',
     privacyBody: 'Your information is handled securely.',
-    settingsTitle: 'Settings',
   },
   fil: {
     heroTagline: 'Suporta kapag kailangan mo.',
     headline: 'Ligtas ka rito.',
-    supporting: 'Kumpidensyal na suporta. Tulong pang-emergency. Pagsubaybay ng kaso.',
+    supporting: 'Kumpidensyal na suporta at pagsubaybay ng kaso.',
     howWeCanHelp: 'Paano kami makakatulong',
     features: {
       privacy: {
@@ -97,7 +93,7 @@ const STRINGS: Record<AppLanguage, WelcomeStrings> = {
         detail: 'Subaybayan ang iyong mga naisumiteng kahilingan at magagamit na suporta.',
       },
     },
-    emergencyTitle: 'Kailangan mo ba ng tulong ngayon?',
+    emergencyTitle: 'Kailangan mo ba ng agarang tulong?',
     emergencyBody: 'Nasa agarang panganib? Tumawag sa 911.',
     emergencySheetTitle: 'Tulong Pang-emergency',
     emergencySheetCall: 'Tumawag sa 911',
@@ -106,9 +102,7 @@ const STRINGS: Record<AppLanguage, WelcomeStrings> = {
       'Hindi kapalit ng emergency services ang SafeSpace. Gumawa ng account para ma-access ang kumpidensyal na SOS alerts at suporta kapag ligtas ka na.',
     createAccount: 'Gumawa ng account',
     logIn: 'Mag-log in',
-    privacyTitle: 'Una ang iyong privacy.',
     privacyBody: 'Ligtas na hinahawakan ang iyong impormasyon.',
-    settingsTitle: 'Mga Setting',
   },
 };
 

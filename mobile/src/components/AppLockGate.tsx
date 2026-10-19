@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Modal, AppState, AppStateStatus } fr
 import { Ionicons } from '@expo/vector-icons';
 import { ClaySurface } from '../theme/clay';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { authenticate } from '../lib/appLock';
 import { spacing, typography, radius } from '../theme/theme';
 
@@ -14,9 +15,25 @@ import { spacing, typography, radius } from '../theme/theme';
  * loses navigation/form state just because the app got locked and
  * unlocked. Locks on cold start and whenever the app returns to the
  * foreground from background/inactive.
+ *
+ * Scoped to an authenticated session only (added alongside the mandatory
+ * security-passcode feature): App Lock is a device-level convenience for
+ * an already-signed-in user's own content, never a gate in front of
+ * Login/Register/OTP verification themselves. Previously this showed
+ * unconditionally whenever `appLockEnabled` was on, regardless of auth
+ * state — harmless for the common case (the preference defaults off and
+ * can only be turned on from a screen that requires being signed in
+ * first), but it had one real, narrow failure mode: a user who enabled
+ * App Lock, then signed out without disabling it, would hit a biometric
+ * prompt before ever reaching Login again on that device — exactly the
+ * "passcode [gate] that blocks the application from opening" this
+ * project's security review flagged. Scoping to `session` fixes that
+ * specific case without touching anything else about how App Lock
+ * behaves for a signed-in user.
  */
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const { palette, prefs, prefsLoaded, updatePreference } = useTheme();
+  const { session } = useAuth();
   // Pessimistic default: locked until we've actually read the stored
   // preference, so a stored `appLockEnabled: true` can never lose the
   // race and reveal an unlocked overlay first.
@@ -69,17 +86,20 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     setFailed(true);
   };
 
-  const showOverlay = !prefsLoaded || (prefs.appLockEnabled && locked);
+  // !!session: App Lock never gates Login/Register/OTP verification or
+  // any other pre-auth screen — see the file-header comment above for
+  // why this was added.
+  const showOverlay = !!session && (!prefsLoaded || (prefs.appLockEnabled && locked));
 
   useEffect(() => {
     // Gated on prefsLoaded too — otherwise this would fire a real
     // biometric prompt on every cold start before we even know App Lock
     // is enabled, for the majority of users who never turned it on.
-    if (prefsLoaded && prefs.appLockEnabled && locked && !authenticating) {
+    if (session && prefsLoaded && prefs.appLockEnabled && locked && !authenticating) {
       tryUnlock();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locked, prefsLoaded]);
+  }, [locked, prefsLoaded, session]);
 
   return (
     <>

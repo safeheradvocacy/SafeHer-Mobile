@@ -3,22 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthBackground } from './components/AuthBackground';
-
-// SafeSpace has no official logo yet — a complex icon (shield, heart, lock,
-// or anything else symbolic) risks conflicting with whatever mark is
-// eventually designed, so the brand panel below identifies itself with
-// this plain two-tone wordmark alone, the same "Safe"/"Space" color split
-// used on the public landing page's own text lockup, with no icon beside
-// it at all (not even the simple geometric LogoMark used elsewhere in the
-// admin shell — this page specifically stays text-only).
-function AuthWordmark() {
-  return (
-    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 26 }}>
-      <span style={{ color: '#FFFFFF' }}>Safe</span>
-      <span style={{ color: '#A9CBEA' }}>Space</span>
-    </span>
-  );
-}
+import { LogoMark } from '../../components/branding/Logo';
 
 // Defensive, client-side belt-and-suspenders check — real HTTPS
 // enforcement belongs at the hosting/CDN layer (HSTS + redirect rules),
@@ -68,8 +53,17 @@ function AuthShell({ children, shaking }: { children: React.ReactNode; shaking?:
             feature list here anymore (Security / Confidentiality /
             Role-based access, previously) — that read as a marketing
             panel rather than an institutional identity panel. */}
-        <div className="auth-brand-top">
-          <AuthWordmark />
+        {/* Symbol only, no separate "SafeSpace" heading beside it — the
+            full mark+wordmark asset (safespace_nobackground.png) isn't
+            used here on purpose: its wordmark ink is blue-toned (verified
+            by decoding the asset's own pixels), and this panel's
+            background is a dark navy gradient off --sidebar-bg (#0B3A82),
+            so that pairing comes out under 2:1 contrast — unreadable. The
+            footer caption below ("SafeSpace Administrative Portal ·
+            Aurora Province") already names the portal on this same panel,
+            so this icon doesn't need its own repeated text label. */}
+        <div className="auth-brand-top" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <LogoMark size={44} tone="onDark" />
         </div>
 
         <div className="auth-brand-middle">

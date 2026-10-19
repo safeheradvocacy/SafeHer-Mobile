@@ -3259,11 +3259,6 @@ html { scroll-behavior: smooth; }
   .auth-back-btn { top: 14px; left: 14px; padding: 7px 12px 7px 10px; }
 }
 
-/* No logo badge here anymore — SafeSpace has no official logo yet, and the
-   brand panel now identifies itself with a plain text wordmark
-   (AuthWordmark in AuthPages.tsx) rather than an icon mark that risks
-   conflicting with whatever gets designed later. */
-
 /* Form card — a government-form surface, not a floating dashboard panel:
    a plain neutral border carries the edge (rather than a shadow doing all
    the work), radius is moderate rather than "rounded card", and the shadow

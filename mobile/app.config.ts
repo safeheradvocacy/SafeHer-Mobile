@@ -34,15 +34,15 @@ export default (): ExpoConfig => ({
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   assetBundlePatterns: ['**/*'],
-  // Previously unset (Expo's own generic default icon/splash shipped in
-  // every build). Expo's icon schema requires a SQUARE source image —
-  // the one approved SafeSpace brand asset (safeher-logo.png) is
-  // 482x381, which fails that validation outright (confirmed via
-  // `expo-doctor`, not assumed). safeher-icon-square.png is that exact
-  // same asset padded onto a 1024x1024 canvas with the app's own real
-  // background color (theme.ts colors.background) — no new artwork
-  // invented, just reformatted to satisfy the schema.
-  icon: './src/assets/branding/safeher-icon-square.png',
+  // The official SafeSpace logo (added to the repo directly, not drawn by
+  // this assistant) — src/assets/branding/safesapce_logo.png (filename
+  // exactly as it exists on disk; "sapce" is a pre-existing typo in the
+  // asset's own filename, not introduced here). 1254x1254, square,
+  // opaque white background — meets Expo's icon schema requirement
+  // (square source image) without any reformatting needed, unlike the
+  // old safeher-icon-square.png this replaces (which had to be padded
+  // onto a square canvas since the old 482x381 source wasn't square).
+  icon: './src/assets/branding/safesapce_logo.png',
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'ph.pswdo.safeher',
@@ -59,12 +59,20 @@ export default (): ExpoConfig => ({
     // shouldn't leave open without a specific reason to.
     allowBackup: false,
     adaptiveIcon: {
-      // Same 1024x1024 square requirement as `icon` above, but with a
-      // TRANSPARENT canvas this time (not the solid one `icon` uses) —
-      // Android composites this foreground layer over backgroundColor
-      // below and masks both into its own shape, so a transparent
-      // foreground is what lets that background color actually show.
-      foregroundImage: './src/assets/branding/safeher-adaptive-foreground.png',
+      // Same safesapce_logo.png as `icon` above. Note this asset has an
+      // OPAQUE white background (no alpha channel), not the transparent
+      // cutout Android's adaptive-icon foreground layer is normally
+      // designed for — the old safeher-adaptive-foreground.png was a
+      // purpose-made transparent version of the mark specifically so
+      // backgroundColor below would show through the masked shape. No
+      // transparent symbol-only variant of the new official logo exists,
+      // and the brief is explicit not to redraw/recolor/modify the
+      // provided artwork, so this renders as "mark on its own white
+      // square, masked into Android's icon shape" rather than "mark on
+      // brand-blue" — a different but still correct, unbroken result.
+      // backgroundColor is kept below regardless (harmless, and some
+      // launchers reveal a sliver of it at the mask edges).
+      foregroundImage: './src/assets/branding/safesapce_logo.png',
       // Real brand primary (src/theme/theme.ts colors.primary) — not an
       // invented color.
       backgroundColor: '#1456A0',
@@ -124,10 +132,17 @@ export default (): ExpoConfig => ({
       // rather than inventing a new one, so the splash screen and the
       // app's own first-paint background (App.tsx's pre-fonts-ready
       // fallback View) match exactly, with no color flash on startup.
+      //
+      // Image is the full mark+wordmark lockup (safespace_nobackground.png,
+      // genuinely transparent — verified by decoding its pixels), not the
+      // symbol-only mark: this native splash hands off directly to the JS
+      // SplashScreen in SplashOnboardingWelcome.tsx, which now shows the
+      // same asset at the same ~180px width on the same light background,
+      // so there's no visible logo swap/resize at the handoff.
       'expo-splash-screen',
       {
-        image: './src/assets/branding/safeher-logo.png',
-        imageWidth: 220,
+        image: './src/assets/branding/safespace_nobackground.png',
+        imageWidth: 180,
         resizeMode: 'contain',
         backgroundColor: '#F5F7FA',
       },

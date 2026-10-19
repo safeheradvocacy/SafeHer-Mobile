@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePasscode } from '../../contexts/PasscodeContext';
 import { supabase } from '../../lib/supabase';
 import { AlertMessage, Card, EmptyState, StatusBadge } from '../../components/ui';
 import { ScreenHeader } from '../../components/ScreenHeader';
@@ -30,6 +31,7 @@ export function CaseListScreen() {
   const navigation = useNavigation<Nav>();
   const { palette } = useTheme();
   const { profile } = useAuth();
+  const { hasActiveGrant, refreshGrantStatus } = usePasscode();
   const [cases, setCases] = useState<CaseReport[]>([]);
   // A client's own case_client_links rows (module14) — cases reached via
   // the QR/verification workflow rather than submitted through this
@@ -74,9 +76,37 @@ export function CaseListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      // Re-checked fresh against the server on every focus (not the
+      // client's own possibly-stale `hasActiveGrant` belief) — this is
+      // the UI-layer half of Phase 7's "do not fetch or display protected
+      // information before the required verification"; the RLS policies
+      // on case_reports/case_status_history (module33) are the actual
+      // trusted-backend half, enforced regardless of what this check
+      // concludes.
+      let cancelled = false;
+      refreshGrantStatus().then((active) => {
+        if (cancelled) return;
+        if (!active) {
+          navigation.navigate('VerifySecurityPasscode', { returnTo: { screen: 'Tabs', params: { screen: 'CasesTab' } } });
+          return;
+        }
+        load();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [load, refreshGrantStatus, navigation])
   );
+
+  // Phase 8: see CaseDetailScreen's identical comment — re-locks a case
+  // list left open past the grant's window, not just on background/focus.
+  useEffect(() => {
+    if (!hasActiveGrant && cases.length > 0) {
+      setCases([]);
+      setLinks([]);
+      navigation.navigate('VerifySecurityPasscode', { returnTo: { screen: 'Tabs', params: { screen: 'CasesTab' } } });
+    }
+  }, [hasActiveGrant]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRefresh = async () => {
     setRefreshing(true);

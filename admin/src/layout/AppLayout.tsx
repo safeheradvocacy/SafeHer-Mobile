@@ -30,7 +30,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { LogoLockup, LogoMark } from '../components/branding/Logo';
+import { LogoMark } from '../components/branding/Logo';
 import { AdminErrorBoundary } from '../components/AdminErrorBoundary';
 import { hasPermission, type PermissionKey } from '../lib/permissions';
 import { ROLE_LABEL } from '../lib/roleLabels';
@@ -400,7 +400,16 @@ export function AppLayout() {
             </div>
           ) : (
             <div>
-              <LogoLockup size={28} tone="onDark" />
+              {/* Symbol only, no hand-typed "SafeSpace" text beside it — the
+                  role label right below already identifies this panel, and
+                  the browser tab title plus this same tooltip (matching the
+                  collapsed state) carry the brand name without repeating it
+                  as a second on-screen heading. See Logo.tsx's LogoMark
+                  comment for why: this sidebar's dark background can't show
+                  the full wordmark-bearing asset at readable contrast. */}
+              <div className="tooltip-anchor" data-tooltip="SafeSpace Administrative Portal">
+                <LogoMark size={28} tone="onDark" />
+              </div>
               <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginTop: 5 }}>
                 {sidebarLabel}
               </p>
@@ -519,7 +528,7 @@ export function AppLayout() {
             background: 'var(--color-surface)',
           }}
         >
-          <LogoLockup size={26} />
+          <LogoMark size={26} />
           <button
             className="btn btn-outline btn-sm"
             aria-label={sidebarOpen ? 'Close navigation' : 'Open navigation'}

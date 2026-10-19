@@ -1,19 +1,40 @@
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
-import safeherLogo from '../../assets/branding/safeher-logo.png';
+import safeSpaceLogoFull from '../../assets/branding/safespace_nobackground.png';
+import safeSpaceLogoSymbol from '../../assets/branding/safesapce_logo.png';
 
 /**
- * The official SafeHer mark (shield + mother/child illustration + heart,
- * transparent background) — src/assets/branding/safeher-logo.png. As of
- * 2026-08-18 this asset is icon-only (no "SafeHer" text baked in — an
- * earlier version of this same file, 482x517, had the wordmark stacked
- * below the shield; the current one is 482x381, cropped to just the mark).
- * That change landed on disk mid-session without any edit from this
- * assistant — flagged to the user rather than assumed. Always pair with a
- * separate text wordmark (see CompactLogoLockup) since none is embedded.
+ * The official SafeSpace mark — a real, provided asset (added to the repo
+ * directly, not drawn by this assistant).
+ *
+ * Two real source files exist, both square 1254x1254, verified by decoding
+ * their actual pixels (not assumed from filename):
+ *   - safespace_nobackground.png — mark + "SafeSpace" wordmark baked in,
+ *     genuinely transparent (every sampled edge/corner pixel is alpha 0,
+ *     not just an unused alpha channel). This is the PRIMARY logo — use it
+ *     as a single complete unit wherever the full lockup fits, never paired
+ *     with an extra hand-typed "SafeSpace" heading beside/beneath it.
+ *     Its wordmark ink is itself blue-toned (sampled: shades in the
+ *     #004070–#1090E0 range), so it only reads clearly on a light/white
+ *     background — on this app's dark navy sidebar/auth-panel blue
+ *     (--sidebar-bg #0B3A82 and its gradient), the contrast ratio comes out
+ *     under 2:1 (WCAG wants >=4.5:1 for text), which is why every
+ *     dark-background spot in this app below uses LogoMark (symbol only)
+ *     instead, exactly as the branding brief allows ("use the symbol-only
+ *     asset when it becomes unreadable").
+ *   - safesapce_logo.png — symbol only, OPAQUE white background baked in
+ *     (filenames exactly as they exist on disk; "sapce" is a pre-existing
+ *     typo in the asset's own filename, not introduced here). Also verified
+ *     by decoding pixels: its own wordmark-sized text strip only occupies
+ *     roughly the bottom 12% of the square canvas, so at the compact
+ *     heights real nav/sidebar rows actually have (well under the ~140px+
+ *     a legible wordmark needs at this asset's proportions), the full
+ *     lockup's text would render too small to read — this is the asset to
+ *     reach for in exactly those compact spots instead.
+ * `withName` selects which; defaults to the full lockup.
  */
 export function OfficialLogo({
   width,
+  withName = true,
   className,
   style,
 }: {
@@ -23,59 +44,40 @@ export function OfficialLogo({
    * regardless of viewport, since inline styles always beat stylesheet
    * rules. */
   width?: number;
+  /** false renders the symbol-only mark instead of the mark+wordmark
+   * lockup — e.g. for a dark/colored background where the wordmark's own
+   * dark-blue ink wouldn't have enough contrast, or a footprint too small
+   * for its wordmark text to stay legible. */
+  withName?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }) {
   return (
     <img
-      src={safeherLogo}
-      alt="SafeSpace logo"
+      src={withName ? safeSpaceLogoFull : safeSpaceLogoSymbol}
+      alt="SafeSpace"
       className={className}
-      style={{ width, height: 'auto', display: 'block', maxWidth: '100%', ...style }}
+      style={{ width, height: 'auto', display: 'block', maxWidth: '100%', objectFit: 'contain', ...style }}
     />
   );
 }
 
 /**
- * Compact brand lockup for tight spaces (navbar, footer): a simple
- * geometric shield mark (LogoMark, below) paired with the two-tone
- * "SafeSpace" text. Public-landing-page-only — the authenticated admin
- * shell uses LogoLockup below instead (same LogoMark, a single-color
- * wordmark by default, with its own twoTone option), since the two
- * contexts need different sizing/layout, not a different mark.
- *
- * Deliberately NOT the illustrated safeher-logo.png (OfficialLogo) — that
- * asset depicts a shield + mother/child illustration, which both names
- * the old brand and reads as gender/role-coded in a way the inclusive
- * SafeSpace identity is specifically meant to move away from. LogoMark's
- * plain shield-in-a-circle is a deliberately simple placeholder per the
- * rebrand brief ("do not invent an elaborate permanent logo") — swap it
- * for a real SafeSpace mark here (and in LogoLockup) the moment one exists.
- */
-export function CompactLogoLockup({
-  logoWidth = 44,
-  fontSize = 23,
-  onDark = false,
-}: {
-  logoWidth?: number;
-  fontSize?: number;
-  onDark?: boolean;
-}) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <LogoMark size={logoWidth} tone={onDark ? 'onDark' : 'onLight'} />
-      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize }}>
-        <span style={{ color: onDark ? '#FFFFFF' : '#0B3A82' }}>Safe</span>
-        <span style={{ color: onDark ? '#A9CBEA' : '#2F80C9' }}>Space</span>
-      </span>
-    </div>
-  );
-}
-
-/**
- * Placeholder brand mark (generic shield icon) — kept for the admin sidebar
- * and login page, which weren't part of this logo-integration change.
- * mirrors mobile/src/components/branding/LogoMark.tsx.
+ * The real SafeSpace symbol mark, cropped into a circular badge. Used alone
+ * (no hand-typed "SafeSpace" text beside it) in every compact or
+ * dark-background spot in this app — sidebar (collapsed and expanded),
+ * the mobile topbar, the auth page's dark brand panel, and the public
+ * site's nav/footer — since safesapce_logo.png has an OPAQUE white
+ * background (no alpha), rendering it inside a circular, `object-fit:
+ * cover` frame is what makes it read correctly on any of those surfaces
+ * without needing the artwork itself to have transparency (which it
+ * doesn't, and the brief says not to modify it). `tone` still affects the
+ * thin ring around the badge for contrast against light vs. dark surfaces.
+ * Each call site already carries its own nearby text for the SafeSpace
+ * name (a page title, a hero heading, a footer caption, or — for the
+ * collapsed/narrow spots — just the alt text and a hover tooltip), so
+ * dropping a second hand-typed label next to this badge isn't a loss of
+ * clarity, it's removing a duplicate.
  */
 export function LogoMark({
   size = 48,
@@ -90,45 +92,16 @@ export function LogoMark({
         width: size,
         height: size,
         borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: tone === 'onDark' ? '#FFFFFF' : 'var(--color-primary-light)',
+        overflow: 'hidden',
         flexShrink: 0,
+        boxShadow: tone === 'onDark' ? '0 0 0 1px rgba(255,255,255,0.18)' : '0 0 0 1px var(--color-border)',
       }}
     >
-      <ShieldCheck size={size * 0.5} color="var(--color-primary)" strokeWidth={2} />
-    </div>
-  );
-}
-
-export function LogoLockup({
-  tone = 'onLight',
-  size = 40,
-  twoTone = false,
-}: {
-  tone?: 'onLight' | 'onDark';
-  size?: number;
-  /** Renders "Safe" / "Space" in two brand shades, matching
-   * CompactLogoLockup's public-page treatment — opt-in; the admin
-   * sidebar/topbar keep the single-color wordmark by default. */
-  twoTone?: boolean;
-}) {
-  const textColor = tone === 'onDark' ? '#FFFFFF' : 'var(--color-text)';
-  const fontSize = size * 0.5;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <LogoMark size={size} tone={tone} />
-      {twoTone ? (
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize }}>
-          <span style={{ color: tone === 'onDark' ? '#FFFFFF' : '#0B3A82' }}>Safe</span>
-          <span style={{ color: tone === 'onDark' ? '#A9CBEA' : '#2F80C9' }}>Space</span>
-        </span>
-      ) : (
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize, color: textColor }}>
-          SafeSpace
-        </span>
-      )}
+      <img
+        src={safeSpaceLogoSymbol}
+        alt="SafeSpace"
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
     </div>
   );
 }

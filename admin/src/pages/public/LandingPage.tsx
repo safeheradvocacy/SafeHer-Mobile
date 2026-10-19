@@ -16,7 +16,7 @@ import {
   ArrowRight,
   ChevronRight,
 } from 'lucide-react';
-import { CompactLogoLockup } from '../../components/branding/Logo';
+import { LogoMark } from '../../components/branding/Logo';
 import { Navbar } from './components/Navbar';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { AnimatedSecurityVisual } from './components/AnimatedSecurityVisual';
@@ -638,7 +638,12 @@ function Footer() {
     <footer style={{ background: '#0B3A82', color: '#fff' }}>
       <div className="container footer-grid" style={{ maxWidth: 900, padding: '64px 24px 48px' }}>
         <div style={{ maxWidth: 320 }}>
-          <CompactLogoLockup logoWidth={36} fontSize={19} onDark />
+          {/* Symbol only, no "SafeSpace" text beside it: the footer
+              background is the same dark navy (#0B3A82) the mark's own
+              wordmark ink has too little contrast against, and the
+              copyright line further down this same footer already spells
+              out "SafeSpace" in plain text. */}
+          <LogoMark size={40} tone="onDark" />
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 12, lineHeight: 1.6 }}>
             A confidential digital support platform designed to connect people experiencing abuse or violence
             across Aurora Province with appropriate support, protection, referrals, and essential services.

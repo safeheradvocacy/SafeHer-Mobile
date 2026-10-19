@@ -1,0 +1,123 @@
+-- Module 34: Fix missing EXECUTE grants on module33's mutation functions
+--
+-- ROOT CAUSE (confirmed by live, read-only testing against the deployed
+-- project qhhcqehgwpzeycejgevk, using only the public anon key -- no
+-- secrets or service-role access were used or needed to find this):
+--
+-- module33_security_passcode.sql explicitly ran
+--   revoke all on function public.enroll_security_passcode(text)      from public, authenticated, anon;
+--   revoke all on function public.verify_security_passcode(text)      from public, authenticated, anon;
+--   revoke all on function public.reset_security_passcode(text,bool)  from public, authenticated, anon;
+-- with the stated intent (see that file's own comments) that these would
+-- be "called only from the security-passcode Edge Function." That is
+-- true -- but the Edge Function (supabase/functions/security-passcode/
+-- index.ts) deliberately does NOT use a service-role client for these
+-- calls. It uses `callerClient`, created with
+--   createClient(url, serviceRoleKey, { global: { headers: { Authorization: authHeader } } })
+-- -- which PostgREST executes as the ROLE ENCODED IN THE FORWARDED JWT
+-- (authHeader, the caller's own access token), i.e. as `authenticated`,
+-- not as `service_role`. That was a deliberate design choice (see the
+-- Edge Function's own file-header comment: "there is no service-role
+-- escalation surface here at all"), made specifically so this function
+-- could never do more than the authenticated caller's own session
+-- already allows. But module33 then revoked EXECUTE from `authenticated`
+-- on exactly the three functions this calling pattern depends on --
+-- directly contradicting its own Edge Function's design.
+--
+-- Effect: every call to enroll/verify/reset a passcode -- from every
+-- account, new or existing -- failed with Postgres error 42501
+-- ("permission denied for function ..."), confirmed live:
+--   anon call to enroll_security_passcode(text)     -> 401, 42501
+--   anon call to verify_security_passcode(text)     -> 401, 42501
+--   anon call to reset_security_passcode(text,bool) -> 401, 42501
+-- (expected for these three: "not authenticated", the function's OWN
+-- first runtime check -- not a permission-denied-before-even-running
+-- error. Getting 42501 instead means the call was refused before the
+-- function body ever ran at all.)
+--
+-- Consequence chain this fully explains, matching BOTH reported symptoms:
+--   - No one could ever successfully enroll -> user_profiles.passcode_enrolled
+--     stays false for every account, forever -> has_security_passcode()
+--     stays false -> the case_reports INSERT policy's
+--     "and public.has_security_passcode()" clause denies every report
+--     submission, including from existing, already-verified accounts.
+--   - No one could ever successfully verify -> no row is ever written to
+--     protected_access_grants -> has_active_protected_access() stays
+--     false for everyone, forever -> the case_reports/case_status_history
+--     SELECT policies' "and public.has_active_protected_access()" clause
+--     denies every case read, including previously-reported cases that
+--     were perfectly fine before module33.
+--
+-- This also confirms module33 DID apply to the live project -- the
+-- functions, tables, and (by the above reasoning -- the RLS denial
+-- behavior is exactly what the updated policies would produce) the RLS
+-- policy changes all exist. The defect is specifically these three
+-- missing grants, not a missing or partially-applied migration. (The
+-- governing instructions for this pass are explicit that "do not claim
+-- a migration ... is deployed merely because it exists in the repo" --
+-- this conclusion is not from the repo, it is from live HTTP responses
+-- against the deployed project, captured and reasoned through above.)
+--
+-- THE FIX: grant EXECUTE on exactly these three functions to
+-- `authenticated`, matching has_security_passcode()/
+-- has_active_protected_access()/revoke_protected_access()/
+-- ensure_passcode_reminder(), which were already (correctly) granted
+-- this way. This does NOT weaken security: SECURITY DEFINER was always
+-- the actual authorization boundary for these functions (each one
+-- independently re-derives current_profile_id() and refuses to act on
+-- anyone else's data, re-checks has_active_protected_access() for the
+-- change path, and re-validates passcode length) -- the EXECUTE grant
+-- only ever controlled whether a request can reach that logic at all,
+-- not what the logic is allowed to do once reached. Revoking it from
+-- authenticated was simply a mistake, not a deliberate narrowing of who
+-- should be able to call these.
+--
+-- hash_security_passcode(text) and verify_security_passcode_hash(text,text)
+-- remain correctly revoked from everyone -- nothing calls those directly
+-- via RPC (only enroll/verify/reset call them internally, as the
+-- function OWNER, which does not require the CALLING client to hold its
+-- own EXECUTE grant on them). No change needed there.
+
+grant execute on function public.enroll_security_passcode(text) to authenticated;
+grant execute on function public.verify_security_passcode(text) to authenticated;
+grant execute on function public.reset_security_passcode(text, boolean) to authenticated;
+
+-- Secondary, non-functional hardening found alongside the primary bug:
+-- revoke_protected_access() and ensure_passcode_reminder() were correctly
+-- GRANTed to authenticated in module33, but (unlike every other sensitive
+-- function in that migration) were never explicitly REVOKEd from PUBLIC
+-- first. Postgres grants EXECUTE on a newly created function to PUBLIC by
+-- default unless revoked -- confirmed live: both were callable with only
+-- the anon key (HTTP 204, i.e. they ran) even though only `authenticated`
+-- was ever explicitly granted. Their own internal logic is harmless for
+-- an anonymous caller (current_profile_id() resolves to null, both
+-- no-op), so this was never an actual data-exposure risk -- but it's
+-- inconsistent with this migration's own stated "explicit, minimal
+-- grants only" design, so closed here for consistency.
+revoke execute on function public.revoke_protected_access() from public, anon;
+revoke execute on function public.ensure_passcode_reminder() from public, anon;
+
+-- ===========================================================================
+-- Manual verification (run against the live project after applying)
+-- ===========================================================================
+--
+-- a) Confirm the grants actually landed:
+--   select routine_name, grantee, privilege_type
+--     from information_schema.role_routine_grants
+--     where routine_name in ('enroll_security_passcode','verify_security_passcode','reset_security_passcode')
+--     order by routine_name, grantee;
+--   -- expected: exactly one row per function, grantee = authenticated, privilege_type = EXECUTE.
+--
+-- b) Confirm anon can no longer reach revoke_protected_access/ensure_passcode_reminder:
+--   select routine_name, grantee from information_schema.role_routine_grants
+--     where routine_name in ('revoke_protected_access','ensure_passcode_reminder');
+--   -- expected: authenticated only, no anon/PUBLIC row.
+--
+-- c) Live smoke test with a real (test) account's access token, not the
+--    anon key -- replace <TEST_USER_JWT> with a disposable test account's
+--    session token:
+--   curl -s -X POST 'https://qhhcqehgwpzeycejgevk.supabase.co/rest/v1/rpc/enroll_security_passcode' \
+--     -H 'apikey: <ANON_KEY>' -H 'Authorization: Bearer <TEST_USER_JWT>' \
+--     -H 'Content-Type: application/json' -d '{"p_passcode":"a-real-test-passcode-1"}'
+--   -- expected now: 200 (first time) or the function's own "already
+--   -- enrolled" 23505 error (if re-run) -- NOT 42501 "permission denied".

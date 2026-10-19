@@ -10,6 +10,7 @@ import { ResetPasswordScreen } from '../screens/auth/PasswordRecovery';
 import { AppLockGate } from '../components/AppLockGate';
 import { TourProvider } from '../contexts/TourContext';
 import { TourOverlay } from '../components/TourOverlay';
+import { PasscodeProvider } from '../contexts/PasscodeContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePushNotifications } from '../lib/usePushNotifications';
 import type { AuthStackParamList, AppStackParamList } from './types';
@@ -96,10 +97,12 @@ export function RootNavigator() {
       <AppStatusBar />
       <AppLockGate>
         <TourProvider>
-          <NavigationContainer ref={navigationRef}>
-            {pendingPasswordRecovery ? <RecoveryNavigator /> : session && profile ? <AppNavigator /> : <AuthNavigator />}
-          </NavigationContainer>
-          <TourOverlay />
+          <PasscodeProvider>
+            <NavigationContainer ref={navigationRef}>
+              {pendingPasswordRecovery ? <RecoveryNavigator /> : session && profile ? <AppNavigator /> : <AuthNavigator />}
+            </NavigationContainer>
+            <TourOverlay />
+          </PasscodeProvider>
         </TourProvider>
       </AppLockGate>
     </ThemeProvider>

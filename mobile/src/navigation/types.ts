@@ -62,4 +62,17 @@ export type AppStackParamList = {
   // acceptance status/re-consent in addition to the same document
   // AuthStackParamList's pre-auth Terms route renders.
   Terms: undefined;
+  // Mobile-only security passcode (module33). `mode` defaults to
+  // 'enroll' (first-time creation, also used for an existing account
+  // that has never enrolled); 'change' requires an already-active
+  // protected-access grant; 'forgot' asks for the account password
+  // instead. `returnTo` is only meaningful for 'enroll' — where an
+  // unenrolled user should land once enrollment succeeds (e.g. back into
+  // the Report Incident flow they were trying to reach).
+  CreateSecurityPasscode: { mode?: 'enroll' | 'change' | 'forgot'; returnTo?: 'Tabs' | 'ReportIncident' } | undefined;
+  // Gates case/report content behind a fresh passcode verification.
+  // `returnTo` names the route to land on after a successful verify —
+  // typed loosely (route name + its own params) since this is a generic
+  // redirect target shared by several different case-content routes.
+  VerifySecurityPasscode: { returnTo: { screen: keyof AppStackParamList; params?: Record<string, unknown> } };
 };

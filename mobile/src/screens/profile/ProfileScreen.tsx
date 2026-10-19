@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePasscode } from '../../contexts/PasscodeContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import { readFileAsArrayBuffer } from '../../lib/uploadFile';
@@ -63,6 +64,7 @@ export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Profile'>>();
   const { palette } = useTheme();
   const { session, profile, survivor, refreshProfile, signOut } = useAuth();
+  const { enrolled: passcodeEnrolled } = usePasscode();
   const { replay } = useTour();
 
   // The tour's spotlight targets (bottom-tab icons, the Report Incident
@@ -698,6 +700,25 @@ export function ProfileScreen() {
           accessibilityLabel="Change Password"
         >
           <Text style={[styles.navRowLabel, { color: palette.text }]}>Change Password</Text>
+          <Ionicons name="chevron-forward" size={18} color={palette.textMuted} />
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (passcodeEnrolled) {
+              navigation.navigate('VerifySecurityPasscode', {
+                returnTo: { screen: 'CreateSecurityPasscode', params: { mode: 'change' } },
+              });
+            } else {
+              navigation.navigate('CreateSecurityPasscode', { mode: 'enroll' });
+            }
+          }}
+          style={styles.navRow}
+          accessibilityRole="button"
+          accessibilityLabel="Security Passcode"
+        >
+          <Text style={[styles.navRowLabel, { color: palette.text }]}>
+            {passcodeEnrolled ? 'Security Passcode' : 'Set Up Security Passcode'}
+          </Text>
           <Ionicons name="chevron-forward" size={18} color={palette.textMuted} />
         </Pressable>
       </Card>

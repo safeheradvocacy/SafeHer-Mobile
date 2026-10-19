@@ -25,7 +25,7 @@ import RAnimated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, wit
 import { colors, spacing, typography, radius } from '../../theme/theme';
 import { ClaySurface, clayShadow, ClayPalette } from '../../theme/clay';
 import { PrimaryButton, PressableScale, IoniconName, useReducedMotion, FadeInUp } from '../../components/ui';
-import { LogoMark } from '../../components/branding/LogoMark';
+import { LogoMark, LogoFull } from '../../components/branding/LogoMark';
 import { AuthStackParamList } from '../../navigation/types';
 import { markOnboardingComplete } from '../../lib/onboarding';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -127,19 +127,52 @@ function FloatingDot({ tint, size = 9, delay = 0, style, reduced }: { tint: stri
   );
 }
 
+/**
+ * Shown between the native splash (expo-splash-screen, configured in
+ * app.config.ts) hiding and the app's real content becoming ready —
+ * covers three separate "still figuring out where to route" moments
+ * (RootNavigator's own session check, AuthNavigator's onboarding-complete
+ * check, AppNavigator's passcode-enrollment check), never a fixed-length
+ * "boot sequence" of its own.
+ *
+ * Redesigned from a full-screen navy/blue/accent gradient (heavy,
+ * decorative, and — significant in its own right — visually inconsistent
+ * with the native splash screen it follows, which already sits on
+ * colors.background, producing a visible color flash at the handoff) to
+ * a plain colors.background screen matching the native splash exactly,
+ * so there is no flash at all between the two anymore. White/near-white
+ * is also the only treatment that works with the real logo asset
+ * (safesapce_logo.png) without modifying it: that file has an opaque
+ * white background baked in (no transparency), so anywhere other than a
+ * white/near-white surface would show a visible box around it.
+ *
+ * Deliberately logo + "SafeSpace" text together, not the combined
+ * logo-with-wordmark asset — that would duplicate the brand name right
+ * under itself.
+ */
 export function SplashScreen() {
+  // Matches this file's own established pattern (Onboarding/Welcome below
+  // both read insets the same way) rather than introducing a different
+  // SafeAreaView-based approach just for this screen. Content is
+  // vertically centered and normally nowhere near the edges, but applying
+  // the real insets as padding (rather than assuming fixed spacing is
+  // always enough) is what actually satisfies "respect safe-area insets"
+  // on every device, not just the ones this was tested on.
+  const insets = useSafeAreaInsets();
   return (
-    <LinearGradient
-      colors={[colors.primaryDark, colors.primary, colors.accent]}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
-      style={styles.splash}
-    >
-      <StatusBar style="light" />
-      <Text style={styles.brand}>SafeSpace</Text>
-      <Text style={styles.tagline}>Safety • Trust • Protection • Compassion • Hope</Text>
-      <ActivityIndicator style={{ marginTop: spacing.xl }} color={colors.white} />
-    </LinearGradient>
+    <View style={[styles.splash, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <StatusBar style="dark" />
+      <View style={styles.splashBrandGroup}>
+        {/* The full mark+wordmark lockup as one image — no separate
+            "SafeSpace" heading beside/beneath it, since the asset already
+            bakes the name in. This light background is exactly where that
+            asset's blue-toned wordmark actually has contrast (unlike the
+            app's own blue brand surfaces — see LogoMark.tsx). */}
+        <LogoFull width={180} />
+        <Text style={styles.tagline}>Safety • Trust • Protection • Compassion • Hope</Text>
+        <ActivityIndicator style={styles.splashLoader} color={colors.primary} />
+      </View>
+    </View>
   );
 }
 
@@ -514,69 +547,26 @@ export function OnboardingScreen() {
   );
 }
 
-// The old translucent ring halo (9-17% opacity white circles) read as
-// barely-there against the purple hero — nowhere near enough contrast for
-// the logo to stand out. This is now a proper solid warm-white
-// claymorphic circle (the same ClaySurface material every other raised
-// element on this screen uses), sized with generous padding around the
-// mark so it reads as "logo set into a premium clay disc", not a busy
-// halo. Entrance: the circle fades in, the mark itself fades in slightly
-// after and scales 96% -> 100% with a soft spring settle. Under
-// reduce-motion both still fade in (just no scale, no float) rather than
-// snapping to their final state instantly.
-function WelcomeHeroLogo({ reduced }: { reduced: boolean }) {
-  const circleOpacity = useSharedValue(0);
-  const markOpacity = useSharedValue(0);
-  const markScale = useSharedValue(reduced ? 1 : 0.96);
-
-  useEffect(() => {
-    if (reduced) {
-      circleOpacity.value = withTiming(1, { duration: 220 });
-      markOpacity.value = withTiming(1, { duration: 220 });
-      return;
-    }
-    circleOpacity.value = withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) });
-    markOpacity.value = withDelay(90, withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) }));
-    markScale.value = withDelay(90, withSpring(1, { damping: 16, stiffness: 150, mass: 0.7 }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
-
-  const circleStyle = useAnimatedStyle(() => ({ opacity: circleOpacity.value }));
-  const markStyle = useAnimatedStyle(() => ({
-    opacity: markOpacity.value,
-    transform: [{ scale: markScale.value }],
-  }));
-
-  return (
-    <View style={styles.heroIllustrationRing}>
-      <RAnimated.View style={circleStyle}>
-        <ClaySurface
-          radius={74}
-          tint={colors.surface}
-          shadowTint={colors.primaryDark}
-          intensity="md"
-          style={styles.logoCircleShadow}
-          innerStyle={styles.clayCircleInner}
-          highlightOpacity={0.38}
-        >
-          <RAnimated.View style={markStyle}>
-            <Float reduced={reduced} distance={2} duration={3600}>
-              <LogoMark size="lg" />
-            </Float>
-          </RAnimated.View>
-        </ClaySurface>
-      </RAnimated.View>
-      <FloatingDot tint="#FFFFFF" size={7} delay={200} reduced={reduced} style={styles.heroDotTopLeft} />
-      <FloatingDot tint={colors.accent} size={5} delay={900} reduced={reduced} style={styles.heroDotBottomLeft} />
-    </View>
-  );
-}
+// Replaced the old "logo set into a premium clay disc" treatment — a
+// 148x148 white claymorphic circle plus two floating accent dots behind a
+// 28px mark — with the mark shown directly, at a size that's actually
+// legible on its own, per the minimalist-redesign brief's explicit
+// "remove the oversized white circle around the logo." No wrapping
+// surface, no decorative dots; LogoMark is already a crisp PNG that reads
+// fine straight on the solid-blue hero below.
 
 // A "How we can help" row: press feedback is a coordinated three-part
 // response — the row itself compresses and nudges down slightly, its
 // icon chip's clay shadow softens (reads as "pressed into the surface"),
 // and the icon scales down a touch further than the row for a subtle
 // extra pop. Release settles back with a spring, never a hard snap.
+// Simplified per the minimalist-redesign brief: was a tinted, shadowed,
+// 40x40 ClaySurface "icon container" with its own press animation
+// (scale + shadow softening) distinct from the row's. Now a single plain
+// icon at text size, directly in the row — still present (it does help
+// tell the three options apart at a glance, which the brief's own "use a
+// small icon only when it helps distinguish" test allows), just not a
+// decorative container competing with the text for attention.
 function ServiceRow({
   meta,
   copy,
@@ -598,37 +588,13 @@ function ServiceRow({
   delay: number;
   onPress: () => void;
 }) {
-  const restIconShadowOpacity = clayShadow(tint, 'sm').shadowOpacity;
   const scale = useSharedValue(1);
-  const iconScale = useSharedValue(1);
-  const iconShadowOpacity = useSharedValue<number>(restIconShadowOpacity);
-
-  // Rows compress and their icon settles inward (scales down + its clay
-  // shadow softens) — no downward nudge, that's reserved for the primary
-  // CTA so buttons and flat clay rows read as two distinct, consistent
-  // "weights" within the same material system rather than everything
-  // moving identically.
-  const rowStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const iconAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: iconScale.value }],
-    shadowOpacity: iconShadowOpacity.value,
-  }));
-
+  const rowStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const pressIn = () => {
-    if (!reduced) {
-      scale.value = withTiming(0.98, { duration: 90 });
-      iconScale.value = withTiming(0.9, { duration: 90 });
-    }
-    iconShadowOpacity.value = withTiming(0.04, { duration: reduced ? 60 : 90 });
+    if (!reduced) scale.value = withTiming(0.98, { duration: 90 });
   };
   const pressOut = () => {
-    if (!reduced) {
-      scale.value = withSpring(1, { damping: 15, stiffness: 180 });
-      iconScale.value = withSpring(1, { damping: 13, stiffness: 200 });
-    }
-    iconShadowOpacity.value = withTiming(restIconShadowOpacity, { duration: reduced ? 90 : 180 });
+    if (!reduced) scale.value = withSpring(1, { damping: 15, stiffness: 180 });
   };
 
   return (
@@ -642,18 +608,7 @@ function ServiceRow({
         accessibilityHint={`Shows more information about ${copy.title}`}
       >
         <RAnimated.View style={[styles.featureRow, !isLast && { borderBottomWidth: 1, borderBottomColor: palette.border }, rowStyle]}>
-          <ClaySurface
-            radius={20}
-            tint={tint + '1A'}
-            shadowTint={tint}
-            intensity="sm"
-            style={styles.featureIconShadow}
-            innerStyle={styles.clayCircleInner}
-            highlightOpacity={0.24}
-            animatedStyle={iconAnimatedStyle}
-          >
-            <Ionicons name={meta.icon} size={19} color={tint} />
-          </ClaySurface>
+          <Ionicons name={meta.icon} size={20} color={tint} style={styles.featureRowIcon} />
           <View style={styles.featureRowText}>
             <Text style={[styles.featureRowTitle, { color: palette.text }]}>{copy.title}</Text>
             <Text style={[styles.featureRowDesc, { color: bodyColor }]}>{copy.short}</Text>
@@ -739,13 +694,13 @@ function EmergencySheet({
   );
 }
 
-// The "Need help now?" panel — deliberately NOT a red-outlined/glowing
-// alert box. Urgency is carried by the blush fill, a darker pink accent
-// strip, and red-toned icon/title text; the ambient shadow itself stays
-// neutral (palette.primaryDark, same as every other card on this screen)
-// so the card never reads as having a glowing red border. Tactile press
-// feedback matches the primary CTA's language: a slight downward nudge
-// and a softened shadow, not just an opacity dim.
+// Simplified per the minimalist-redesign brief: was a ClaySurface-in-
+// ClaySurface (outer shadow-bearing card + a separate white clay circle
+// just for the icon), a diagonal two-stop gradient wash, and a solid
+// accent strip down the left edge. Urgency is now carried the way the
+// brief asks for — "distinct enough to communicate urgency, but [without]
+// excessive red decoration" — by one flat light-red fill and red-toned
+// icon/text, nothing layered on top of that.
 function EmergencyBanner({
   palette,
   strings,
@@ -759,31 +714,13 @@ function EmergencyBanner({
   delay: number;
   onPress: () => void;
 }) {
-  const restShadowOpacity = clayShadow(palette.primaryDark, 'sm').shadowOpacity;
   const scale = useSharedValue(1);
-  const shadowOpacity = useSharedValue<number>(restShadowOpacity);
-
-  // Cards compress and soften their shadow on press but don't nudge
-  // downward — that vertical "physical push" is reserved for the primary
-  // CTA (see PrimaryPressable) so buttons read as more dimensional than
-  // flat clay surfaces, a deliberate distinction rather than every
-  // pressable element moving the same way.
-  const cardAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    shadowOpacity: shadowOpacity.value,
-  }));
-
+  const cardAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const pressIn = () => {
-    if (!reduced) {
-      scale.value = withTiming(0.98, { duration: 100 });
-    }
-    shadowOpacity.value = withTiming(0.05, { duration: reduced ? 70 : 100 });
+    if (!reduced) scale.value = withTiming(0.98, { duration: 100 });
   };
   const pressOut = () => {
-    if (!reduced) {
-      scale.value = withSpring(1, { damping: 16, stiffness: 190 });
-    }
-    shadowOpacity.value = withTiming(restShadowOpacity, { duration: reduced ? 100 : 200 });
+    if (!reduced) scale.value = withSpring(1, { damping: 16, stiffness: 190 });
   };
 
   return (
@@ -796,63 +733,36 @@ function EmergencyBanner({
         accessibilityLabel={strings.emergencyTitle}
         accessibilityHint="Opens emergency help options, including calling 911"
       >
-        {/* A deliberate, controlled two-stop rose gradient — not the
-            generic diagonal white-gloss highlight every other ClaySurface
-            gets (highlightOpacity=0 below), which read as a messy overlay
-            once layered on top of a tinted fill. Just a calm light-rose
-            to slightly-warmer-rose wash, plus a crisp accent strip. */}
-        <ClaySurface
-          radius={20}
-          tint="transparent"
-          shadowTint={palette.primaryDark}
-          intensity="sm"
-          style={styles.safetyBannerShadow}
-          innerStyle={styles.safetyBannerInner}
-          highlightOpacity={0}
-          animatedStyle={cardAnimatedStyle}
+        <RAnimated.View
+          style={[styles.safetyBanner, { backgroundColor: palette.danger + '12', borderColor: palette.danger + '33' }, cardAnimatedStyle]}
         >
-          <LinearGradient
-            colors={[palette.danger + '0F', palette.danger + '1C']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={[styles.safetyAccentStrip, { backgroundColor: palette.dangerDark }]} />
-          <ClaySurface
-            radius={18}
-            tint={palette.white}
-            shadowTint={palette.dangerDark}
-            intensity="sm"
-            style={styles.safetyIconShadow}
-            innerStyle={styles.clayCircleInner}
-            highlightOpacity={0.28}
-          >
-            <Ionicons name="alert-circle" size={19} color={palette.dangerDark} />
-          </ClaySurface>
+          <Ionicons name="alert-circle" size={20} color={palette.dangerDark} />
           <View style={styles.safetyText}>
             <Text style={[styles.safetyTitle, { color: palette.dangerDark }]}>{strings.emergencyTitle}</Text>
             <Text style={[styles.safetyBody, { color: palette.text }]}>{strings.emergencyBody}</Text>
           </View>
           <Ionicons name="chevron-forward" size={15} color={palette.dangerDark} />
-        </ClaySurface>
+        </RAnimated.View>
       </Pressable>
     </FadeInUp>
   );
 }
 
+// Minimalist redesign — see the brief this implements for the full
+// rationale behind each removal; summarized at each change below rather
+// than repeated per element. Settings access: this screen no longer has
+// its own gear button (brief: "remove floating settings buttons... not
+// needed on the welcome screen"), but accessibility/language/appearance
+// preferences remain exactly one tap away via AuthHeader's settings
+// button on Login/Register — not removed from the app, just not
+// duplicated on this specific first screen.
 export function WelcomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList, 'Welcome'>>();
   const insets = useSafeAreaInsets();
   const systemReducedMotion = useReducedMotion();
-  // The hero banner keeps a fixed brand-blue gradient in both themes
-  // (a deliberate choice — see welcomeHero below), so unlike Onboarding's
-  // header this screen doesn't need `isDark` to pick a status bar style.
   const { palette, prefs } = useTheme();
-  const [showSettings, setShowSettings] = useState(false);
   const [activeFeature, setActiveFeature] = useState<FeatureKey | null>(null);
   const [showEmergency, setShowEmergency] = useState(false);
-  const scrollY = useRef(new Animated.Value(0)).current;
 
   const reduced = systemReducedMotion || prefs.reduceMotion;
   const strings = useMemo(() => getWelcomeStrings(prefs.language), [prefs.language]);
@@ -862,72 +772,47 @@ export function WelcomeScreen() {
   const goToRegister = () => navigation.navigate('Register');
   const goToLogin = () => navigation.navigate('Login');
 
-  // Extremely subtle — the hero eases from 100% to 94% over the first
-  // ~140px of scroll, then holds. Pure transform, so this can run on the
-  // native/UI thread instead of the JS thread.
-  const heroScale = scrollY.interpolate({ inputRange: [0, 140], outputRange: [1, 0.94], extrapolate: 'clamp' });
-
   const activeFeatureMeta = activeFeature ? FEATURE_META.find((f) => f.key === activeFeature) : null;
   const activeFeatureCopy = activeFeature ? strings.features[activeFeature] : null;
 
   return (
     <View style={[styles.screen, { backgroundColor: palette.background }]}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
-      {/* Content scrolls independently of the pinned CTA footer below, so
-          nothing clips or pushes buttons off-screen on smaller phones no
-          matter how tall this section grows. */}
-      <Animated.ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: spacing.lg }}
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-        scrollEventThrottle={16}
-      >
-        <Animated.View style={{ transform: [{ scale: heroScale }] }}>
-          <LinearGradient
-            colors={[colors.primaryDark, colors.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.welcomeHero, { paddingTop: insets.top + spacing.sm }]}
-          >
-            <Float reduced={reduced} distance={4} duration={5400} style={styles.heroDecoRingLarge} />
-            <View style={styles.heroDecoRingSmall} />
-            <Float reduced={reduced} distance={3} duration={4700} style={styles.heroDecoRingTiny} />
-            <View style={styles.heroDecoRingMicro} />
-
-            <View style={styles.heroTopRow}>
-              <View style={{ width: 48 }} />
-              <PressableScale onPress={() => setShowSettings(true)} pressScale={0.94} accessibilityLabel={strings.settingsTitle} accessibilityHint="Opens accessibility, appearance, language, and privacy options">
-                <ClaySurface radius={24} tint="rgba(255,255,255,0.18)" shadowTint={colors.primaryDark} intensity="sm" style={styles.heroSettingsButton} innerStyle={styles.clayCircleInner} highlightOpacity={0.14}>
-                  <Ionicons name="settings-outline" size={20} color={colors.white} />
-                </ClaySurface>
-              </PressableScale>
-            </View>
-
-            <View style={{ alignItems: 'center' }}>
-              <WelcomeHeroLogo reduced={reduced} />
-            </View>
-            <FadeInUp reduced={reduced} delay={140} style={{ alignItems: 'center' }}>
-              <Text style={styles.welcomeBrand}>SafeSpace</Text>
-            </FadeInUp>
-            <FadeInUp reduced={reduced} delay={220} style={{ alignItems: 'center' }}>
-              <Text style={styles.welcomeHeroText}>{strings.heroTagline}</Text>
-            </FadeInUp>
-          </LinearGradient>
-        </Animated.View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.lg }} showsVerticalScrollIndicator={false}>
+        {/* Was a solid colors.primary (blue) fill behind LogoMark (the
+            symbol-only asset, which has an OPAQUE white square baked in) —
+            that combination rendered an unwanted white square sitting on
+            top of the blue hero. Now the complete mark+wordmark lockup
+            (LogoFull, genuinely transparent) on the same light background
+            as the rest of the screen: no added container, no duplicate
+            "SafeSpace" heading beside it (the asset already has the name),
+            and no contrast problem, since this asset's blue-toned wordmark
+            only reads against a light surface — see LogoMark.tsx. */}
+        <View style={[styles.welcomeHero, { paddingTop: insets.top + spacing.md, borderBottomColor: palette.border }]}>
+          <FadeInUp reduced={reduced} delay={0} style={{ alignItems: 'center' }}>
+            <LogoFull width={170} />
+          </FadeInUp>
+          <FadeInUp reduced={reduced} delay={100} style={{ alignItems: 'center' }}>
+            <Text style={styles.welcomeHeroText}>{strings.heroTagline}</Text>
+          </FadeInUp>
+        </View>
 
         <View style={styles.welcomeContent}>
-          <FadeInUp reduced={reduced} delay={270}>
+          <FadeInUp reduced={reduced} delay={200}>
             <Text style={[styles.welcomeHeadline, { color: palette.text, fontSize: 24 * titleFontScale }]}>{strings.headline}</Text>
             <Text style={[styles.welcomeBody, { color: bodyColor }]}>{strings.supporting}</Text>
           </FadeInUp>
 
-          <FadeInUp reduced={reduced} delay={340} style={{ marginTop: spacing.lg }}>
+          <FadeInUp reduced={reduced} delay={260} style={{ marginTop: spacing.lg }}>
             <Text style={[styles.sectionLabel, { color: palette.textMuted }]}>{strings.howWeCanHelp}</Text>
           </FadeInUp>
 
-          <ClaySurface radius={20} tint={palette.surface} shadowTint={palette.primaryDark} intensity="sm" style={{ marginTop: spacing.sm }} innerStyle={styles.featureGroupInner}>
+          {/* The three support options as simple rows in one plain
+              container — a thin border instead of a clay shadow, which
+              is enough to read as "one grouped card" on a white screen
+              without adding another decorative effect. */}
+          <FadeInUp reduced={reduced} delay={300} style={[styles.featureGroup, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             {FEATURE_META.map((meta, i) => (
               <ServiceRow
                 key={meta.key}
@@ -938,28 +823,24 @@ export function WelcomeScreen() {
                 palette={palette}
                 bodyColor={bodyColor}
                 reduced={reduced}
-                delay={380 + i * 100}
+                delay={340 + i * 80}
                 onPress={() => setActiveFeature(meta.key)}
               />
             ))}
-          </ClaySurface>
+          </FadeInUp>
 
-          <EmergencyBanner palette={palette} strings={strings} reduced={reduced} delay={700} onPress={() => setShowEmergency(true)} />
+          <EmergencyBanner palette={palette} strings={strings} reduced={reduced} delay={560} onPress={() => setShowEmergency(true)} />
         </View>
-      </Animated.ScrollView>
+      </ScrollView>
 
-      <FadeInUp reduced={reduced} delay={780} style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.border, paddingBottom: insets.bottom + spacing.md }]}>
+      <FadeInUp reduced={reduced} delay={620} style={[styles.footer, { backgroundColor: palette.background, borderTopColor: palette.border, paddingBottom: insets.bottom + spacing.md }]}>
         <PrimaryButton title={strings.createAccount} onPress={goToRegister} size="lg" reduced={reduced} />
         <PrimaryButton title={strings.logIn} variant="tertiary" onPress={goToLogin} reduced={reduced} />
-        <View style={styles.trustIndicator}>
-          <ClaySurface radius={13} tint={palette.primaryLight} shadowTint={palette.primaryDark} intensity="sm" style={styles.trustIconShadow} innerStyle={styles.clayCircleInner} highlightOpacity={0.28}>
-            <Ionicons name="lock-closed" size={12} color={palette.primary} />
-          </ClaySurface>
-          <View style={styles.trustIndicatorText}>
-            <Text style={[styles.trustIndicatorTitle, { color: palette.text }]}>{strings.privacyTitle}</Text>
-            <Text style={[styles.trustIndicatorBody, { color: palette.textMuted }]}>{strings.privacyBody}</Text>
-          </View>
-        </View>
+        {/* One line, no icon — the privacy promise is already made once,
+            here, not repeated as a separate header/card claim elsewhere
+            on this screen (brief: "do not repeat the same promise in the
+            header, support cards, and footer"). */}
+        <Text style={[styles.trustIndicatorBody, { color: palette.textMuted }]}>{strings.privacyBody}</Text>
       </FadeInUp>
 
       {activeFeatureMeta && activeFeatureCopy ? (
@@ -984,17 +865,21 @@ export function WelcomeScreen() {
           goToRegister();
         }}
       />
-
-      <SettingsSheet visible={showSettings} onClose={() => setShowSettings(false)} title={strings.settingsTitle} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  splash: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  brand: { ...typography.display, fontSize: 44, color: colors.white, letterSpacing: 0.5 },
-  tagline: { ...typography.caption, color: colors.white, opacity: 0.9, marginTop: spacing.sm, textAlign: 'center' },
+  splash: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, backgroundColor: colors.background },
+  // The logo, brand name, tagline, and loading indicator are one visual
+  // group (see the component's own comment) — centered together as a
+  // single flex column rather than each positioned independently, so
+  // their relative spacing stays correct across screen sizes instead of
+  // drifting apart on taller devices.
+  splashBrandGroup: { alignItems: 'center', maxWidth: 320 },
+  tagline: { ...typography.caption, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' },
+  splashLoader: { marginTop: spacing.xl },
 
   // ---- Header (Back / Skip / Settings) ----
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, minHeight: 56 },
@@ -1133,76 +1018,19 @@ const styles = StyleSheet.create({
 
   ctaRow: { paddingHorizontal: spacing.lg },
 
+  // Plain light surface, same background as the rest of the screen — see
+  // this screen's own render comment for why a colored (blue) fill was
+  // dropped: it's the one background the complete logo's own blue-toned
+  // wordmark doesn't have contrast against. A thin bottom border (color
+  // set at the call site) is the only separation from the content below.
   welcomeHero: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
-    overflow: 'hidden',
     alignItems: 'center',
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
   },
-  heroTopRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  heroSettingsButton: { width: 48, height: 48 },
-  // Hero focal point is the real logo now (see WelcomeHeroLogo) — this
-  // ring just centers the white logo circle and anchors the two minimal
-  // floating dots. Sized to exactly match the circle below so nothing
-  // clips or leaves stray extra space in the hero's flow.
-  heroIllustrationRing: { width: 148, height: 148, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-  // The white claymorphic backdrop behind the logo (see WelcomeHeroLogo)
-  // — the single biggest fix for the mark blending into the purple hero.
-  // Warm-white fill, a real clay shadow, and a soft inner gloss, same
-  // material language as every other raised surface on this screen.
-  logoCircleShadow: { width: 148, height: 148 },
-  heroDotTopLeft: { position: 'absolute', top: 6, left: 12 },
-  heroDotBottomLeft: { position: 'absolute', bottom: 8, left: 2 },
-  heroDecoRingLarge: {
-    position: 'absolute',
-    top: -30,
-    right: -30,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  heroDecoRingSmall: {
-    position: 'absolute',
-    top: 40,
-    right: 50,
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  // A third, smaller ring lower-left balances the composition without
-  // adding a second visual "system" — same line-art language, just
-  // another size/position so the hero doesn't read as one lonely motif
-  // stuck in a corner.
-  heroDecoRingTiny: {
-    position: 'absolute',
-    bottom: 18,
-    left: -20,
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  // A fourth, smallest ring for extra layering depth — deliberately
-  // static (no float) so not every element drifts at once.
-  heroDecoRingMicro: {
-    position: 'absolute',
-    top: 26,
-    left: 26,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-  },
-  welcomeBrand: { ...typography.display, fontSize: 28, color: colors.white, letterSpacing: 0.3, textAlign: 'center' },
-  welcomeHeroText: { ...typography.body, color: 'rgba(255,255,255,0.92)', marginTop: 4, textAlign: 'center' },
+  welcomeHeroText: { ...typography.body, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
 
   welcomeContent: {
     paddingHorizontal: spacing.xl,
@@ -1212,24 +1040,20 @@ const styles = StyleSheet.create({
   welcomeBody: { ...typography.body },
 
   sectionLabel: { ...typography.bodyMedium, marginBottom: spacing.sm },
-  featureGroupInner: { paddingHorizontal: spacing.sm },
+  // One plain white container, a thin border instead of a clay shadow —
+  // still reads as "one grouped card" without a second decorative effect.
+  featureGroup: { borderRadius: radius.lg, borderWidth: 1, paddingHorizontal: spacing.sm },
   featureRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  featureIconShadow: { width: 40, height: 40 },
-  featureRowText: { flex: 1, marginLeft: spacing.sm, marginRight: spacing.sm },
+  featureRowIcon: { marginRight: spacing.sm },
+  featureRowText: { flex: 1, marginRight: spacing.sm },
   featureRowTitle: { ...typography.bodyMedium, marginBottom: 2 },
   featureRowDesc: { ...typography.caption, lineHeight: 17 },
 
-  // Distinguishable without being alarming: a soft blush clay surface
-  // with a darker pink accent strip along the leading edge — urgency
-  // comes from fill/icon/text color, never from a colored ambient
-  // shadow (that read as a glowing red outline, which is exactly what
-  // this is deliberately avoiding). The shadow itself stays neutral,
-  // via shadowTint={palette.primaryDark} at the call site, same as
-  // every other card on this screen.
-  safetyBannerShadow: { borderRadius: 20 },
-  safetyBannerInner: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, paddingLeft: spacing.md + 6 },
-  safetyAccentStrip: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
-  safetyIconShadow: { width: 36, height: 36 },
+  // One flat tinted row (background/border color set at the call site) —
+  // was a shadowed card with a gradient wash, an accent strip, and a
+  // separate clay circle just for the icon. Urgency now comes from the
+  // fill/icon/text color alone.
+  safetyBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, borderWidth: 1, padding: spacing.md },
   safetyText: { flex: 1, marginLeft: spacing.sm, marginRight: spacing.sm },
   safetyTitle: { ...typography.bodyMedium, marginBottom: 2 },
   safetyBody: { ...typography.caption, lineHeight: 17 },
@@ -1239,14 +1063,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: 1,
   },
-  trustIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.xs,
-  },
-  trustIconShadow: { width: 26, height: 26 },
-  trustIndicatorText: { flex: 1, marginLeft: spacing.sm },
-  trustIndicatorTitle: { ...typography.caption, fontFamily: 'Inter_600SemiBold' as any, color: colors.text },
-  trustIndicatorBody: { ...typography.caption, color: colors.textMuted, marginTop: 1, lineHeight: 16 },
+  // One line, no icon (see WelcomeScreen's own comment on this).
+  trustIndicatorBody: { ...typography.caption, color: colors.textMuted, marginTop: spacing.md, lineHeight: 16 },
 });

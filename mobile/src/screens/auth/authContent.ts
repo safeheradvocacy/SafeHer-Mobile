@@ -8,7 +8,6 @@ import type { AppLanguage } from '../../lib/preferences';
 // these terms in everyday apps.
 
 export interface LoginStrings {
-  reassurance: string;
   title: string;
   subtitle: string;
   emailLabel: string;
@@ -22,7 +21,6 @@ export interface LoginStrings {
   signingIn: string;
   noAccount: string;
   createOne: string;
-  privacyHeading: string;
   privacyBody: string;
 }
 
@@ -165,7 +163,6 @@ export interface EmailVerificationStrings {
 
 const LOGIN: Record<AppLanguage, LoginStrings> = {
   en: {
-    reassurance: "You are not alone. We're here to help.",
     title: 'Welcome back',
     subtitle: 'Log in to continue to SafeSpace.',
     emailLabel: 'Email',
@@ -179,11 +176,9 @@ const LOGIN: Record<AppLanguage, LoginStrings> = {
     signingIn: 'Signing in...',
     noAccount: "Don't have an account? ",
     createOne: 'Create one',
-    privacyHeading: 'Your privacy matters',
-    privacyBody: 'Your information is handled securely and confidentially.',
+    privacyBody: 'Your information is handled securely.',
   },
   fil: {
-    reassurance: 'Hindi ka nag-iisa. Nandito kami para tumulong.',
     title: 'Maligayang pagbabalik',
     subtitle: 'Mag-log in para magpatuloy sa SafeSpace.',
     emailLabel: 'Email',
@@ -197,8 +192,7 @@ const LOGIN: Record<AppLanguage, LoginStrings> = {
     signingIn: 'Nagla-log in...',
     noAccount: 'Wala pang account? ',
     createOne: 'Gumawa ng isa',
-    privacyHeading: 'Mahalaga ang iyong privacy',
-    privacyBody: 'Ligtas at kumpidensyal na hinahawakan ang iyong impormasyon.',
+    privacyBody: 'Ligtas na hinahawakan ang iyong impormasyon.',
   },
 };
 

@@ -1,9 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
-import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { AlertMessage, Card, EmptyState, StatusBadge } from '../../components/ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import { usePasscode } from '../../contexts/PasscodeContext';
 import { radius, spacing, typography } from '../../theme/theme';
 import { AppStackParamList } from '../../navigation/types';
 import type { ClientCaseProjection } from '../../types/database.types';
@@ -20,8 +22,10 @@ import type { ClientCaseProjection } from '../../types/database.types';
  */
 export function LinkedCaseDetailScreen() {
   const { palette } = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'LinkedCaseDetail'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'LinkedCaseDetail'>>();
   const { caseId } = route.params;
+  const { hasActiveGrant, refreshGrantStatus } = usePasscode();
 
   const [data, setData] = useState<ClientCaseProjection | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,9 +62,36 @@ export function LinkedCaseDetailScreen() {
       // device followed by a different account signing in, or the
       // admin later revoking/rejecting access, must never leave a stale
       // cached view on screen (module14's session-security requirement).
-      load();
-    }, [load])
+      // The passcode grant check below is the same pattern
+      // CaseDetailScreen/CaseListScreen use — this is the one real
+      // content-bearing read in the QR/walk-in flow (get_client_case
+      // itself also independently requires an active grant server-side,
+      // module33 — this is the matching UI-layer pre-check so the screen
+      // doesn't even attempt the RPC, rather than attempting it and
+      // showing a misleading "not authorized" for what's actually "not
+      // verified yet").
+      let cancelled = false;
+      refreshGrantStatus().then((active) => {
+        if (cancelled) return;
+        if (!active) {
+          navigation.navigate('VerifySecurityPasscode', { returnTo: { screen: 'LinkedCaseDetail', params: { caseId } } });
+          return;
+        }
+        load();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [load, refreshGrantStatus, navigation, caseId])
   );
+
+  // Phase 8: same re-lock-while-open pattern as CaseDetailScreen.
+  useEffect(() => {
+    if (!hasActiveGrant && data) {
+      setData(null);
+      navigation.navigate('VerifySecurityPasscode', { returnTo: { screen: 'LinkedCaseDetail', params: { caseId } } });
+    }
+  }, [hasActiveGrant]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (

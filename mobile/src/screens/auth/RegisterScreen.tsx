@@ -18,6 +18,7 @@ import {
   DropdownInput,
 } from '../../components/ui';
 import { AuthHeader } from '../../components/auth/AuthHeader';
+import { LogoMark } from '../../components/branding/LogoMark';
 import { MunicipalityPicker, MunicipalityLoadState } from '../../components/MunicipalityPicker';
 import { BarangayPicker } from '../../components/BarangayPicker';
 import { LocationMapPicker, type LocationPickerResult } from '../../components/LocationMapPicker';
@@ -336,6 +337,9 @@ export function RegisterScreen() {
         {step === 0 ? (
           <View>
             <FadeInUp reduced={reduced}>
+              <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
+                <LogoMark size="lg" />
+              </View>
               <Text style={[styles.title, { color: palette.text, fontSize: 22 * titleFontScale }]}>{strings.step0Title}</Text>
               <Text style={[styles.subtitle, { color: bodyColor }]}>{strings.stepTitles[0]}</Text>
             </FadeInUp>

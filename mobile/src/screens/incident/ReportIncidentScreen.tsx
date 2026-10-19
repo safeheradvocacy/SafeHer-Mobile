@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePasscode } from '../../contexts/PasscodeContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit, generateCaseNumber } from '../../lib/audit';
 import { preflightLocation, acquireSosLocation } from '../../lib/sosLocation';
@@ -69,6 +70,7 @@ export function ReportIncidentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'ReportIncident'>>();
   const { palette } = useTheme();
   const { profile } = useAuth();
+  const { enrolled: passcodeEnrolled } = usePasscode();
 
   const [survivorId, setSurvivorId] = useState<string | null>(null);
   const [municipalityId, setMunicipalityId] = useState<string | null>(null);
@@ -198,6 +200,20 @@ export function ReportIncidentScreen() {
       setError('Please verify your account before submitting an incident report.');
       return;
     }
+    // Same defense-in-depth reasoning as the identity-verification check
+    // above, added for the security-passcode requirement (module33) — the
+    // real enforcement is the case_reports RLS policy's
+    // has_security_passcode() clause; this just gives an accurate reason
+    // instead of a generic post-rejection guess. reportIncidentGuard.ts
+    // should already prevent an unenrolled account from reaching this
+    // screen at all, so reaching this specific branch means either a
+    // stale client build (reportIncidentGuard predates this check) or
+    // enrollment state changed after this screen was opened — either way,
+    // fail honestly rather than let the request reach the server.
+    if (passcodeEnrolled === false) {
+      setError('Please set up your SafeSpace security passcode before submitting an incident report.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -254,7 +270,19 @@ export function ReportIncidentScreen() {
         // that diagnosable from the Metro/Expo console.
         console.error('[ReportIncidentScreen] case_reports insert failed:', insertErr?.code, insertErr?.message, insertErr?.details);
         if (insertErr?.code === '42501' || insertErr?.message?.toLowerCase().includes('row-level security')) {
-          setError('Please verify your account before submitting an incident report.');
+          // Fixed alongside a live diagnosis: this used to always say
+          // "verify your account," which became actively misleading once
+          // the case_reports policy also started requiring passcode
+          // enrollment (module33) — an already-verified account hitting
+          // this exact branch for the passcode reason was being told the
+          // wrong thing. The two client-side pre-checks above (identity
+          // verification, then passcode) already cover the two REAL
+          // reasons this policy can reject an insert and show the
+          // specific one — reaching this fallback means the request was
+          // rejected for a reason this screen's own local state didn't
+          // predict (e.g. that state was stale), so the message stays
+          // deliberately generic rather than guessing which one again.
+          setError("Your account doesn't currently meet the requirements to submit a report. Please check your verification and security passcode status, then try again.");
         } else {
           setError('Could not submit your report. Please try again.');
         }
