@@ -1,0 +1,312 @@
+<!doctype html>
+<title>SafeSpace System Flow</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --header-bg: #e9ecf1;
+    --accent: #1f4e8c;
+    --stripe: #f1f3f7;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --header-bg: #2b2e33;
+      --accent: #8fb6ec;
+      --stripe: #26292e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --header-bg: #2b2e33;
+    --accent: #8fb6ec;
+    --stripe: #26292e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet { max-width: 1080px; margin: 0 auto; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 4px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 26px);
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .table-label {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 22px 0 0;
+  }
+  .table-caption {
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 16px;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 840px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--header-bg);
+    color: var(--ink);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th:last-child, td:last-child { border-right: none; }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .flow-cell { font-weight: 600; color: var(--accent); background: var(--stripe); width: 160px; }
+  .step-cell {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-muted);
+    width: 36px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .actor-cell { font-weight: 500; width: 190px; }
+  .action-cell { color: var(--ink); }
+
+  .legend {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+</style>
+
+<div class="sheet">
+  <p class="section-label">System Requirements</p>
+  <h1 class="fig-title">System Flow</h1>
+
+  <p class="note">
+    The sequence each primary SafeSpace process actually follows end to end, from the initiating actor's
+    action through the system's processing to the resulting outcome. Mirrors the workflows already shown in
+    the Use Case Diagram and Context Diagram, expressed here as an ordered sequence rather than a static
+    relationship.
+  </p>
+
+  <p class="table-label">Table 6</p>
+  <p class="table-caption">System Flow</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Flow</th>
+          <th>Step</th>
+          <th>Actor</th>
+          <th>Action / System Process</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="flow-cell" rowspan="4">Account Registration<br>&amp; Verification</td>
+          <td class="step-cell">1</td>
+          <td class="actor-cell">Survivor / Reporter</td>
+          <td class="action-cell">Submits personal information and a PSGC-based registered address (municipality, barangay, purok/sitio) through the mobile app.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">2</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Validates all required fields, creates the account through Supabase Auth, and provisions the linked survivor profile.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">3</td>
+          <td class="actor-cell">Survivor / Reporter</td>
+          <td class="action-cell">Optionally submits an identity-verification document from the Profile screen.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">4</td>
+          <td class="actor-cell">Municipal / Provincial Admin</td>
+          <td class="action-cell">Reviews the submitted document and approves or rejects the verification request.</td>
+        </tr>
+
+        <tr>
+          <td class="flow-cell" rowspan="5">Incident Report<br>Submission</td>
+          <td class="step-cell">1</td>
+          <td class="actor-cell">Survivor / Reporter</td>
+          <td class="action-cell">Completes the incident report form (case type, incident details, location) and submits it.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">2</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Validates the submission, generates a case number, and determines case ownership (barangay, municipal, or provincial) based on routing rules.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">3</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Notifies the responsible administrator(s) that a new case has been filed.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">4</td>
+          <td class="actor-cell">Barangay / Municipal / Provincial Admin</td>
+          <td class="action-cell">Reviews the case, updates its status, and assigns it as needed.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">5</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Logs each status change to the case history and notifies the survivor of the update.</td>
+        </tr>
+
+        <tr>
+          <td class="flow-cell" rowspan="5">Emergency SOS</td>
+          <td class="step-cell">1</td>
+          <td class="actor-cell">Survivor / Reporter</td>
+          <td class="action-cell">Triggers the Emergency SOS button and confirms the alert.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">2</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Captures the device's real-time location and creates an SOS alert record.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">3</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Delivers the alert to the police dashboard in real time via Supabase Realtime, with an audible and visual alert.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">4</td>
+          <td class="actor-cell">Police Officer</td>
+          <td class="action-cell">Acknowledges the alert and responds, updating its status as the situation is addressed.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">5</td>
+          <td class="actor-cell">Police Officer</td>
+          <td class="action-cell">Creates a law-enforcement referral linked to the alert when further action is required.</td>
+        </tr>
+
+        <tr>
+          <td class="flow-cell" rowspan="4">Shelter Request<br>&amp; Referral</td>
+          <td class="step-cell">1</td>
+          <td class="actor-cell">Survivor / Reporter</td>
+          <td class="action-cell">Browses available shelters and submits a shelter request, or an administrator refers an existing case to a shelter.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">2</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Routes the request or referral to the selected shelter's administrator.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">3</td>
+          <td class="actor-cell">Shelter Administrator</td>
+          <td class="action-cell">Reviews the request or referral and accepts or declines it.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">4</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Updates the request/referral status and notifies the requesting survivor or case owner of the outcome.</td>
+        </tr>
+
+        <tr>
+          <td class="flow-cell" rowspan="4">Case Referral<br>&amp; Escalation</td>
+          <td class="step-cell">1</td>
+          <td class="actor-cell">Barangay / Municipal Admin</td>
+          <td class="action-cell">Reviews a case within their jurisdiction and determines it requires escalation or referral.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">2</td>
+          <td class="actor-cell">Barangay / Municipal Admin</td>
+          <td class="action-cell">Refers the case to a higher administrative tier or to law enforcement, with a stated reason.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">3</td>
+          <td class="actor-cell">Receiving Admin / Police Officer</td>
+          <td class="action-cell">Reviews the referral and responds, accepting ownership or taking the requested action.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">4</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Records the referral outcome in the case's status history for full traceability.</td>
+        </tr>
+
+        <tr>
+          <td class="flow-cell" rowspan="3">Administration<br>&amp; System Management</td>
+          <td class="step-cell">1</td>
+          <td class="actor-cell">Provincial Admin</td>
+          <td class="action-cell">Creates and manages user accounts, municipality/barangay/shelter reference data, and system-wide settings.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">2</td>
+          <td class="actor-cell">System</td>
+          <td class="action-cell">Enforces each account's authorized role and jurisdiction through Row-Level Security on every request, independent of the interface.</td>
+        </tr>
+        <tr>
+          <td class="step-cell">3</td>
+          <td class="actor-cell">Municipal Admin / Provincial Staff</td>
+          <td class="action-cell">Generates reports and reviews audit logs for oversight and accountability.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="legend">Every status change and referral in these flows is recorded to the relevant history table, giving each case and SOS alert a complete, auditable timeline.</p>
+</div>

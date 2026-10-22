@@ -1,0 +1,228 @@
+<!doctype html>
+<title>SafeSpace System Modules</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --header-bg: #e9ecf1;
+    --accent: #1f4e8c;
+    --stripe: #f1f3f7;
+    --check: #2c6a4e;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --header-bg: #2b2e33;
+      --accent: #8fb6ec;
+      --stripe: #26292e;
+      --check: #8fcbab;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --header-bg: #2b2e33;
+    --accent: #8fb6ec;
+    --stripe: #26292e;
+    --check: #8fcbab;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet { max-width: 1160px; margin: 0 auto; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 4px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 26px);
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .table-label {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 22px 0 0;
+  }
+  .table-caption {
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 16px;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 920px;
+    background: var(--surface);
+    font-size: 12.5px;
+  }
+
+  th {
+    background: var(--header-bg);
+    color: var(--ink);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: left;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  th.role-head { text-align: center; white-space: nowrap; width: 44px; }
+  th:last-child, td:last-child { border-right: none; }
+
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.4;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .module-cell { width: 220px; }
+  .module-name { font-weight: 600; color: var(--ink); display: block; }
+  .module-desc { font-size: 11px; color: var(--ink-muted); display: block; margin-top: 2px; }
+
+  .role-cell { text-align: center; font-size: 15px; }
+  .yes { color: var(--check); font-weight: 700; }
+  .no { color: var(--border); }
+
+  .legend {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+  }
+</style>
+
+<div class="sheet">
+  <p class="section-label">System Requirements</p>
+  <h1 class="fig-title">System Modules and Authorized Users</h1>
+
+  <p class="note">
+    A module is marked for a role only where that role has real, RLS-enforced access to it &mdash; matching the
+    scope already defined in the User Specification table, not just interface visibility.
+  </p>
+
+  <p class="table-label">Table 7</p>
+  <p class="table-caption">System Modules and Authorized Users</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th class="role-head" title="Survivor / Reporter">SV</th>
+          <th class="role-head" title="Barangay Administrator">BA</th>
+          <th class="role-head" title="Municipal Administrator (MSWDO)">MA</th>
+          <th class="role-head" title="Provincial Admin (Super Administrator)">PA</th>
+          <th class="role-head" title="Provincial Staff">PS</th>
+          <th class="role-head" title="Shelter Administrator">ShA</th>
+          <th class="role-head" title="Support Expert">SE</th>
+          <th class="role-head" title="Police Officer (Law Enforcement)">PO</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+  const ROLES = ['SV', 'BA', 'MA', 'PA', 'PS', 'ShA', 'SE', 'PO'];
+  const MODULES = [
+    { name: 'Account &amp; Profile Management', desc: 'Mobile registration, profile, security passcode', access: ['SV'] },
+    { name: 'Incident Reporting &amp; Case Tracking', desc: 'Submit and track own incident reports (Mobile)', access: ['SV'] },
+    { name: 'Case Management &amp; Status Updates', desc: 'Review and update cases within jurisdiction', access: ['BA', 'MA', 'PA', 'PS'] },
+    { name: 'Case Referral &amp; Escalation', desc: 'Refer or escalate a case to another tier', access: ['BA', 'MA', 'PA', 'PO'] },
+    { name: 'Emergency SOS Trigger', desc: 'Trigger an SOS alert with live location (Mobile)', access: ['SV'] },
+    { name: 'Law-Enforcement SOS Response', desc: 'Monitor and respond to routed SOS alerts', access: ['PO'] },
+    { name: 'Shelter Locator &amp; Request', desc: 'Find shelters and submit a request (Mobile)', access: ['SV'] },
+    { name: 'Shelter Management', desc: 'Manage own shelter listing, photos, and requests', access: ['ShA'] },
+    { name: 'Barangay Action Requests (BPO)', desc: 'Handle barangay-level protection-order requests', access: ['BA', 'MA'] },
+    { name: 'Personnel &amp; Reference Data Administration', desc: 'Manage accounts, municipalities, and barangays', access: ['MA', 'PA'] },
+    { name: 'Announcements', desc: 'Author and publish province/municipal announcements', access: ['MA', 'PS'] },
+    { name: 'Reports &amp; Analytics', desc: 'Generate case, shelter, and SOS reports', access: ['MA', 'PS'] },
+    { name: 'Audit Log &amp; System Configuration', desc: 'Review audit trail and configure system-wide settings', access: ['PA'] },
+    { name: 'Confidential Support', desc: 'Request or respond to confidential support conversations', access: ['SV', 'SE'] },
+  ];
+
+  const tbody = document.getElementById('tbody');
+  MODULES.forEach((m) => {
+    const tr = document.createElement('tr');
+    const moduleTd = document.createElement('td');
+    moduleTd.className = 'module-cell';
+    moduleTd.innerHTML = `<span class="module-name">${m.name}</span><span class="module-desc">${m.desc}</span>`;
+    tr.appendChild(moduleTd);
+    ROLES.forEach((r) => {
+      const td = document.createElement('td');
+      td.className = 'role-cell';
+      const has = m.access.includes(r);
+      td.innerHTML = has ? '<span class="yes">&#10003;</span>' : '<span class="no">&mdash;</span>';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  const legendItems = [
+    ['SV', 'Survivor / Reporter'], ['BA', 'Barangay Administrator'], ['MA', 'Municipal Administrator (MSWDO)'], ['PA', 'Provincial Admin (Super Administrator)'],
+    ['PS', 'Provincial Staff'], ['ShA', 'Shelter Administrator'], ['SE', 'Support Expert'], ['PO', 'Police Officer (Law Enforcement)'],
+  ];
+  const legend = document.getElementById('legend');
+  legendItems.forEach(([abbr, full]) => {
+    const span = document.createElement('span');
+    span.innerHTML = `<strong>${abbr}</strong> = ${full}`;
+    legend.appendChild(span);
+  });
+</script>

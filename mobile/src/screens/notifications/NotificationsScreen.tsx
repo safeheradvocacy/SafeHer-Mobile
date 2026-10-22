@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,6 +11,8 @@ import { AppStackParamList } from '../../navigation/types';
 import type { Notification } from '../../types/database.types';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'Notifications'>;
+
+const PAGE_SIZE = 10;
 
 const TYPE_LABEL: Record<string, string> = {
   'Case Update': 'Case update',
@@ -28,7 +30,13 @@ export function NotificationsScreen() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
+  // Server-side range pagination, same proven pattern as
+  // lib/useSosHistory.ts — this list has no natural bound (every
+  // case-update/SOS/announcement notification ever sent to this
+  // account), so it is never fetched in full.
   const load = useCallback(async () => {
     if (!profile) return;
     setLoadError(false);
@@ -39,9 +47,10 @@ export function NotificationsScreen() {
         // creation, and responder dispatch never go through this screen.
         query = query.neq('notification_type', 'SOS');
       }
-      const { data, error } = await query;
+      const { data, error } = await query.range(0, PAGE_SIZE - 1);
       if (error) throw error;
       setItems(data ?? []);
+      setHasMore((data?.length ?? 0) === PAGE_SIZE);
     } catch (e) {
       console.error('[NotificationsScreen] load:', e);
       setLoadError(true);
@@ -49,6 +58,25 @@ export function NotificationsScreen() {
       setLoading(false);
     }
   }, [profile, prefs.emergencyAlertsEnabled]);
+
+  const loadMore = useCallback(async () => {
+    if (!profile || loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      let query = supabase.from('notifications').select('*').eq('profile_id', profile.profile_id).order('created_at', { ascending: false });
+      if (!prefs.emergencyAlertsEnabled) {
+        query = query.neq('notification_type', 'SOS');
+      }
+      const { data, error } = await query.range(items.length, items.length + PAGE_SIZE - 1);
+      if (error) throw error;
+      setItems((prev) => [...prev, ...(data ?? [])]);
+      setHasMore((data?.length ?? 0) === PAGE_SIZE);
+    } catch (e) {
+      console.error('[NotificationsScreen] loadMore:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [profile, prefs.emergencyAlertsEnabled, items.length, loadingMore, hasMore, loading]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,6 +122,13 @@ export function NotificationsScreen() {
     markRead(n);
     if (n.announcement_id) {
       navigation.navigate('AnnouncementDetail', { announcementId: n.announcement_id });
+    } else if (n.request_id) {
+      // Support handoff events (assigned, connected, new message) all
+      // resolve to the same place a survivor would check them — their
+      // one ongoing SafeHer Assistant conversation, not a per-request
+      // detail screen (none exists; useSupportChat always loads "the"
+      // active session for this profile).
+      navigation.navigate('Tabs', { screen: 'ChatTab' });
     }
   };
 
@@ -103,6 +138,9 @@ export function NotificationsScreen() {
       contentContainerStyle={{ padding: spacing.lg, flexGrow: 1 }}
       data={items}
       keyExtractor={(n) => n.notification_id}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.4}
+      ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={palette.primary} /> : null}
       ListHeaderComponent={
         <>
           <Text style={[styles.title, { color: palette.text }]}>Notifications</Text>

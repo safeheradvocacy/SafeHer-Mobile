@@ -25,6 +25,8 @@ import { LocationMapPicker, type LocationPickerResult } from '../../components/L
 import { SettingsSheet } from '../../components/SettingsSheet';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getRegisterStrings, getSettingsTitle } from './authContent';
+import { SUFFIX_OPTIONS, formatFullName } from '../../lib/personName';
+import { PH_PHONE_RE, sanitizePhoneInput } from '../../lib/numericInput';
 import { spacing, typography, radius } from '../../theme/theme';
 import { AuthStackParamList } from '../../navigation/types';
 import type { Gender, Municipality } from '../../types/database.types';
@@ -135,11 +137,14 @@ export function RegisterScreen() {
   const [municipalityId, setMunicipalityId] = useState<string | null>(null);
   const [barangayId, setBarangayId] = useState<string | null>(null);
   const [barangayName, setBarangayName] = useState('');
-  const [streetAddress, setStreetAddress] = useState('');
   const [purokSitio, setPurokSitio] = useState('');
   const [mapResult, setMapResult] = useState<LocationPickerResult | null>(null);
   const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [suffixChoice, setSuffixChoice] = useState<string | null>(null);
+  const [suffixOther, setSuffixOther] = useState('');
+  const suffixValue = suffixChoice === 'Other' ? suffixOther.trim() : (suffixChoice ?? '');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [dobYear, setDobYear] = useState<string | null>(null);
   const [dobMonth, setDobMonth] = useState<string | null>(null);
@@ -233,8 +238,8 @@ export function RegisterScreen() {
       setStepError(strings.pleaseSelectBarangay);
       return;
     }
-    if (!streetAddress.trim()) {
-      setStepError(strings.pleaseEnterStreet);
+    if (phoneNumber.trim() && !PH_PHONE_RE.test(phoneNumber.trim())) {
+      setStepError('Enter a valid Philippine mobile number (e.g. 09XXXXXXXXX) or leave it blank.');
       return;
     }
     goToStep(1);
@@ -295,11 +300,12 @@ export function RegisterScreen() {
       email: email.trim(),
       password,
       firstName: firstName.trim(),
+      middleName: middleName.trim() || undefined,
       lastName: lastName.trim(),
+      suffix: suffixValue || undefined,
       phoneNumber,
       municipalityId: municipalityId as string,
       barangayId: barangayId as string,
-      streetAddress: streetAddress.trim(),
       purokSitio: purokSitio.trim() || undefined,
       latitude: mapResult?.latitude,
       longitude: mapResult?.longitude,
@@ -348,15 +354,30 @@ export function RegisterScreen() {
               <FadeInUp reduced={reduced} delay={60}>
                 <Input label={strings.firstNameLabel} icon="person-outline" value={firstName} onChangeText={setFirstName} />
               </FadeInUp>
+              <FadeInUp reduced={reduced} delay={80}>
+                <Input label="Middle name" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              </FadeInUp>
               <FadeInUp reduced={reduced} delay={100}>
                 <Input label={strings.lastNameLabel} icon="person-outline" value={lastName} onChangeText={setLastName} />
+              </FadeInUp>
+              <FadeInUp reduced={reduced} delay={110}>
+                <DropdownInput
+                  label="Suffix (optional)"
+                  placeholder="Select suffix"
+                  value={suffixChoice}
+                  options={[...SUFFIX_OPTIONS.map((s) => ({ label: s, value: s })), { label: 'Other', value: 'Other' }]}
+                  onSelect={setSuffixChoice}
+                />
+                {suffixChoice === 'Other' ? (
+                  <Input label="Enter suffix" value={suffixOther} onChangeText={setSuffixOther} />
+                ) : null}
               </FadeInUp>
               <FadeInUp reduced={reduced} delay={140}>
                 <Input
                   label={strings.phoneLabel}
                   icon="call-outline"
                   value={phoneNumber}
-                  onChangeText={setPhoneNumber}
+                  onChangeText={(v) => setPhoneNumber(sanitizePhoneInput(v))}
                   keyboardType="phone-pad"
                   placeholder="09XX XXX XXXX"
                 />
@@ -407,9 +428,6 @@ export function RegisterScreen() {
                 </Pressable>
               </FadeInUp>
 
-              <FadeInUp reduced={reduced} delay={210}>
-                <Input label={strings.streetLabel} icon="home-outline" value={streetAddress} onChangeText={setStreetAddress} />
-              </FadeInUp>
               <FadeInUp reduced={reduced} delay={215}>
                 <Input label={strings.purokLabel} icon="location-outline" value={purokSitio} onChangeText={setPurokSitio} />
               </FadeInUp>
@@ -546,16 +564,18 @@ export function RegisterScreen() {
             </FadeInUp>
 
             <FadeInUp reduced={reduced} delay={60} style={[styles.reviewCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <ReviewRow label={strings.reviewNameLabel} value={`${firstName} ${lastName}`.trim()} onEdit={() => goToStep(0)} editLabel={strings.editLink} />
-              {phoneNumber ? <ReviewRow label={strings.reviewPhoneLabel} value={phoneNumber} onEdit={() => goToStep(0)} editLabel={strings.editLink} /> : null}
-              <ReviewRow label={strings.reviewMunicipalityLabel} value={municipalityName} onEdit={() => goToStep(0)} editLabel={strings.editLink} />
-              <ReviewRow label={strings.reviewBarangayLabel} value={barangayName} onEdit={() => goToStep(0)} editLabel={strings.editLink} />
               <ReviewRow
-                label={strings.reviewAddressLabel}
-                value={[streetAddress, purokSitio].filter(Boolean).join(', ')}
+                label={strings.reviewNameLabel}
+                value={formatFullName({ first_name: firstName, middle_name: middleName, last_name: lastName, suffix: suffixValue })}
                 onEdit={() => goToStep(0)}
                 editLabel={strings.editLink}
               />
+              {phoneNumber ? <ReviewRow label={strings.reviewPhoneLabel} value={phoneNumber} onEdit={() => goToStep(0)} editLabel={strings.editLink} /> : null}
+              <ReviewRow label={strings.reviewMunicipalityLabel} value={municipalityName} onEdit={() => goToStep(0)} editLabel={strings.editLink} />
+              <ReviewRow label={strings.reviewBarangayLabel} value={barangayName} onEdit={() => goToStep(0)} editLabel={strings.editLink} />
+              {purokSitio ? (
+                <ReviewRow label={strings.reviewAddressLabel} value={purokSitio} onEdit={() => goToStep(0)} editLabel={strings.editLink} />
+              ) : null}
               <ReviewRow
                 label={strings.reviewDateOfBirthLabel}
                 value={dobYear && dobMonth && dobDay ? composeIsoDate(dobYear, dobMonth, dobDay) : ''}

@@ -10,6 +10,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTour } from '../contexts/TourContext';
 import { measureAndRegister } from '../lib/tourMeasure';
 import { useUnreadNotificationCount } from '../lib/useUnreadNotificationCount';
+import { useAvatarUrl } from '../lib/useAvatarUrl';
 import { ClaySurface } from '../theme/clay';
 import { PressableScale } from './ui';
 import { spacing, typography } from '../theme/theme';
@@ -30,9 +31,16 @@ export function HeaderActions() {
   const { unreadCount } = useUnreadNotificationCount();
   const { registerTarget, registerTargetRef, skip: skipTour } = useTour();
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarUrl = useAvatarUrl(profile?.profile_picture);
   const prevUnreadRef = useRef(0);
   const avatarRef = useRef<View>(null);
   const badgePop = useSharedValue(1);
+
+  // A prior broken-image failure must not stick around once the photo
+  // itself has actually changed (new path -> new signed URL).
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUrl]);
 
   // A brief pop — never continuous — the moment unread count goes UP,
   // not just whenever it happens to be > 0 on render.
@@ -79,8 +87,8 @@ export function HeaderActions() {
           accessibilityLabel="Profile"
         >
           <ClaySurface radius={22} tint={palette.primaryLight} shadowTint={palette.primaryDark} intensity="sm" style={styles.iconButtonShadow} innerStyle={styles.avatarInner} highlightOpacity={0.24}>
-            {profile?.profile_picture && !avatarFailed ? (
-              <Image source={{ uri: profile.profile_picture }} style={styles.avatarImage} onError={() => setAvatarFailed(true)} />
+            {avatarUrl && !avatarFailed ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} onError={() => setAvatarFailed(true)} />
             ) : (
               <Text style={[styles.avatarInitial, { color: palette.primaryDark }]}>{profile?.first_name?.[0]?.toUpperCase() ?? '?'}</Text>
             )}

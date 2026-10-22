@@ -1,16 +1,27 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
+import { SosSoundToggle } from '../../components/sos/SosSoundToggle';
+import { LocationMap } from '../../components/maps/LocationMap';
 import { locationQuality } from '../../lib/geo';
 import { SOS_STATUS_FLOW, type SosAlert, type SosStatus } from '../../types/database.types';
-import { bucketOf, isCriticalSos, sosElapsedMinutes, sosUrgencyScore, usePoliceSosAlerts } from '../../hooks/usePoliceSosAlerts';
+import { bucketOf, isCriticalSos, sosElapsedMinutes, sosReference } from '../../hooks/usePoliceSosAlerts';
+import { useSosAlertContext } from '../../contexts/SosAlertContext';
 
 type Tab = 'new' | 'active' | 'completed' | 'all';
 
-function sosReference(a: SosAlert): string {
-  return `SOS-${a.sos_id.slice(0, 8).toUpperCase()}`;
-}
+// Phase 4's priority order within the 'all' tab and anywhere alerts are
+// listed together: New (unacknowledged) first, then Active (acknowledged/
+// Responding), then Resolved last — matching bucketOf's own three real,
+// existing groups (no new status invented for sorting). Within a bucket,
+// newest triggered_at first; this REPLACES the old sosUrgencyScore-based
+// sort for the queue specifically (that function weighted *longer-waiting*
+// alerts to the top, the opposite of "newest first" — it's kept, unused
+// here, for the dashboard's own separate "Urgent SOS" widget, which is a
+// different, pre-existing feature this change doesn't touch).
+const BUCKET_RANK: Record<ReturnType<typeof bucketOf>, number> = { new: 0, active: 1, completed: 2 };
 
 function elapsedLabel(mins: number): string {
   if (mins < 60) return `${mins} min`;
@@ -38,7 +49,8 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 // embeds that table (see the hook's header for why).
 export function SosReferralsPage() {
   const { showToast } = useToast();
-  const { alerts, officerNames, loading, refreshing, lastUpdated, error, reload, acknowledge, setStatus } = usePoliceSosAlerts();
+  const location = useLocation();
+  const { alerts, officerNames, loading, refreshing, lastUpdated, error, reload, acknowledge, setStatus } = useSosAlertContext();
   const [tab, setTab] = useState<Tab>('new');
   const [selected, setSelected] = useState<SosAlert | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,10 +64,43 @@ export function SosReferralsPage() {
     [alerts]
   );
 
+  // Phase 4: newest first within each bucket, buckets ordered New ->
+  // Active -> Resolved — real triggered_at timestamps, not a formatted
+  // display string, and never updated_at (sos_alerts' creation time is
+  // triggered_at; nothing here asks for "last changed" ordering).
   const visible = useMemo(() => {
     const list = tab === 'all' ? alerts : buckets[tab];
-    return list.slice().sort((a, b) => sosUrgencyScore(b) - sosUrgencyScore(a));
+    return list.slice().sort((a, b) => {
+      if (tab === 'all') {
+        const rankDiff = BUCKET_RANK[bucketOf(a)] - BUCKET_RANK[bucketOf(b)];
+        if (rankDiff !== 0) return rankDiff;
+      }
+      const aTime = new Date(a.triggered_at).getTime();
+      const bTime = new Date(b.triggered_at).getTime();
+      const safeA = Number.isFinite(aTime) ? aTime : 0;
+      const safeB = Number.isFinite(bTime) ? bTime : 0;
+      return safeB - safeA;
+    });
   }, [tab, alerts, buckets]);
+
+  // A pop-up's "View SOS Alert" action navigates here with the exact
+  // sos_id to open (SosAlertContext.viewAlert) — this opens that same
+  // alert's modal the moment it arrives (or the alert list itself loads),
+  // satisfying "opening the notification must display the exact
+  // corresponding SOS" without duplicating the details view. Guarded by a
+  // ref (not just checking `selected`) so a later `alerts` refresh can't
+  // re-open the same alert right after the officer closes it — it only
+  // ever acts on a given openSosId once.
+  const consumedOpenSosIdRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    const openSosId = (location.state as { openSosId?: string } | null)?.openSosId;
+    if (!openSosId || consumedOpenSosIdRef.current === openSosId) return;
+    const match = alerts.find((a) => a.sos_id === openSosId);
+    if (match) {
+      consumedOpenSosIdRef.current = openSosId;
+      setSelected(match);
+    }
+  }, [location.state, alerts]);
 
   const handleAcknowledge = async () => {
     if (!selected) return;
@@ -87,7 +132,12 @@ export function SosReferralsPage() {
       <PageHeader
         title="SOS Alerts"
         subtitle="Emergency alerts — direct access, no referral required"
-        actions={<DashboardHeaderActions lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => reload(true)} />}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <SosSoundToggle />
+            <DashboardHeaderActions lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => reload(true)} />
+          </div>
+        }
       />
 
       {error && (
@@ -214,10 +264,19 @@ export function SosReferralsPage() {
                 label="Map"
                 value={
                   <a href={`https://www.google.com/maps?q=${selected.latitude},${selected.longitude}`} target="_blank" rel="noreferrer">
-                    View on map
+                    Open in Google Maps
                   </a>
                 }
               />
+              {/* Reuses the same @react-google-maps/api component every
+                  other location preview in this app already uses
+                  (LocationMap — survivor registered address, case incident
+                  location) — tolerant of a missing/invalid API key or a
+                  load failure on its own (GoogleMapFallback), so a map
+                  problem never hides the address/accuracy text above it. */}
+              <div style={{ height: 220, marginTop: 8 }}>
+                <LocationMap latitude={selected.latitude} longitude={selected.longitude} label={sosReference(selected)} />
+              </div>
             </>
           ) : (
             <Field label="Address" value="Location unavailable" />

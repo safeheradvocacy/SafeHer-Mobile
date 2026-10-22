@@ -2,8 +2,9 @@ import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, PageHeader, StatCard, StatusBadge } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
+import { SosSoundToggle } from '../../components/sos/SosSoundToggle';
 import { useLawEnforcementReferrals, bucketOf as caseBucketOf, type LeReferralRow } from '../../hooks/useLawEnforcementReferrals';
-import { usePoliceSosAlerts, bucketOf as sosBucketOf, isCriticalSos, sosElapsedMinutes, sosUrgencyScore } from '../../hooks/usePoliceSosAlerts';
+import { useSosAlertContext, bucketOf as sosBucketOf, isCriticalSos, sosElapsedMinutes, sosUrgencyScore } from '../../contexts/SosAlertContext';
 import type { SosAlert } from '../../types/database.types';
 
 function timeAgo(iso: string): string {
@@ -43,7 +44,7 @@ type ActivityEntry =
 // only real, existing data (sos_alerts.status/triggered_at) — sos_alerts
 // has no severity column, so none is fabricated.
 export function LawEnforcementDashboard() {
-  const sos = usePoliceSosAlerts();
+  const sos = useSosAlertContext();
   const caseReferrals = useLawEnforcementReferrals();
 
   const loading = sos.loading || caseReferrals.loading;
@@ -102,7 +103,12 @@ export function LawEnforcementDashboard() {
       <PageHeader
         title="Police Dashboard"
         subtitle="Direct access to emergency SOS alerts and case referrals assigned to you"
-        actions={<DashboardHeaderActions lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => reload(true)} />}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <SosSoundToggle />
+            <DashboardHeaderActions lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => reload(true)} />
+          </div>
+        }
       />
 
       {error && (

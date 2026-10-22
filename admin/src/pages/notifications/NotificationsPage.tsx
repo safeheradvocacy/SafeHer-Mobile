@@ -51,7 +51,17 @@ export function NotificationsPage() {
     // module31 — the deep link just opens the request id in the query
     // string; RLS on barangay_action_requests (not this link) is what
     // actually decides whether the viewer can see it.
-    if (n.barangay_request_id) navigate(`/admin/barangay-requests?open=${n.barangay_request_id}`);
+    if (n.barangay_request_id) {
+      navigate(`/admin/barangay-requests?open=${n.barangay_request_id}`);
+    } else if (n.request_id) {
+      // module41 — same pattern, for expert_support_requests. Where
+      // "the relevant conversation" lives depends on the viewer's own
+      // role: a support_expert opens it directly in My Conversations;
+      // an Expert Support Queue manager (provincial_staff) lands on
+      // the queue page instead. RLS on expert_support_requests/
+      // chat_sessions decides actual visibility either way.
+      navigate(profile?.role === 'support_expert' ? `/admin/dashboard?open=${n.request_id}` : '/admin/support-queue');
+    }
   };
 
   return (

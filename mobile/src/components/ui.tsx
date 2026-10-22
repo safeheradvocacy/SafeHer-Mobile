@@ -14,7 +14,7 @@ import {
   View,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing } from 'react-native-reanimated';
@@ -525,6 +525,18 @@ export function PasswordStrengthMeter({ password }: { password: string }) {
   );
 }
 
+/**
+ * A compact trigger field (label, current value, chevron-down) that opens
+ * a proper bottom-sheet drawer — slide-up, dimmed backdrop, rounded top
+ * corners, drag handle, safe-area-aware bottom padding, optional search —
+ * instead of a plain centered dialog. Every existing caller (incident
+ * timing, third-party age range, and others) keeps working with the exact
+ * same required props; `indicator`/`searchable` are additive and default
+ * to the previous look (a trailing checkmark, no search row), so this is
+ * a visual/behavioral upgrade of the one existing component, not a new
+ * one — every screen using DropdownInput gets the drawer treatment for
+ * free rather than each needing its own bespoke picker.
+ */
 export function DropdownInput({
   label,
   placeholder = 'Select an option',
@@ -533,6 +545,12 @@ export function DropdownInput({
   onSelect,
   error,
   disabled,
+  searchable = false,
+  /** 'check' (default, unchanged) shows a trailing checkmark on the
+   * selected row. 'radio' shows a leading radio-button icon instead —
+   * used where the drawer is explicitly a single-choice list the brief
+   * wants presented with a radio control (e.g. case type). */
+  indicator = 'check',
 }: {
   label?: string;
   placeholder?: string;
@@ -541,10 +559,20 @@ export function DropdownInput({
   onSelect: (value: string) => void;
   error?: string;
   disabled?: boolean;
+  searchable?: boolean;
+  indicator?: 'check' | 'radio';
 }) {
   const { palette } = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const selected = options.find((o) => o.value === value);
+  const filtered = searchable && query.trim() ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase())) : options;
+
+  const close = () => {
+    setOpen(false);
+    setQuery('');
+  };
 
   return (
     <View style={{ marginBottom: spacing.md }}>
@@ -558,6 +586,9 @@ export function DropdownInput({
           error ? { borderColor: palette.danger } : null,
           disabled ? { opacity: 0.5 } : null,
         ]}
+        accessibilityRole="button"
+        accessibilityLabel={label ?? placeholder}
+        accessibilityHint={`Opens a list to choose ${(label ?? placeholder).toLowerCase()}`}
       >
         <Text style={[selected ? styles.dropdownValue : styles.dropdownPlaceholder, { color: selected ? palette.text : palette.textMuted }]} numberOfLines={1}>
           {selected ? selected.label : placeholder}
@@ -566,30 +597,70 @@ export function DropdownInput({
       </Pressable>
       {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
-          <View style={[styles.modalSheet, { backgroundColor: palette.surface }]}>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
+        <Pressable style={styles.modalBackdrop} onPress={close} accessibilityViewIsModal accessibilityLabel={`${label ?? 'Selection'} options`}>
+          {/* Swallows taps so touching the sheet itself (its padding, the
+              title, between list rows) doesn't fall through to the
+              backdrop's onPress and close the drawer unexpectedly — the
+              bug the previous centered-dialog version had. */}
+          <Pressable style={[styles.modalSheet, { backgroundColor: palette.surface, paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.md) }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.sheetHandle, { backgroundColor: palette.border }]} />
             <Text style={[styles.modalTitle, { color: palette.text }]}>{label ?? 'Select an option'}</Text>
-            <FlatList
-              data={options}
-              keyExtractor={(o) => o.value}
-              style={{ maxHeight: 320 }}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => {
-                    onSelect(item.value);
-                    setOpen(false);
-                  }}
-                  style={styles.modalOption}
-                >
-                  <Text style={[styles.modalOptionText, { color: item.value === value ? palette.primary : palette.text }]}>
-                    {item.label}
-                  </Text>
-                  {item.value === value ? <Ionicons name="checkmark" size={18} color={palette.primary} /> : null}
-                </Pressable>
-              )}
-            />
-          </View>
+
+            {searchable ? (
+              <View style={[styles.sheetSearchRow, { backgroundColor: palette.surfaceMuted }]}>
+                <Ionicons name="search" size={17} color={palette.textMuted} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search"
+                  placeholderTextColor={palette.textMuted}
+                  style={[styles.sheetSearchInput, { color: palette.text }]}
+                  accessibilityLabel={`Search ${label ?? 'options'}`}
+                />
+                {query.length > 0 ? (
+                  <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+                    <Ionicons name="close-circle" size={17} color={palette.textMuted} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            {filtered.length === 0 ? (
+              <Text style={[styles.dropdownPlaceholder, { color: palette.textMuted, paddingVertical: spacing.lg, textAlign: 'center' }]}>
+                No matches found.
+              </Text>
+            ) : (
+              <FlatList
+                data={filtered}
+                keyExtractor={(o) => o.value}
+                style={{ maxHeight: 360 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => {
+                  const active = item.value === value;
+                  return (
+                    <Pressable
+                      onPress={() => {
+                        onSelect(item.value);
+                        close();
+                      }}
+                      style={({ pressed }) => [styles.modalOption, pressed ? { opacity: 0.7 } : null]}
+                      accessibilityRole={indicator === 'radio' ? 'radio' : 'button'}
+                      accessibilityState={{ selected: active, checked: indicator === 'radio' ? active : undefined }}
+                      accessibilityLabel={item.label}
+                    >
+                      {indicator === 'radio' ? (
+                        <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={18} color={active ? palette.primary : palette.textMuted} style={{ marginRight: spacing.sm }} />
+                      ) : null}
+                      <Text style={[styles.modalOptionText, { color: active ? palette.primary : palette.text, flex: 1 }]}>{item.label}</Text>
+                      {indicator === 'check' && active ? <Ionicons name="checkmark" size={18} color={palette.primary} /> : null}
+                    </Pressable>
+                  );
+                }}
+              />
+            )}
+          </Pressable>
         </Pressable>
       </Modal>
     </View>
@@ -789,6 +860,17 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   modalTitle: { ...typography.heading, color: colors.text, marginBottom: spacing.sm },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.sm },
+  sheetSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    height: 44,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  sheetSearchInput: { flex: 1, ...typography.body, height: '100%' },
   modalOption: {
     flexDirection: 'row',
     alignItems: 'center',

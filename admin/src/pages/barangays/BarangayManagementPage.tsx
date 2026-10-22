@@ -5,6 +5,7 @@ import { EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui'
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import type { Barangay, Municipality } from '../../types/database.types';
+import { sanitizePhoneInput } from '../../lib/validators';
 
 export function BarangayManagementPage() {
   const { profile, municipality, roleTier } = useAuth();
@@ -170,7 +171,7 @@ export function BarangayManagementPage() {
           </div>
           <div className="field">
             <label className="label">Contact number</label>
-            <input className="input" value={newContact} onChange={(e) => setNewContact(e.target.value)} />
+            <input className="input" type="tel" inputMode="tel" value={newContact} onChange={(e) => setNewContact(sanitizePhoneInput(e.target.value))} />
           </div>
           {error && <p style={{ color: 'var(--color-danger)', fontSize: 13 }}>{error}</p>}
         </Modal>

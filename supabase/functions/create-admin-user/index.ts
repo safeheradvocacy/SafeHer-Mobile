@@ -143,7 +143,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // 'create' preserves every existing caller (including
   // ShelterAdminDashboard.tsx's inline staff-creation call) unchanged.
   const action: 'create' | 'update' = body.action === 'update' ? 'update' : 'create';
-  const { email, password, firstName, lastName, phoneNumber, role } = body;
+  const { email, password, firstName, middleName, lastName, suffix, phoneNumber, role } = body;
   // Normalized at this boundary rather than trusted verbatim from the
   // request: a client (correctly) omitting a jurisdiction field for a
   // role that doesn't need one can still send '' instead of undefined/
@@ -361,7 +361,9 @@ async function handleRequest(req: Request): Promise<Response> {
         shelter_id: role === 'shelter_admin' ? resolvedShelterId : null,
         role,
         first_name: firstName,
+        middle_name: middleName || null,
         last_name: lastName,
+        suffix: suffix || null,
         phone_number: phoneNumber ?? null,
       })
       .eq('profile_id', targetProfileId)
@@ -407,7 +409,9 @@ async function handleRequest(req: Request): Promise<Response> {
       shelter_id: role === 'shelter_admin' ? resolvedShelterId : null,
       role,
       first_name: firstName,
+      middle_name: middleName || null,
       last_name: lastName,
+      suffix: suffix || null,
       phone_number: phoneNumber ?? null,
       is_active: true,
     })

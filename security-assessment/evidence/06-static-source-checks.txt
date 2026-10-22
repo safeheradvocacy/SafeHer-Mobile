@@ -1,0 +1,30 @@
+============================================================
+SafeSpace security assessment — evidence capture
+Test     : Static source and schema checks
+Target   : repository source tree
+Captured : 2026-10-21T15:12:36Z (UTC)
+Method   : non-destructive, unauthenticated
+============================================================
+
+--- RLS enablement vs table definitions (migration files) -------
+  tables defined        : 35
+  tables with RLS enable: 35
+  defined WITHOUT RLS   : 0
+
+--- Service-role key references in client source ----------------
+  occurrences in admin/src + mobile/src: 0   (expected 0)
+  Edge Functions using it (expected, server-side):
+     supabase/functions/admin-user-metadata/index.ts
+     supabase/functions/backup-create/index.ts
+     supabase/functions/backup-restore/index.ts
+     supabase/functions/create-admin-user/index.ts
+     supabase/functions/safeher-chatbot/index.ts
+     supabase/functions/security-passcode/index.ts
+     supabase/functions/send-push-notification/index.ts
+
+--- Hardcoded secret patterns in source -------------------------
+  matches: 0   (expected 0)
+
+--- Dangerous constructs ----------------------------------------
+  dangerouslySetInnerHTML / eval / new Function: 1
+     admin/src/pages/announcements/AnnouncementFormModal.tsx:87: * text (no dangerouslySetInnerHTML anywhere in this component), which

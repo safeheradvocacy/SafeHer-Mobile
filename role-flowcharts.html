@@ -1,0 +1,464 @@
+<!doctype html>
+<title>SafeSpace Role Flowcharts</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --accent: #1f4e8c;
+    --accent-soft: #e7eefb;
+    --decision-fill: #faf1df; --decision-border: #e9d2a3;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --accent: #8fb6ec;
+      --accent-soft: #1f2c40;
+      --decision-fill: #352c1c; --decision-border: #5c4a26;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --accent: #8fb6ec;
+    --accent-soft: #1f2c40;
+    --decision-fill: #352c1c; --decision-border: #5c4a26;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 16px 56px;
+  }
+  .sheet { max-width: 1100px; margin: 0 auto; }
+
+  .doc-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(22px, 3.4vw, 30px);
+    text-align: center;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .doc-sub {
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin: 0 0 36px;
+  }
+
+  .fig-block { margin-bottom: 48px; }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: center;
+    margin: 0 0 4px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    text-align: center;
+    margin: 0 0 14px;
+  }
+
+  .diagram-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  svg text { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  .node-label { font-size: 11.5px; fill: var(--ink); }
+  .edge-label { font-size: 10px; font-weight: 600; fill: var(--accent); }
+
+  .caption {
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin-top: 10px;
+    font-style: italic;
+  }
+
+  hr.divider { border: none; border-top: 1px dashed var(--border); margin: 44px 0; }
+</style>
+
+<div class="sheet">
+  <h1 class="doc-title">Login and Role Flowcharts</h1>
+  <p class="doc-sub">The real authentication flow, followed by each of SafeSpace's eight roles' primary operating flow.</p>
+
+  <div id="figures"></div>
+</div>
+
+<script>
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  function wrapLines(text, maxChars) {
+    if (text.includes('\n')) return text.split('\n');
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((w) => {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > maxChars) { lines.push(line); line = w; } else { line = test; }
+    });
+    lines.push(line);
+    return lines;
+  }
+
+  function arrowheadAt(svg, x, y, ux, uy) {
+    const size = 8;
+    const leftX = x - ux * size - uy * size * 0.55, leftY = y - uy * size + ux * size * 0.55;
+    const rightX = x - ux * size + uy * size * 0.55, rightY = y - uy * size - ux * size * 0.55;
+    svg.appendChild(el('polygon', { points: `${x},${y} ${leftX},${leftY} ${rightX},${rightY}`, fill: 'var(--ink-muted)', opacity: 0.7 }));
+  }
+
+  const COL_W = 182, ROW_H = 104;
+  const PROC_W = 152, PROC_H = 52;
+  const DEC_W = 158, DEC_H = 78;
+  const OVAL_W = 140, OVAL_H = 44;
+
+  function renderFlowchart(svg, nodes, edges) {
+    const nodeMap = {};
+    nodes.forEach((n) => (nodeMap[n.id] = n));
+    let minCol = 0, maxCol = 0, maxRow = 0;
+    nodes.forEach((n) => {
+      minCol = Math.min(minCol, n.col);
+      maxCol = Math.max(maxCol, n.col);
+      maxRow = Math.max(maxRow, n.row);
+    });
+    const padX = 110, padY = 60;
+    const width = (maxCol - minCol) * COL_W + padX * 2;
+    const height = maxRow * ROW_H + padY * 2;
+    const offsetX = padX - minCol * COL_W;
+    const offsetY = padY;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+    function pt(n) {
+      return { x: n.col * COL_W + offsetX, y: n.row * ROW_H + offsetY };
+    }
+
+    edges.forEach((e) => {
+      const a = nodeMap[e.from], b = nodeMap[e.to];
+      const pa = pt(a), pb = pt(b);
+      const pts = e.via ? [pa, ...e.via.map((v) => ({ x: v.col * COL_W + offsetX, y: v.row * ROW_H + offsetY })), pb] : [pa, pb];
+      const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
+      svg.appendChild(el('path', { d, fill: 'none', stroke: 'var(--ink-muted)', 'stroke-width': 1.4, opacity: 0.55 }));
+      const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+      const dx = last.x - prev.x, dy = last.y - prev.y, len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const pullback = b.type === 'decision' ? 34 : b.type === 'start' || b.type === 'end' ? 24 : 28;
+      arrowheadAt(svg, last.x - ux * pullback, last.y - uy * pullback, ux, uy);
+      if (e.label) {
+        const mid = pts.length === 2 ? { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 } : pts[1];
+        svg.appendChild(el('rect', { x: mid.x - 14, y: mid.y - 9, width: 28, height: 16, fill: 'var(--surface)' }));
+        svg.appendChild(el('text', { x: mid.x, y: mid.y + 3, 'text-anchor': 'middle', class: 'edge-label' }, e.label));
+      }
+    });
+
+    nodes.forEach((n) => {
+      const p = pt(n);
+      const g = el('g');
+      if (n.type === 'start' || n.type === 'end') {
+        g.appendChild(el('ellipse', { cx: p.x, cy: p.y, rx: OVAL_W / 2, ry: OVAL_H / 2, fill: 'var(--accent-soft)', stroke: 'var(--accent)', 'stroke-width': 1.5 }));
+        const lines = wrapLines(n.label, 16);
+        const sy = p.y - (lines.length - 1) * 6.5;
+        lines.forEach((ln, i) => g.appendChild(el('text', { x: p.x, y: sy + i * 13, 'text-anchor': 'middle', class: 'node-label' }, ln)));
+      } else if (n.type === 'decision') {
+        const hw = DEC_W / 2, hh = DEC_H / 2;
+        g.appendChild(el('polygon', { points: `${p.x},${p.y - hh} ${p.x + hw},${p.y} ${p.x},${p.y + hh} ${p.x - hw},${p.y}`, fill: 'var(--decision-fill)', stroke: 'var(--decision-border)', 'stroke-width': 1.5 }));
+        const lines = wrapLines(n.label, 13);
+        const sy = p.y - (lines.length - 1) * 6.5;
+        lines.forEach((ln, i) => g.appendChild(el('text', { x: p.x, y: sy + i * 13, 'text-anchor': 'middle', class: 'node-label' }, ln)));
+      } else {
+        g.appendChild(el('rect', { x: p.x - PROC_W / 2, y: p.y - PROC_H / 2, width: PROC_W, height: PROC_H, rx: 8, fill: 'var(--surface)', stroke: 'var(--border)', 'stroke-width': 1.5 }));
+        const lines = wrapLines(n.label, 17);
+        const sy = p.y - (lines.length - 1) * 6.5;
+        lines.forEach((ln, i) => g.appendChild(el('text', { x: p.x, y: sy + i * 13, 'text-anchor': 'middle', class: 'node-label' }, ln)));
+      }
+      svg.appendChild(g);
+    });
+  }
+
+  // ---- Flowchart data ----
+  const FLOWCHARTS = [
+    {
+      title: 'Figure 6. Log-in Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Start' },
+        { id: 'open', type: 'process', col: 0, row: 1, label: 'Open SafeSpace (mobile app or web portal)' },
+        { id: 'enter', type: 'process', col: 0, row: 2, label: 'Enter email and password' },
+        { id: 'submit', type: 'process', col: 0, row: 3, label: 'Submit credentials' },
+        { id: 'valid', type: 'decision', col: 0, row: 4, label: 'Credentials valid?' },
+        { id: 'err', type: 'process', col: -1, row: 4, label: 'Display error message' },
+        { id: 'verified', type: 'decision', col: 0, row: 5, label: 'Email verified?' },
+        { id: 'promptVerify', type: 'process', col: -1, row: 6, label: 'Prompt email verification' },
+        { id: 'endPending', type: 'end', col: -1, row: 7, label: 'Pending verification' },
+        { id: 'role', type: 'process', col: 0, row: 6, label: 'Determine account role' },
+        { id: 'appPortal', type: 'decision', col: 0, row: 7, label: 'Using the Admin Portal?' },
+        { id: 'mobileHome', type: 'process', col: -1, row: 8, label: 'Load mobile Home screen' },
+        { id: 'endMobile', type: 'end', col: -1, row: 9, label: 'Session active' },
+        { id: 'isSurvivor', type: 'decision', col: 1, row: 8, label: 'Role = Survivor?' },
+        { id: 'denied', type: 'end', col: 1.9, row: 9, label: 'Signed out — access denied' },
+        { id: 'adminDash', type: 'process', col: 1, row: 9, label: 'Load role-scoped admin dashboard' },
+        { id: 'endAdmin', type: 'end', col: 1, row: 10, label: 'Session active' },
+      ],
+      edges: [
+        { from: 's', to: 'open' }, { from: 'open', to: 'enter' }, { from: 'enter', to: 'submit' }, { from: 'submit', to: 'valid' },
+        { from: 'valid', to: 'err', label: 'No' },
+        { from: 'err', to: 'enter', via: [{ col: -1.6, row: 4 }, { col: -1.6, row: 2 }] },
+        { from: 'valid', to: 'verified', label: 'Yes' },
+        { from: 'verified', to: 'promptVerify', label: 'No' },
+        { from: 'promptVerify', to: 'endPending' },
+        { from: 'verified', to: 'role', label: 'Yes' },
+        { from: 'role', to: 'appPortal' },
+        { from: 'appPortal', to: 'mobileHome', label: 'No' },
+        { from: 'mobileHome', to: 'endMobile' },
+        { from: 'appPortal', to: 'isSurvivor', label: 'Yes' },
+        { from: 'isSurvivor', to: 'denied', label: 'Yes' },
+        { from: 'isSurvivor', to: 'adminDash', label: 'No' },
+        { from: 'adminDash', to: 'endAdmin' },
+      ],
+    },
+    {
+      title: 'Figure 7. Survivor / Reporter Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Survivor / Reporter' },
+        { id: 'home', type: 'process', col: 0, row: 1, label: 'Home screen' },
+        { id: 'choose', type: 'decision', col: 0, row: 2, label: 'Choose an action' },
+        { id: 'report1', type: 'process', col: -2, row: 3, label: 'Submit Incident Report' },
+        { id: 'report2', type: 'process', col: -2, row: 4, label: 'Case created and routed' },
+        { id: 'sos1', type: 'process', col: -1, row: 3, label: 'Trigger Emergency SOS' },
+        { id: 'sos2', type: 'process', col: -1, row: 4, label: 'Location sent to police dashboard' },
+        { id: 'chat1', type: 'process', col: 0, row: 3, label: 'Chat with SafeSpace AI Assistant' },
+        { id: 'chat2', type: 'process', col: 0, row: 4, label: 'Request a support expert (optional)' },
+        { id: 'shelter1', type: 'process', col: 1, row: 3, label: 'Request Shelter Assistance' },
+        { id: 'shelter2', type: 'process', col: 1, row: 4, label: 'Awaiting shelter response' },
+        { id: 'profile1', type: 'process', col: 2, row: 3, label: 'Update profile' },
+        { id: 'profile2', type: 'process', col: 2, row: 4, label: 'Changes saved' },
+        { id: 'notify', type: 'process', col: 0, row: 5, label: 'Receive status update / notification' },
+        { id: 'e', type: 'end', col: 0, row: 6, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'home' }, { from: 'home', to: 'choose' },
+        { from: 'choose', to: 'report1', label: 'Report' }, { from: 'report1', to: 'report2' }, { from: 'report2', to: 'notify' },
+        { from: 'choose', to: 'sos1', label: 'SOS' }, { from: 'sos1', to: 'sos2' }, { from: 'sos2', to: 'notify' },
+        { from: 'choose', to: 'chat1', label: 'Assistant' }, { from: 'chat1', to: 'chat2' }, { from: 'chat2', to: 'notify' },
+        { from: 'choose', to: 'shelter1', label: 'Shelter' }, { from: 'shelter1', to: 'shelter2' }, { from: 'shelter2', to: 'notify' },
+        { from: 'choose', to: 'profile1', label: 'Profile' }, { from: 'profile1', to: 'profile2' }, { from: 'profile2', to: 'notify' },
+        { from: 'notify', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 8. Barangay Administrator Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Barangay Administrator' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Barangay dashboard' },
+        { id: 'choose', type: 'decision', col: 0, row: 2, label: 'Choose a task' },
+        { id: 'caseView', type: 'process', col: -1.3, row: 3, label: 'View cases in barangay' },
+        { id: 'caseSelect', type: 'process', col: -1.3, row: 4, label: 'Select a case' },
+        { id: 'escalate', type: 'decision', col: -1.3, row: 5, label: 'Escalate to Municipal Admin?' },
+        { id: 'referMswdo', type: 'process', col: -2.1, row: 6, label: 'Refer case to Municipal Admin' },
+        { id: 'localAction', type: 'process', col: -0.5, row: 6, label: 'Update status / refer to shelter or police' },
+        { id: 'caseUpdated', type: 'process', col: -1.3, row: 7, label: 'Case updated, survivor notified' },
+        { id: 'bpoView', type: 'process', col: 1.3, row: 3, label: 'View Barangay Action Requests (BPO)' },
+        { id: 'bpoSelect', type: 'process', col: 1.3, row: 4, label: 'Select a request' },
+        { id: 'approve', type: 'decision', col: 1.3, row: 5, label: 'Approve request?' },
+        { id: 'processBpo', type: 'process', col: 0.5, row: 6, label: 'Process BPO, update status' },
+        { id: 'declineBpo', type: 'process', col: 2.1, row: 6, label: 'Provide decline reason' },
+        { id: 'bpoNotify', type: 'process', col: 1.3, row: 7, label: 'Requester notified' },
+        { id: 'e', type: 'end', col: 0, row: 8, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'choose' },
+        { from: 'choose', to: 'caseView', label: 'Cases' }, { from: 'caseView', to: 'caseSelect' }, { from: 'caseSelect', to: 'escalate' },
+        { from: 'escalate', to: 'referMswdo', label: 'Yes' }, { from: 'escalate', to: 'localAction', label: 'No' },
+        { from: 'referMswdo', to: 'caseUpdated' }, { from: 'localAction', to: 'caseUpdated' }, { from: 'caseUpdated', to: 'e' },
+        { from: 'choose', to: 'bpoView', label: 'BPO' }, { from: 'bpoView', to: 'bpoSelect' }, { from: 'bpoSelect', to: 'approve' },
+        { from: 'approve', to: 'processBpo', label: 'Yes' }, { from: 'approve', to: 'declineBpo', label: 'No' },
+        { from: 'processBpo', to: 'bpoNotify' }, { from: 'declineBpo', to: 'bpoNotify' }, { from: 'bpoNotify', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 9. Municipal Administrator (MSWDO) Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Municipal Administrator' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Municipal dashboard' },
+        { id: 'view', type: 'process', col: 0, row: 2, label: 'View cases in municipality' },
+        { id: 'select', type: 'process', col: 0, row: 3, label: 'Select a case' },
+        { id: 'choose', type: 'decision', col: 0, row: 4, label: 'Determine next action' },
+        { id: 'a1', type: 'process', col: -2, row: 5, label: 'Update case status' },
+        { id: 'a2', type: 'process', col: -1, row: 5, label: 'Assign case handler' },
+        { id: 'a3', type: 'process', col: 1, row: 5, label: 'Refer to shelter' },
+        { id: 'a4', type: 'process', col: 2, row: 5, label: 'Refer to police officer' },
+        { id: 'history', type: 'process', col: 0, row: 6, label: 'Case history updated' },
+        { id: 'notify', type: 'process', col: 0, row: 7, label: 'Notify survivor' },
+        { id: 'e', type: 'end', col: 0, row: 8, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'view' }, { from: 'view', to: 'select' }, { from: 'select', to: 'choose' },
+        { from: 'choose', to: 'a1' }, { from: 'choose', to: 'a2' }, { from: 'choose', to: 'a3' }, { from: 'choose', to: 'a4' },
+        { from: 'a1', to: 'history' }, { from: 'a2', to: 'history' }, { from: 'a3', to: 'history' }, { from: 'a4', to: 'history' },
+        { from: 'history', to: 'notify' }, { from: 'notify', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 10. Provincial Admin (Super Administrator) Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Provincial Admin' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Provincial dashboard' },
+        { id: 'choose', type: 'decision', col: 0, row: 2, label: 'Select administrative task' },
+        { id: 'a1', type: 'process', col: -1.5, row: 3, label: 'Manage personnel accounts' },
+        { id: 'a2', type: 'process', col: -0.5, row: 3, label: 'Manage police officer accounts' },
+        { id: 'a3', type: 'process', col: 0.5, row: 3, label: 'Configure system / backups' },
+        { id: 'a4', type: 'process', col: 1.5, row: 3, label: 'Review audit logs' },
+        { id: 'saved', type: 'process', col: 0, row: 4, label: 'Change saved / action logged' },
+        { id: 'e', type: 'end', col: 0, row: 5, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'choose' },
+        { from: 'choose', to: 'a1' }, { from: 'choose', to: 'a2' }, { from: 'choose', to: 'a3' }, { from: 'choose', to: 'a4' },
+        { from: 'a1', to: 'saved' }, { from: 'a2', to: 'saved' }, { from: 'a3', to: 'saved' }, { from: 'a4', to: 'saved' },
+        { from: 'saved', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 11. Provincial Staff Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Provincial Staff' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Provincial staff dashboard' },
+        { id: 'choose', type: 'decision', col: 0, row: 2, label: 'Select focus area' },
+        { id: 'b1', type: 'process', col: -3, row: 3, label: 'Monitor cases province-wide' },
+        { id: 'b2', type: 'process', col: -2, row: 3, label: 'Monitor SOS alerts' },
+        { id: 'b3', type: 'process', col: -1, row: 3, label: 'Coordinate shelter capacity / referrals' },
+        { id: 'b4', type: 'process', col: 0, row: 3, label: 'Manage municipality & barangay data' },
+        { id: 'b5', type: 'process', col: 1, row: 3, label: 'Assign support queue & manage FAQs' },
+        { id: 'b6', type: 'process', col: 2, row: 3, label: 'Publish announcements' },
+        { id: 'b7', type: 'process', col: 3, row: 3, label: 'Manage police officer accounts' },
+        { id: 'updated', type: 'process', col: 0, row: 4, label: 'Action taken / data updated' },
+        { id: 'report', type: 'process', col: 0, row: 5, label: 'Generate reports & analytics' },
+        { id: 'e', type: 'end', col: 0, row: 6, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'choose' },
+        { from: 'choose', to: 'b1' }, { from: 'choose', to: 'b2' }, { from: 'choose', to: 'b3' }, { from: 'choose', to: 'b4' },
+        { from: 'choose', to: 'b5' }, { from: 'choose', to: 'b6' }, { from: 'choose', to: 'b7' },
+        { from: 'b1', to: 'updated' }, { from: 'b2', to: 'updated' }, { from: 'b3', to: 'updated' }, { from: 'b4', to: 'updated' },
+        { from: 'b5', to: 'updated' }, { from: 'b6', to: 'updated' }, { from: 'b7', to: 'updated' },
+        { from: 'updated', to: 'report' }, { from: 'report', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 12. Shelter Administrator Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Shelter Administrator' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Shelter dashboard' },
+        { id: 'view', type: 'process', col: 0, row: 2, label: 'View shelter requests / referrals' },
+        { id: 'select', type: 'process', col: 0, row: 3, label: 'Select a request' },
+        { id: 'accept', type: 'decision', col: 0, row: 4, label: 'Accept request?' },
+        { id: 'update', type: 'process', col: -1, row: 5, label: 'Update shelter occupancy' },
+        { id: 'decline', type: 'process', col: 1, row: 5, label: 'Provide decline reason' },
+        { id: 'notify', type: 'process', col: 0, row: 6, label: 'Notify requester' },
+        { id: 'e', type: 'end', col: 0, row: 7, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'view' }, { from: 'view', to: 'select' }, { from: 'select', to: 'accept' },
+        { from: 'accept', to: 'update', label: 'Yes' }, { from: 'accept', to: 'decline', label: 'No' },
+        { from: 'update', to: 'notify' }, { from: 'decline', to: 'notify' }, { from: 'notify', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 13. Support Expert Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Support Expert' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Support expert dashboard' },
+        { id: 'view', type: 'process', col: 0, row: 2, label: 'View assigned (Waiting) requests' },
+        { id: 'select', type: 'process', col: 0, row: 3, label: 'Select a conversation' },
+        { id: 'accept', type: 'process', col: 0, row: 4, label: 'Accept conversation' },
+        { id: 'respond', type: 'process', col: 0, row: 5, label: 'Respond to survivor' },
+        { id: 'resolved', type: 'decision', col: 0, row: 6, label: 'Issue resolved?' },
+        { id: 'cont', type: 'process', col: -1, row: 7, label: 'Continue conversation' },
+        { id: 'close', type: 'process', col: 1, row: 7, label: 'Close conversation' },
+        { id: 'e', type: 'end', col: 1, row: 8, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'view' }, { from: 'view', to: 'select' }, { from: 'select', to: 'accept' },
+        { from: 'accept', to: 'respond' }, { from: 'respond', to: 'resolved' },
+        { from: 'resolved', to: 'cont', label: 'No' },
+        { from: 'cont', to: 'respond', via: [{ col: -1.6, row: 7 }, { col: -1.6, row: 5 }] },
+        { from: 'resolved', to: 'close', label: 'Yes' }, { from: 'close', to: 'e' },
+      ],
+    },
+    {
+      title: 'Figure 14. Police Officer (Law Enforcement) Flowchart',
+      nodes: [
+        { id: 's', type: 'start', col: 0, row: 0, label: 'Authenticated as Police Officer' },
+        { id: 'dash', type: 'process', col: 0, row: 1, label: 'Police dashboard' },
+        { id: 'choose', type: 'decision', col: 0, row: 2, label: 'SOS alert or case referral?' },
+        { id: 'sosView', type: 'process', col: -1, row: 3, label: 'View urgent SOS alerts' },
+        { id: 'sosAck', type: 'process', col: -1, row: 4, label: 'Acknowledge alert' },
+        { id: 'sosRespond', type: 'process', col: -1, row: 5, label: 'Mark Responding' },
+        { id: 'sosResolve', type: 'process', col: -1, row: 6, label: 'Mark Resolved' },
+        { id: 'refView', type: 'process', col: 1, row: 3, label: 'View assigned case referrals' },
+        { id: 'refSelect', type: 'process', col: 1, row: 4, label: 'Open referral' },
+        { id: 'refDecide', type: 'decision', col: 1, row: 5, label: 'Accept referral?' },
+        { id: 'refAccept', type: 'process', col: 0.3, row: 6, label: 'Act on referral, mark Completed' },
+        { id: 'refDecline', type: 'process', col: 1.7, row: 6, label: 'Decline referral' },
+        { id: 'e', type: 'end', col: 0, row: 7, label: 'End' },
+      ],
+      edges: [
+        { from: 's', to: 'dash' }, { from: 'dash', to: 'choose' },
+        { from: 'choose', to: 'sosView', label: 'SOS' }, { from: 'sosView', to: 'sosAck' }, { from: 'sosAck', to: 'sosRespond' },
+        { from: 'sosRespond', to: 'sosResolve' }, { from: 'sosResolve', to: 'e' },
+        { from: 'choose', to: 'refView', label: 'Referral' }, { from: 'refView', to: 'refSelect' }, { from: 'refSelect', to: 'refDecide' },
+        { from: 'refDecide', to: 'refAccept', label: 'Yes' }, { from: 'refDecide', to: 'refDecline', label: 'No' },
+        { from: 'refAccept', to: 'e' }, { from: 'refDecline', to: 'e' },
+      ],
+    },
+  ];
+
+  const container = document.getElementById('figures');
+  FLOWCHARTS.forEach((fc, idx) => {
+    const block = document.createElement('div');
+    block.className = 'fig-block';
+    block.innerHTML = `
+      <p class="eyebrow">System Design</p>
+      <p class="fig-title">${fc.title}</p>
+      <div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${fc.title}"></svg></div>
+      <p class="caption">${fc.title}</p>
+    `;
+    container.appendChild(block);
+    const svg = block.querySelector('svg');
+    renderFlowchart(svg, fc.nodes, fc.edges);
+    if (idx < FLOWCHARTS.length - 1) {
+      const hr = document.createElement('hr');
+      hr.className = 'divider';
+      container.appendChild(hr);
+    }
+  });
+</script>

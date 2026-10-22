@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>F-09 Clickjacking Proof of Concept — SafeSpace Security Assessment</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f4f5f3;
+         color: #10141c; margin: 0; padding: 24px; line-height: 1.6; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: #4a5261; margin: 0 0 20px; font-size: 14px; }
+  .box { background: #fff; border: 1px solid #d8dbd6; border-radius: 8px; padding: 18px; margin-bottom: 18px; }
+  .verdict { font-weight: 600; padding: 12px 14px; border-radius: 6px; margin-bottom: 18px; font-size: 14px; }
+  .vuln { background: #fdecea; border-left: 4px solid #d03b3b; color: #7d1f1f; }
+  .safe { background: #e8f5e9; border-left: 4px solid #0ca30c; color: #11521b; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+         background: #f0f1ee; padding: 1px 5px; border-radius: 3px; }
+  iframe { width: 100%; height: 560px; border: 2px dashed #d03b3b; border-radius: 6px; background: #fff; }
+  ol { padding-left: 20px; } li { margin-bottom: 6px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>F-09 &mdash; Clickjacking Proof of Concept</h1>
+  <p class="sub">SafeSpace Security Assessment &middot; Finding F-09: missing <code>X-Frame-Options</code> and CSP <code>frame-ancestors</code></p>
+
+  <div class="verdict vuln" id="verdict">
+    If the SafeSpace administrative dashboard renders in the frame below, the application
+    <strong>can be embedded by any third-party origin</strong>, confirming F-09.
+    If the frame stays blank or shows a refusal message, the framing protection is working.
+  </div>
+
+  <div class="box">
+    <strong>What this demonstrates.</strong>
+    <p style="font-size:14px;margin:8px 0 0">
+      A page under an attacker's control can load the SafeSpace admin dashboard inside an invisible
+      or disguised iframe. Because an administrator's session cookie travels with the framed request,
+      the attacker can overlay decoy UI and trick an authenticated administrator into clicking real
+      controls &mdash; approving a verification, reassigning a case, revoking an access token &mdash;
+      while believing they are interacting with the attacker's page. This is clickjacking (UI redress).
+    </p>
+    <p style="font-size:14px;margin:8px 0 0">
+      A real attack would set <code>opacity: 0</code> and position the frame beneath a decoy button.
+      This PoC leaves the frame fully visible and interactive controls untouched, because the point
+      is to evidence the <em>framing</em>, not to exercise any action against the live system.
+    </p>
+  </div>
+
+  <div class="box">
+    <strong>How to capture this for the report</strong>
+    <ol>
+      <li>Open this file directly in a browser (double-click it, or <code>file:///&hellip;/clickjacking-test.html</code>).</li>
+      <li>Wait for the frame below to settle.</li>
+      <li>Screenshot the <em>whole browser window</em>, so the attacker-page URL bar and the framed SafeSpace login are both visible in one image. That single frame is the evidence.</li>
+      <li>Save as <code>evidence/fig-03-clickjacking-poc.png</code>.</li>
+      <li>Open DevTools &rarr; Console and screenshot any framing-related error, if one appears.</li>
+    </ol>
+  </div>
+
+  <div class="box">
+    <strong>Live target:</strong> <code>https://safespace-administrative.vercel.app/</code><br>
+    <strong>Framed by:</strong> <code id="origin"></code>
+    <p style="font-size:13px;color:#4a5261;margin:10px 0 0">
+      Two different origins. No same-origin exception applies &mdash; if this renders, the only thing
+      that could have stopped it was a response header, and there isn't one.
+    </p>
+  </div>
+
+  <iframe id="target" src="https://safespace-administrative.vercel.app/"
+          title="SafeSpace administrative dashboard framed from a third-party origin"></iframe>
+
+  <div class="box" style="margin-top:18px">
+    <strong>Remediation to verify against.</strong>
+    <p style="font-size:14px;margin:8px 0 0">
+      Add to <code>admin/vercel.json</code>, redeploy, then reload this page. The frame should go blank.
+    </p>
+<pre style="font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#f0f1ee;padding:12px;border-radius:5px;overflow-x:auto">{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "headers": [{
+    "source": "/(.*)",
+    "headers": [
+      { "key": "X-Frame-Options",         "value": "DENY" },
+      { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" },
+      { "key": "X-Content-Type-Options",  "value": "nosniff" },
+      { "key": "Referrer-Policy",         "value": "strict-origin-when-cross-origin" },
+      { "key": "Permissions-Policy",      "value": "camera=(), microphone=(), geolocation=(self)" }
+    ]
+  }]
+}</pre>
+    <p style="font-size:13px;color:#4a5261;margin:10px 0 0">
+      Re-running this PoC after deploying is the <em>retest step</em> for F-09. Capture a second
+      screenshot showing the blank frame as remediation evidence.
+    </p>
+  </div>
+
+  <p style="font-size:12.5px;color:#7c8494">
+    Authorized testing only. This file loads a page you own, performs no action against it, and
+    transmits nothing. Run it locally; do not host it.
+  </p>
+
+</div>
+<script>
+  document.getElementById('origin').textContent = window.location.origin || 'file:// (local)';
+</script>
+</body>
+</html>

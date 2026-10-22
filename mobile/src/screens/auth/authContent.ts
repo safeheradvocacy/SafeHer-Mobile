@@ -61,8 +61,6 @@ export interface RegisterStrings {
   barangayLabel: string;
   barangaySelectPlaceholder: string;
   pleaseSelectBarangay: string;
-  streetLabel: string;
-  pleaseEnterStreet: string;
   purokLabel: string;
   mapSectionTitle: string;
   mapSectionBody: string;
@@ -232,8 +230,6 @@ const REGISTER: Record<AppLanguage, RegisterStrings> = {
     barangayLabel: 'Barangay *',
     barangaySelectPlaceholder: 'Select barangay',
     pleaseSelectBarangay: 'Please select your barangay.',
-    streetLabel: 'House No. / Street *',
-    pleaseEnterStreet: 'Please enter your house number or street.',
     purokLabel: 'Purok / Sitio',
     mapSectionTitle: 'Location (optional)',
     mapSectionBody: 'You can confirm your exact location on a map now, or add it later from your profile.',
@@ -241,7 +237,7 @@ const REGISTER: Record<AppLanguage, RegisterStrings> = {
     editLocationBtn: 'Edit Location',
     locationSetLabel: 'Location set',
     reviewBarangayLabel: 'Barangay',
-    reviewAddressLabel: 'Address',
+    reviewAddressLabel: 'Purok / Sitio',
     checkFieldsTitle: 'Check the fields above',
     continueBtn: 'Continue',
     emailLabel: 'Email *',
@@ -306,8 +302,6 @@ const REGISTER: Record<AppLanguage, RegisterStrings> = {
     barangayLabel: 'Barangay *',
     barangaySelectPlaceholder: 'Pumili ng barangay',
     pleaseSelectBarangay: 'Pakipili ang iyong barangay.',
-    streetLabel: 'Numero ng Bahay / Kalye *',
-    pleaseEnterStreet: 'Pakilagay ang numero ng bahay o kalye.',
     purokLabel: 'Purok / Sitio',
     mapSectionTitle: 'Lokasyon (opsyonal)',
     mapSectionBody: 'Maaari mong kumpirmahin ang eksaktong lokasyon sa mapa ngayon, o idagdag ito mamaya sa iyong profile.',
@@ -315,7 +309,7 @@ const REGISTER: Record<AppLanguage, RegisterStrings> = {
     editLocationBtn: 'I-edit ang Lokasyon',
     locationSetLabel: 'Naitakda na ang lokasyon',
     reviewBarangayLabel: 'Barangay',
-    reviewAddressLabel: 'Address',
+    reviewAddressLabel: 'Purok / Sitio',
     checkFieldsTitle: 'Suriin ang mga field sa itaas',
     continueBtn: 'Magpatuloy',
     emailLabel: 'Email *',

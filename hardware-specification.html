@@ -1,0 +1,281 @@
+<!doctype html>
+<title>SafeSpace Hardware Specification</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --header-bg: #e9ecf1;
+    --accent: #1f4e8c;
+    --stripe: #f1f3f7;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --header-bg: #2b2e33;
+      --accent: #8fb6ec;
+      --stripe: #26292e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --header-bg: #2b2e33;
+    --accent: #8fb6ec;
+    --stripe: #26292e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet { max-width: 980px; margin: 0 auto; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 4px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 26px);
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .table-label {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 22px 0 0;
+  }
+  .table-caption {
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 16px;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 920px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--header-bg);
+    color: var(--ink);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th:last-child, td:last-child { border-right: none; }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .group-cell {
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--stripe);
+    width: 130px;
+  }
+  .component-cell { font-weight: 500; width: 130px; }
+  .purpose-cell { color: var(--ink-muted); font-size: 12.5px; width: 260px; }
+
+  .legend {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+</style>
+
+<div class="sheet">
+  <p class="section-label">System Requirements</p>
+  <h1 class="fig-title">Hardware Specification</h1>
+
+  <p class="note">
+    Specifications reflect the actual hardware needed to develop, operate, and access SafeSpace across its
+    three real surfaces: the React Native/Expo mobile app, the React/Vite web admin portal, and the Supabase
+    managed cloud backend. The backend is cloud-hosted infrastructure, not on-premise server hardware &mdash;
+    PSWDO Aurora does not need to purchase or maintain a physical server.
+  </p>
+
+  <p class="table-label">Table 3</p>
+  <p class="table-caption">Hardware Specification</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Item</th>
+          <th>Minimum Requirement</th>
+          <th>Recommended Requirement</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="group-cell" rowspan="5">Development<br>Workstation</td>
+          <td class="component-cell">Processor</td>
+          <td>Dual-core, 2.0 GHz (Intel Core i5 / AMD Ryzen 5 or equivalent)</td>
+          <td>Quad-core, 2.5 GHz or higher (Intel Core i7 / AMD Ryzen 7 or equivalent)</td>
+          <td class="purpose-cell">Compiles and bundles the mobile app (Metro) and the admin web app (Vite) during development and builds.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Memory (RAM)</td>
+          <td>8 GB</td>
+          <td>16 GB or higher</td>
+          <td class="purpose-cell">Runs the Expo development server, an Android emulator or iOS simulator, and the code editor at the same time without slowdown.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Storage</td>
+          <td>256 GB SSD, 20 GB free</td>
+          <td>512 GB SSD or higher</td>
+          <td class="purpose-cell">Holds the Node.js toolchain, project dependencies, and Android SDK/Xcode build caches for both apps.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Display</td>
+          <td>1366 &times; 768</td>
+          <td>1920 &times; 1080 (Full HD) or higher</td>
+          <td class="purpose-cell">Allows code, the running app preview, and the Supabase dashboard to be viewed side by side while developing.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Internet Connection</td>
+          <td>Broadband, 5 Mbps</td>
+          <td>Stable broadband, 15 Mbps or higher</td>
+          <td class="purpose-cell">Installs npm packages, runs Expo/EAS builds, and reaches the live Supabase project while developing.</td>
+        </tr>
+
+        <tr>
+          <td class="group-cell" rowspan="6">Mobile Client<br>Device<br><span style="font-weight:400;font-size:11px">(Survivor&rsquo;s Smartphone)</span></td>
+          <td class="component-cell">Processor</td>
+          <td>Quad-core, 1.8 GHz</td>
+          <td>Octa-core, 2.0 GHz or higher</td>
+          <td class="purpose-cell">Keeps the app, map rendering, and camera capture responsive during an incident report or SOS trigger.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Memory (RAM)</td>
+          <td>3 GB</td>
+          <td>4 GB or higher</td>
+          <td class="purpose-cell">Prevents the app from slowing down or crashing while the map, camera, and forms are open at once.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Storage</td>
+          <td>32 GB, 300 MB free for app and offline data</td>
+          <td>64 GB or higher</td>
+          <td class="purpose-cell">Stores the installed app and locally cached data, such as a draft report or map tiles.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Display</td>
+          <td>5.0&Prime; HD touchscreen</td>
+          <td>6.0&Prime; or larger, Full HD touchscreen</td>
+          <td class="purpose-cell">Keeps incident-report forms, maps, and shelter listings legible and easy to navigate, especially under stress.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Sensors &amp; Camera</td>
+          <td>GPS/location, rear camera (8 MP), fingerprint or face recognition sensor</td>
+          <td>GPS with A-GPS/GLONASS, rear camera (12 MP or higher), fingerprint and face recognition sensor</td>
+          <td class="purpose-cell">GPS locates the survivor for SOS alerts and shelter distance; the camera attaches evidence photos and the identity-verification document; the biometric sensor protects the in-app security passcode.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Connectivity</td>
+          <td>Mobile data (3G) or Wi-Fi</td>
+          <td>4G/LTE or Wi-Fi, stable connection</td>
+          <td class="purpose-cell">Delivers SOS alerts, incident reports, and real-time location updates to responders &mdash; the app's core safety functions depend on this.</td>
+        </tr>
+
+        <tr>
+          <td class="group-cell" rowspan="4">Web Admin<br>Client Device<br><span style="font-weight:400;font-size:11px">(PSWDO / LGU Staff)</span></td>
+          <td class="component-cell">Processor</td>
+          <td>Dual-core, 1.6 GHz</td>
+          <td>Quad-core, 2.0 GHz or higher</td>
+          <td class="purpose-cell">Renders the admin dashboard, real-time SOS monitoring, and generated reports without lag.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Memory (RAM)</td>
+          <td>4 GB</td>
+          <td>8 GB or higher</td>
+          <td class="purpose-cell">Keeps multiple open views (case management, SOS monitoring, reports) responsive during an active caseload.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Display</td>
+          <td>1366 &times; 768</td>
+          <td>1920 &times; 1080 (Full HD) or higher</td>
+          <td class="purpose-cell">Displays data tables, case details, and the province map clearly for caseworkers and responders.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Internet Connection</td>
+          <td>Broadband, 5 Mbps</td>
+          <td>Stable broadband, 10 Mbps or higher</td>
+          <td class="purpose-cell">Required for real-time SOS alert delivery and continuous access to case data.</td>
+        </tr>
+
+        <tr>
+          <td class="group-cell" rowspan="2">Backend Hosting<br>Infrastructure<br><span style="font-weight:400;font-size:11px">(Supabase Cloud)</span></td>
+          <td class="component-cell">Provisioning</td>
+          <td colspan="2">Managed cloud infrastructure (Supabase) &mdash; PostgreSQL database, file storage, authentication, and serverless Edge Functions. Compute and storage scale automatically with the hosting plan; no on-premise server hardware is required or maintained by PSWDO Aurora.</td>
+          <td class="purpose-cell">Hosts the database, file storage (evidence, identity documents, profile photos), authentication, and serverless functions that power both apps.</td>
+        </tr>
+        <tr>
+          <td class="component-cell">Network Uplink</td>
+          <td colspan="2">Stable internet connection at the hosting provider&rsquo;s data center (provided and maintained by Supabase under its service-level terms, not by the province).</td>
+          <td class="purpose-cell">Ensures SOS alerts and case updates reach the mobile app and admin dashboard in real time.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="legend">Minimum and recommended values describe the hardware each surface runs on; software and runtime versions (Node.js, Expo SDK, browser requirements) are addressed separately under Software Specification.</p>
+</div>

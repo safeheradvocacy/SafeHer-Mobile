@@ -1,0 +1,27 @@
+============================================================
+SafeSpace security assessment — evidence capture
+Test     : Edge Function unauthenticated negative tests
+Target   : https://qhhcqehgwpzeycejgevk.supabase.co/functions/v1/*
+Captured : 2026-10-21T15:12:36Z (UTC)
+Method   : non-destructive, unauthenticated
+============================================================
+
+Four request shapes per function. None should execute privileged logic.
+
+FUNCTION                   noAuth   apikeyOnly   badJWT   keyAsBearer 
+admin-user-metadata        401      401          401      401         
+backup-create              401      400          401      400         
+backup-restore             401      400          401      400         
+create-admin-user          401      401          401      401         
+safeher-chatbot            401      401          401      401         
+security-passcode          401      401          401      401         
+send-push-notification     401      401          401      401         
+
+--- Token validation proof (create-admin-user) ------------------
+  response: {"error":"Invalid session"}
+
+--- F-11: pre-auth action enumeration (backup-create) -----------
+  action=validate       -> {"error":"Missing Authorization header"} [HTTP 401]
+  action=download       -> {"error":"Missing Authorization header"} [HTTP 401]
+  action=bogusaction    -> {"error":"Unknown action"} [HTTP 400]
+  action=anotherfake    -> {"error":"Unknown action"} [HTTP 400]

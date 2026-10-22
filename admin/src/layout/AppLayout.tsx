@@ -34,7 +34,26 @@ import { LogoMark } from '../components/branding/Logo';
 import { AdminErrorBoundary } from '../components/AdminErrorBoundary';
 import { hasPermission, type PermissionKey } from '../lib/permissions';
 import { ROLE_LABEL } from '../lib/roleLabels';
+import { SosAlertProvider } from '../contexts/SosAlertContext';
+import { SosAlertPopup } from '../components/sos/SosAlertPopup';
 import type { UserRole } from '../types/database.types';
+
+/** Only mounts the SOS pop-up/sound provider (and its Realtime
+ * subscription + AudioContext) for the one role it's built for —
+ * everyone else's dashboard renders exactly as before, with zero added
+ * queries or channels. Wrapping just <main>, above the <Outlet/>, is what
+ * makes the pop-up stack survive navigation between the Police
+ * dashboard's own pages (brief: "display new alerts even when viewing
+ * another page"), since AppLayout itself never unmounts between them. */
+function MaybeSosAlertProvider({ active, children }: { active: boolean; children: React.ReactNode }) {
+  if (!active) return <>{children}</>;
+  return (
+    <SosAlertProvider>
+      {children}
+      <SosAlertPopup />
+    </SosAlertProvider>
+  );
+}
 
 // Section a nav item belongs to, purely for the sidebar's visual grouping
 // (small uppercase labels) — carries no permission meaning of its own.
@@ -538,16 +557,18 @@ export function AppLayout() {
             {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
         </div>
-        <main style={{ padding: 32, flex: 1, minWidth: 0 }}>
-          {/* Keyed by pathname so each route change gets its own fresh fade
-              + slight-rise entrance rather than the outgoing page's
-              animation state carrying over. */}
-          <div key={location.pathname} className="page-transition">
-            <AdminErrorBoundary>
-              <Outlet />
-            </AdminErrorBoundary>
-          </div>
-        </main>
+        <MaybeSosAlertProvider active={isLawEnforcement}>
+          <main style={{ padding: 32, flex: 1, minWidth: 0 }}>
+            {/* Keyed by pathname so each route change gets its own fresh fade
+                + slight-rise entrance rather than the outgoing page's
+                animation state carrying over. */}
+            <div key={location.pathname} className="page-transition">
+              <AdminErrorBoundary>
+                <Outlet />
+              </AdminErrorBoundary>
+            </div>
+          </main>
+        </MaybeSosAlertProvider>
       </div>
     </div>
   );

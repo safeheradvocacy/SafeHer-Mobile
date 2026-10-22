@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import { acquireSosLocation } from './sosLocation';
 import { distanceMeters } from './geo';
+import { toFiniteCoord } from './coords';
 import type { SosAlert } from '../types/database.types';
 
 const POLL_INTERVAL_MS = 45_000;
@@ -37,7 +38,13 @@ export function useActiveSosLocationUpdates(sos: SosAlert | null, enabled: boole
     }
     const seedTime = sos.location_timestamp ?? sos.triggered_at;
     setLastUpdatedAt(new Date(seedTime));
-    lastWrittenRef.current = sos.latitude != null && sos.longitude != null ? { lat: sos.latitude, lng: sos.longitude, at: new Date(seedTime).getTime() } : null;
+    // sos_alerts.latitude/longitude are Postgres `decimal` columns, which
+    // PostgREST serializes as JSON strings (see sosCoords.ts) — coerced
+    // here before use so the distance check below is always real
+    // arithmetic, not a string silently coerced mid-expression.
+    const seedLat = toFiniteCoord(sos.latitude);
+    const seedLng = toFiniteCoord(sos.longitude);
+    lastWrittenRef.current = seedLat != null && seedLng != null ? { lat: seedLat, lng: seedLng, at: new Date(seedTime).getTime() } : null;
   }, [sos?.sos_id]);
 
   useEffect(() => {

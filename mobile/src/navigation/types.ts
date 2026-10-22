@@ -41,8 +41,12 @@ export type AppStackParamList = {
   // since this is optional.
   Tabs: { screen: keyof AppTabParamList } | undefined;
   ReportIncident: undefined;
+  SosHistory: undefined;
+  SosHistoryDetail: { sosId: string };
   CaseDetail: { caseId: string };
   RequestShelter: { shelterId?: string };
+  ShelterDetail: { shelterId: string };
+  MyShelterRequests: undefined;
   Notifications: undefined;
   Profile: undefined;
   EditProfile: undefined;

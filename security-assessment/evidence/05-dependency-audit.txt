@@ -1,0 +1,90 @@
+============================================================
+SafeSpace security assessment — evidence capture
+Test     : Dependency vulnerability audit
+Target   : admin/ and mobile/ package manifests
+Captured : 2026-10-21T15:12:36Z (UTC)
+Method   : non-destructive, unauthenticated
+============================================================
+
+################ admin — FULL DEPENDENCY TREE ################
+react-router  6.0.0 - 7.17.0
+Severity: moderate
+React Router: Open redirect via backslash in <Link> and useNavigate (CVE-2025-68470 bypass) - https://github.com/advisories/GHSA-wrjc-x8rr-h8h6
+React Router: Arbitrary Constructor Injection via deserializeErrors() in React Router SSR Hydration - https://github.com/advisories/GHSA-337j-9hxr-rhxg
+fix available via `npm audit fix`
+node_modules/react-router
+  react-router-dom  6.0.0-alpha.0 - 7.17.0
+  Depends on vulnerable versions of react-router
+  node_modules/react-router-dom
+
+
+source-map-js  1.0.0 - 1.2.1
+Severity: high
+source-map-js allows event-loop denial of service through indexed source-map section offsets - https://github.com/advisories/GHSA-68fv-2mgg-jv7q
+fix available via `npm audit fix`
+node_modules/source-map-js
+
+
+8 vulnerabilities (3 low, 3 moderate, 2 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+################ admin — PRODUCTION TREE ONLY ################
+  react-router-dom  6.0.0-alpha.0 - 7.17.0
+  Depends on vulnerable versions of react-router
+  node_modules/react-router-dom
+
+
+5 vulnerabilities (3 low, 2 moderate)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues, run:
+  npm audit fix --force
+
+################ mobile — FULL DEPENDENCY TREE ################
+Will install expo@44.0.6, which is a breaking change
+node_modules/node-forge
+  @expo/code-signing-certificates  *
+  Depends on vulnerable versions of node-forge
+  node_modules/@expo/code-signing-certificates
+
+uuid  <11.1.1
+Severity: moderate
+uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided - https://github.com/advisories/GHSA-w5hq-g745-h8pq
+fix available via `npm audit fix`
+node_modules/uuid
+  xcode  0.9.2 - 3.0.2-nightly.20251125002453809.sha.e6b981ec
+  Depends on vulnerable versions of uuid
+  node_modules/xcode
+    @expo/config-plugins  <=56.0.16 || 57.0.0-canary-20260526-13e89ca - 57.0.10 || >=58.0.0-canary-20260806-8c2d007
+    Depends on vulnerable versions of xcode
+    node_modules/@expo/config-plugins
+
+25 vulnerabilities (2 low, 3 moderate, 20 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+################ mobile — PRODUCTION TREE ONLY ################
+  node_modules/xcode
+    @expo/config-plugins  <=56.0.16 || 57.0.0-canary-20260526-13e89ca - 57.0.10 || >=58.0.0-canary-20260806-8c2d007
+    Depends on vulnerable versions of xcode
+    node_modules/@expo/config-plugins
+
+25 vulnerabilities (2 low, 3 moderate, 20 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+

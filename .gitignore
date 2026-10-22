@@ -42,3 +42,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Security assessment — test credentials and generated reports (never commit)
+security-assessment/.test-accounts.env
+security-assessment/reports/

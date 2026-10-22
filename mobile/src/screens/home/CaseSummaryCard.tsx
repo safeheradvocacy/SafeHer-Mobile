@@ -2,9 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBadge } from '../../components/ui';
-import { ClaySurface } from '../../theme/clay';
 import { useTheme } from '../../contexts/ThemeContext';
-import { spacing, typography } from '../../theme/theme';
+import { spacing, typography, radius } from '../../theme/theme';
 import type { CaseReport, CaseStatus } from '../../types/database.types';
 
 const STAGE_LABELS = ['Submitted', 'Reviewing', 'In Progress', 'Resolved'] as const;
@@ -69,7 +68,7 @@ export function CaseSummaryCard({ caseReport, onPress }: { caseReport: CaseRepor
       accessibilityLabel={`Case ${caseReport.case_number}`}
       accessibilityHint={`Status: ${caseReport.status}. Opens case details.`}
     >
-      <ClaySurface radius={20} tint={palette.surface} shadowTint={palette.primaryDark} intensity="sm" innerStyle={styles.cardInner} highlightOpacity={0.24}>
+      <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.topRow}>
           <Text style={[styles.caseNumber, { color: palette.text }]}>{caseReport.case_number}</Text>
           <StatusBadge label={caseReport.status} />
@@ -83,7 +82,7 @@ export function CaseSummaryCard({ caseReport, onPress }: { caseReport: CaseRepor
             </Text>
           ))}
         </View>
-      </ClaySurface>
+      </View>
     </Pressable>
   );
 }
@@ -94,7 +93,7 @@ export function CaseSummaryCard({ caseReport, onPress }: { caseReport: CaseRepor
 export function EmptyCaseCard({ onReport }: { onReport: () => void }) {
   const { palette } = useTheme();
   return (
-    <ClaySurface radius={20} tint={palette.surface} shadowTint={palette.primaryDark} intensity="sm" innerStyle={styles.emptyInner} highlightOpacity={0.24}>
+    <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <View style={styles.emptyRow}>
         <View style={[styles.emptyIconWrap, { backgroundColor: palette.primaryLight }]}>
           <Ionicons name="document-text-outline" size={17} color={palette.primary} />
@@ -110,7 +109,7 @@ export function EmptyCaseCard({ onReport }: { onReport: () => void }) {
         <Text style={[styles.emptyBtnText, { color: palette.primary }]}>Report an incident</Text>
         <Ionicons name="chevron-forward" size={14} color={palette.primary} />
       </Pressable>
-    </ClaySurface>
+    </View>
   );
 }
 
@@ -127,7 +126,7 @@ export function CaseSectionHeader({ activeCount }: { activeCount: number }) {
 }
 
 const styles = StyleSheet.create({
-  cardInner: { padding: spacing.md },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   caseNumber: { ...typography.subheading },
   updated: { ...typography.caption, marginTop: 2, marginBottom: spacing.sm },
@@ -139,7 +138,6 @@ const styles = StyleSheet.create({
   sectionBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionBadgeText: { ...typography.caption, fontFamily: 'Inter_600SemiBold' as any },
 
-  emptyInner: { padding: spacing.md },
   emptyRow: { flexDirection: 'row', alignItems: 'center' },
   emptyIconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { ...typography.bodyMedium },

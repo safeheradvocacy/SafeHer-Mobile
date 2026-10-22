@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import * as Network from 'expo-network';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -14,6 +14,7 @@ import { useGoToReportIncident } from '../../lib/reportIncidentGuard';
 import { Input } from '../../components/ui';
 import { HeaderActions } from '../../components/ScreenHeader';
 import { QuickActionCard } from '../home/QuickActionCard';
+import { ExpertSupportConfirmSheet } from './ExpertSupportConfirmSheet';
 import { spacing, typography, radius } from '../../theme/theme';
 import { AppStackParamList, AppTabParamList } from '../../navigation/types';
 import type { ChatMessage, ChatSessionStatus } from '../../types/database.types';
@@ -63,6 +64,7 @@ export function SafeHerAssistantScreen() {
   const [input, setInput] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [emergencyDismissedFor, setEmergencyDismissedFor] = useState<string | null>(null);
+  const [showExpertConfirm, setShowExpertConfirm] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -99,21 +101,8 @@ export function SafeHerAssistantScreen() {
   };
 
   const onTalkToExpert = () => {
-    if (session && session.status !== 'AI_ASSISTED') return; // already requested/active
-    Alert.alert(
-      'Talk to a SafeSpace support expert?',
-      "You don't need to explain why. A SafeSpace support expert will be connected to this conversation as soon as one is available.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Request support',
-          onPress: async () => {
-            const { error } = await requestExpertSupport();
-            if (error) Alert.alert('Could not request support', error);
-          },
-        },
-      ]
-    );
+    if (session && session.status !== 'AI_ASSISTED') return; // already requested/active — nothing to confirm
+    setShowExpertConfirm(true);
   };
 
   const send = () => {
@@ -244,6 +233,12 @@ export function SafeHerAssistantScreen() {
           {sending ? <ActivityIndicator color={palette.white} size="small" /> : <Ionicons name="send" size={16} color={palette.white} />}
         </Pressable>
       </View>
+
+      <ExpertSupportConfirmSheet
+        visible={showExpertConfirm}
+        onClose={() => setShowExpertConfirm(false)}
+        onConfirm={requestExpertSupport}
+      />
     </KeyboardAvoidingView>
   );
 }

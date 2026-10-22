@@ -23,7 +23,6 @@ import {
   type CaseService,
   type CaseStatus,
   type CaseStatusHistory,
-  type Evidence,
   type Gender,
   type LawEnforcementReferral,
   type Municipality,
@@ -52,7 +51,6 @@ export function CaseDetailPage() {
   const [survivorProfile, setSurvivorProfile] = useState<UserProfile | null>(null);
   const [history, setHistory] = useState<CaseStatusHistory[]>([]);
   const [assignment, setAssignment] = useState<CaseAssignment | null>(null);
-  const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [referrals, setReferrals] = useState<(ShelterReferral & { shelters?: Shelter })[]>([]);
   const [lawEnforcementReferrals, setLawEnforcementReferrals] = useState<(LawEnforcementReferral & { user_profiles?: UserProfile })[]>([]);
   const [officers, setOfficers] = useState<UserProfile[]>([]);
@@ -89,7 +87,6 @@ export function CaseDetailPage() {
   const [assigningLeReferral, setAssigningLeReferral] = useState<LawEnforcementReferral | null>(null);
   const [escalateModalOpen, setEscalateModalOpen] = useState(false);
   const [escalateReason, setEscalateReason] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Survivor Information edit (module21) — admin-side completion of a
@@ -138,7 +135,7 @@ export function CaseDetailPage() {
       return;
     }
 
-    const [survivorRes, historyRes, assignRes, evidenceRes, referralRes, leReferralRes, officersRes, shelterRes, municipalityRes, barangaysRes, ownershipRes, servicesRes, barangayRequestsRes] = await Promise.all([
+    const [survivorRes, historyRes, assignRes, referralRes, leReferralRes, officersRes, shelterRes, municipalityRes, barangaysRes, ownershipRes, servicesRes, barangayRequestsRes] = await Promise.all([
       // A Walk-In case with no associated account yet (Scenario B,
       // module14) has survivor_id === null — nothing to look up until a
       // client is verified and linked.
@@ -147,7 +144,6 @@ export function CaseDetailPage() {
         : Promise.resolve({ data: null, error: null }),
       supabase.from('case_status_history').select('*').eq('case_id', caseId).order('changed_at', { ascending: true }),
       supabase.from('case_assignments').select('*').eq('case_id', caseId).order('assigned_at', { ascending: false }).limit(1),
-      supabase.from('evidence').select('*').eq('case_id', caseId).order('uploaded_at', { ascending: false }),
       supabase.from('shelter_referrals').select('*, shelters(*)').eq('case_id', caseId).order('referred_at', { ascending: false }),
       supabase.from('law_enforcement_referrals').select('*, user_profiles!law_enforcement_referrals_assigned_officer_id_fkey(*)').eq('case_id', caseId).order('created_at', { ascending: false }),
       supabase.from('user_profiles').select('*').eq('role', 'law_enforcement').eq('is_active', true),
@@ -167,7 +163,6 @@ export function CaseDetailPage() {
     setSurvivor(survivorRes.data ?? null);
     setHistory(historyRes.data ?? []);
     setAssignment(assignRes.data?.[0] ?? null);
-    setEvidence(evidenceRes.data ?? []);
     setReferrals((referralRes.data as any) ?? []);
     setLawEnforcementReferrals((leReferralRes.data as any) ?? []);
     setOfficers(officersRes.data ?? []);
@@ -619,42 +614,6 @@ export function CaseDetailPage() {
     load();
   };
 
-  const submitEvidenceUpload = async () => {
-    if (!uploadFile || !profile) return;
-    setSaving(true);
-    const path = `${caseReport.case_id}/${Date.now()}_${uploadFile.name}`;
-    const { error: uploadErr } = await supabase.storage.from('evidence').upload(path, uploadFile);
-    if (!uploadErr) {
-      const { data: row } = await supabase
-        .from('evidence')
-        .insert({
-          case_id: caseReport.case_id,
-          uploaded_by: profile.profile_id,
-          file_name: uploadFile.name,
-          storage_path: path,
-          mime_type: uploadFile.type || 'application/octet-stream',
-          file_size: uploadFile.size,
-        })
-        .select()
-        .single();
-      await logAudit({
-        profileId: profile.profile_id,
-        action: 'INSERT',
-        tableName: 'evidence',
-        recordId: row?.evidence_id ?? '',
-        newValues: row,
-      });
-    }
-    setSaving(false);
-    setUploadFile(null);
-    load();
-  };
-
-  const viewEvidence = async (e: Evidence) => {
-    const { data } = await supabase.storage.from('evidence').createSignedUrl(e.storage_path, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-  };
-
   // Part A/4 — the compact action area is deliberately role-scoped: a
   // Municipal Administrator's general case actions are Update Status /
   // Refer to Shelter / Refer to Police Officer only. Assign Staff moved
@@ -804,44 +763,6 @@ export function CaseDetailPage() {
               </>
             ) : (
               <p style={{ color: 'var(--color-text-muted)' }}>Survivor details unavailable.</p>
-            )}
-          </div>
-
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3>Evidence</h3>
-              <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer' }}>
-                Attach file
-                <input type="file" style={{ display: 'none' }} onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
-              </label>
-            </div>
-            {uploadFile && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 13 }}>{uploadFile.name}</span>
-                <button className="btn btn-primary btn-sm" onClick={submitEvidenceUpload} disabled={saving}>
-                  Upload
-                </button>
-              </div>
-            )}
-            {evidence.length === 0 ? (
-              <EmptyState title="No evidence uploaded yet" />
-            ) : (
-              <table>
-                <tbody>
-                  {evidence.map((e) => (
-                    <tr key={e.evidence_id}>
-                      <td>{e.file_name}</td>
-                      <td style={{ color: 'var(--color-text-muted)' }}>{(e.file_size / 1024).toFixed(0)} KB</td>
-                      <td style={{ color: 'var(--color-text-muted)' }}>{new Date(e.uploaded_at).toLocaleDateString()}</td>
-                      <td>
-                        <button className="btn btn-outline btn-sm" onClick={() => viewEvidence(e)}>
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             )}
           </div>
 

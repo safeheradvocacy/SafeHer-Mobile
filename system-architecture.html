@@ -1,0 +1,280 @@
+<!doctype html>
+<title>SafeSpace System Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --header-bg: #e9ecf1;
+    --accent: #1f4e8c;
+    --stripe: #f1f3f7;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --header-bg: #2b2e33;
+      --accent: #8fb6ec;
+      --stripe: #26292e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --header-bg: #2b2e33;
+    --accent: #8fb6ec;
+    --stripe: #26292e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet { max-width: 1040px; margin: 0 auto; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 4px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 26px);
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .table-label {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 22px 0 0;
+  }
+  .table-caption {
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 16px;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 780px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--header-bg);
+    color: var(--ink);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th:last-child, td:last-child { border-right: none; }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .layer-cell { font-weight: 600; color: var(--accent); background: var(--stripe); width: 170px; }
+  .tech-cell { font-weight: 500; width: 230px; }
+  .desc-cell { color: var(--ink-muted); font-size: 12.5px; }
+
+  code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    background: var(--stripe);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .legend {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+</style>
+
+<div class="sheet">
+  <p class="section-label">System Requirements</p>
+  <h1 class="fig-title">System Architecture</h1>
+
+  <p class="note">
+    Reflects the actual technology choices in the live codebase (package versions confirmed directly from
+    each application's own configuration), not a generic reference stack.
+  </p>
+
+  <p class="table-label">Table 5</p>
+  <p class="table-caption">System Architecture</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Layer</th>
+          <th>Technology</th>
+          <th>Role in SafeSpace</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="layer-cell" rowspan="5">Presentation &mdash;<br>Mobile Application</td>
+          <td class="tech-cell">React Native 0.86.3 (Expo SDK 57)</td>
+          <td class="desc-cell">Cross-platform framework for the survivor-facing Android/iOS app.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">TypeScript</td>
+          <td class="desc-cell">Type-safe application code across every mobile screen and library.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">React Navigation (bottom-tabs, native-stack)</td>
+          <td class="desc-cell">Tab bar and screen-to-screen navigation.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">react-native-maps (Google Maps)</td>
+          <td class="desc-cell">Renders shelter locations, SOS location, and registered-address map selection.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">react-native-reanimated, react-native-paper</td>
+          <td class="desc-cell">Screen/UI animation and base interface components.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell" rowspan="4">Presentation &mdash;<br>Web Admin Portal</td>
+          <td class="tech-cell">React 18.3.1 + Vite 5.4.5</td>
+          <td class="desc-cell">Component framework and build tool for the administrative dashboard.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">TypeScript</td>
+          <td class="desc-cell">Type-safe application code across every admin page and library.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">React Router DOM</td>
+          <td class="desc-cell">Page routing across case management, shelters, personnel, and reports.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Chart.js (react-chartjs-2), Lucide React</td>
+          <td class="desc-cell">Analytics/report charts and interface iconography.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell" rowspan="3">Application &amp;<br>Business Logic</td>
+          <td class="tech-cell">Supabase Edge Functions (Deno)</td>
+          <td class="desc-cell">Server-side logic requiring elevated privilege: account creation, backup/restore, the support chatbot, security-passcode verification, and push-notification dispatch.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">PostgreSQL Row-Level Security (RLS)</td>
+          <td class="desc-cell">Enforces each of the eight roles' authorized data scope directly at the database level &mdash; the real authorization boundary, not just the interface.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">PostgreSQL Functions &amp; Triggers</td>
+          <td class="desc-cell">Server-side business rules: automatic case numbering, audit-log capture, and account provisioning on signup.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell" rowspan="2">Data</td>
+          <td class="tech-cell">Supabase-managed PostgreSQL</td>
+          <td class="desc-cell">Primary relational database for every case, user, shelter, and SOS record.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Supabase Storage</td>
+          <td class="desc-cell">File storage for incident evidence, identity-verification documents, profile photos, shelter photos, and system backups.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell" rowspan="3">Authentication &amp;<br>Security</td>
+          <td class="tech-cell">Supabase Auth</td>
+          <td class="desc-cell">Email/password authentication and session management for both applications.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Security Passcode (bcrypt via pgcrypto)</td>
+          <td class="desc-cell">A second, mobile-only credential gating access to submitted case details.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Biometric Lock (expo-local-authentication)</td>
+          <td class="desc-cell">Device-level fingerprint/face lock for the mobile app.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell">Real-Time<br>Communication</td>
+          <td class="tech-cell">Supabase Realtime</td>
+          <td class="desc-cell">Live delivery of Emergency SOS alerts to the police dashboard and live in-app notification updates.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell" rowspan="3">External<br>Integrations</td>
+          <td class="tech-cell">PSGC (Philippine Statistics Authority)</td>
+          <td class="desc-cell">Official municipality and barangay reference data for Aurora Province.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Expo Push Notification Service</td>
+          <td class="desc-cell">Delivers push notifications to registered mobile devices.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Google Maps Platform</td>
+          <td class="desc-cell">Map rendering and geolocation display on mobile.</td>
+        </tr>
+
+        <tr>
+          <td class="layer-cell" rowspan="2">Hosting &amp;<br>Deployment</td>
+          <td class="tech-cell">Vercel</td>
+          <td class="desc-cell">Hosts and deploys the web admin portal.</td>
+        </tr>
+        <tr>
+          <td class="tech-cell">Expo Application Services (EAS)</td>
+          <td class="desc-cell">Builds and distributes the mobile application.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="legend">Both applications communicate with the backend through <code>@supabase/supabase-js</code> &mdash; REST (PostgREST) for queries/writes and a WebSocket channel for Realtime subscriptions.</p>
+</div>

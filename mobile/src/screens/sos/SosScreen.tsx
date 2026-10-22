@@ -1,50 +1,59 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useActiveSosLocationUpdates } from '../../lib/useActiveSosLocationUpdates';
-import { locationQuality } from '../../lib/sosLocation';
-import { MapErrorBoundary } from '../../components/MapErrorBoundary';
 import { SosConfirmSheet } from '../home/SosConfirmSheet';
 import { ScreenHeader } from '../../components/ScreenHeader';
-import { StatusBadge, PressableScale } from '../../components/ui';
+import { PressableScale } from '../../components/ui';
+import { SosAlertStatusCard } from '../../components/sos/SosAlertStatusCard';
+import { SosAlertTimeline } from '../../components/sos/SosAlertTimeline';
+import { SosAlertMapCard } from '../../components/sos/SosAlertMapCard';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
+import { AppStackParamList } from '../../navigation/types';
 import type { SosAlert } from '../../types/database.types';
 
-// Never shows raw coordinates to the survivor — just a coarse read on how
-// much responders can trust the pin. LAST_KNOWN is always "Approximate"
-// regardless of its accuracy radius, since it's not a fresh fix.
-function locationStatusLabel(sos: SosAlert): 'Unavailable' | 'Approximate' | 'Available' {
-  if (sos.location_source === 'UNAVAILABLE' || sos.latitude == null || sos.longitude == null) return 'Unavailable';
-  if (sos.location_source === 'LAST_KNOWN') return 'Approximate';
-  const quality = locationQuality(sos.location_accuracy);
-  return quality === 'Excellent' || quality === 'Good' ? 'Available' : 'Approximate';
-}
+// Realtime ('*'/UPDATE postgres_changes below) is the primary path, same
+// as before — this is only the bounded fallback for the case realtime
+// itself goes stale/silently drops while the screen stays open and
+// focused a long time, mirroring the spirit (not the exact interval) of
+// useActiveSosLocationUpdates' own 45s location-write poll, without
+// adding a second, unrelated polling mechanism when the user navigates
+// away (gated on `enabled` below, same as that hook already is).
+const STATUS_REFRESH_MS = 60_000;
 
 export function SosScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { palette } = useTheme();
   const { profile } = useAuth();
   const isFocused = useIsFocused();
   const [activeSos, setActiveSos] = useState<SosAlert | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const { lastUpdatedAt } = useActiveSosLocationUpdates(activeSos, isFocused);
+  useActiveSosLocationUpdates(activeSos, isFocused);
 
-  const loadActive = useCallback(async () => {
-    if (!profile) return;
-    const { data } = await supabase
-      .from('sos_alerts')
-      .select('*')
-      .eq('profile_id', profile.profile_id)
-      .in('status', ['Triggered', 'Responding'])
-      .order('triggered_at', { ascending: false })
-      .limit(1);
-    setActiveSos(data?.[0] ?? null);
-    setLoading(false);
-  }, [profile]);
+  const loadActive = useCallback(
+    async (isRefresh = false) => {
+      if (!profile) return;
+      if (isRefresh) setRefreshing(true);
+      const { data } = await supabase
+        .from('sos_alerts')
+        .select('*')
+        .eq('profile_id', profile.profile_id)
+        .in('status', ['Triggered', 'Responding'])
+        .order('triggered_at', { ascending: false })
+        .limit(1);
+      setActiveSos(data?.[0] ?? null);
+      setLoading(false);
+      setRefreshing(false);
+    },
+    [profile]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -52,8 +61,8 @@ export function SosScreen() {
     }, [loadActive])
   );
 
-  // Live updates: when an admin marks this alert Responding / Resolved,
-  // reflect it immediately without the user needing to refresh.
+  // Live updates: when an admin/officer marks this alert Responding /
+  // Resolved, reflect it immediately without the user needing to refresh.
   useEffect(() => {
     if (!activeSos) return;
     const channel = supabase
@@ -69,10 +78,18 @@ export function SosScreen() {
     };
   }, [activeSos?.sos_id]);
 
+  // Bounded staleness fallback — only while there's an active alert AND
+  // the screen is actually focused; never runs in the background.
+  useEffect(() => {
+    if (!activeSos || !isFocused) return;
+    const id = setInterval(() => loadActive(), STATUS_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [activeSos?.sos_id, isFocused, loadActive]);
+
   if (loading) {
     return (
       <View style={[styles.screen, { backgroundColor: palette.background }]}>
-        <ScreenHeader title="SOS" />
+        <ScreenHeader title="SOS Status" />
         <View style={styles.center}>
           <ActivityIndicator color={palette.primary} />
         </View>
@@ -80,60 +97,33 @@ export function SosScreen() {
     );
   }
 
-  const statusLabel = activeSos ? locationStatusLabel(activeSos) : null;
-  const hasMapPosition = activeSos?.latitude != null && activeSos?.longitude != null;
-
   return (
     <View style={[styles.screen, { backgroundColor: palette.background }]}>
-      <ScreenHeader title="SOS" />
+      <ScreenHeader title="SOS Status" />
+      <Text style={[styles.headerSubtitle, { color: palette.textMuted }]}>View your emergency alert and response updates.</Text>
+
       {activeSos ? (
-        <View style={styles.activeWrap}>
-          <StatusBadge label={activeSos.status} />
-          <Text style={[styles.activeTitle, { color: palette.text }]}>
-            {activeSos.status === 'Triggered' ? 'Help is on the way' : 'A responder is handling your alert'}
-          </Text>
-          <Text style={[styles.activeBody, { color: palette.textMuted }]}>
-            Your location was sent at {new Date(activeSos.triggered_at).toLocaleTimeString()}. Stay in a safe
-            place if you can.
-          </Text>
-          {activeSos.location_address ? (
-            <Text style={[styles.activeAddress, { color: palette.textMuted }]}>{activeSos.location_address}</Text>
-          ) : null}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.activeWrap}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadActive(true)} tintColor={palette.primary} />}
+        >
+          <SosAlertStatusCard sos={activeSos} />
+          <SosAlertTimeline sos={activeSos} />
+          <SosAlertMapCard sos={activeSos} />
 
-          <View style={styles.locationRow}>
-            <View style={[styles.locationDot, { backgroundColor: statusLabel === 'Available' ? palette.success : statusLabel === 'Approximate' ? palette.warning : palette.danger }]} />
-            <Text style={[styles.locationStatusText, { color: palette.textMuted }]}>Location: {statusLabel}</Text>
-            {lastUpdatedAt ? (
-              <Text style={[styles.locationStatusText, { color: palette.textMuted }]}> · Last updated: {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-            ) : null}
-          </View>
+          {/* No cancellation action here — confirmed by schema/RLS audit:
+              SosStatus has no 'Cancelled' value and survivors hold no
+              UPDATE grant on sos_alerts.status (validate_sos_alert_update()
+              only allows law_enforcement/admin roles to change it), so
+              there is no backend-supported way for a survivor to cancel
+              an already-triggered alert today. */}
 
-          <View style={[styles.mapWrap, { borderColor: palette.border }]}>
-            {hasMapPosition ? (
-              <MapErrorBoundary
-                palette={palette}
-                fallbackMessage="Map unavailable — your alert is still active and responders have your location."
-                style={styles.mapFallback}
-              >
-                <MapView
-                  style={StyleSheet.absoluteFill}
-                  region={{
-                    latitude: activeSos.latitude as number,
-                    longitude: activeSos.longitude as number,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
-                  }}
-                >
-                  <Marker coordinate={{ latitude: activeSos.latitude as number, longitude: activeSos.longitude as number }} pinColor={palette.danger} title="Your location" />
-                </MapView>
-              </MapErrorBoundary>
-            ) : (
-              <View style={[styles.mapFallback, { backgroundColor: palette.surfaceMuted }]}>
-                <Text style={{ color: palette.textMuted, ...typography.caption }}>No location available for this alert.</Text>
-              </View>
-            )}
-          </View>
-        </View>
+          <Pressable onPress={() => navigation.navigate('SosHistory')} style={styles.historyLink} accessibilityRole="button">
+            <Text style={[styles.historyLinkText, { color: palette.primary }]}>View SOS History</Text>
+            <Ionicons name="chevron-forward" size={16} color={palette.primary} />
+          </Pressable>
+        </ScrollView>
       ) : (
         <View style={styles.center}>
           <PressableScale
@@ -150,6 +140,11 @@ export function SosScreen() {
           <Text style={[styles.helperText, { color: palette.textMuted }]}>
             Press and confirm to send your location to an emergency responder
           </Text>
+
+          <Pressable onPress={() => navigation.navigate('SosHistory')} style={styles.historyLink} accessibilityRole="button">
+            <Text style={[styles.historyLinkText, { color: palette.primary }]}>View SOS History</Text>
+            <Ionicons name="chevron-forward" size={16} color={palette.primary} />
+          </Pressable>
         </View>
       )}
 
@@ -168,6 +163,7 @@ export function SosScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  headerSubtitle: { ...typography.body, paddingHorizontal: spacing.lg, marginTop: -spacing.xs, marginBottom: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   sosButton: {
     width: 180,
@@ -178,13 +174,7 @@ const styles = StyleSheet.create({
   },
   sosButtonText: { fontSize: 40, fontFamily: 'PlusJakartaSans_700Bold' as any },
   helperText: { ...typography.body, textAlign: 'center', marginTop: spacing.xl },
-  activeWrap: { flex: 1, padding: spacing.xl },
-  activeTitle: { ...typography.heading, marginTop: spacing.md },
-  activeBody: { ...typography.body, marginTop: spacing.sm },
-  activeAddress: { ...typography.caption, marginTop: spacing.md },
-  locationRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: spacing.md },
-  locationDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  locationStatusText: { ...typography.caption },
-  mapWrap: { height: 200, borderRadius: radius.md, borderWidth: 1, overflow: 'hidden', marginTop: spacing.lg },
-  mapFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
+  activeWrap: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  historyLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: spacing.xl, padding: spacing.sm },
+  historyLinkText: { ...typography.bodyMedium },
 });

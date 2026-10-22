@@ -181,13 +181,16 @@ export default function App() {
                 (Phase 2: "independently accessible, rather than being
                 one page with two unrelated sections hidden together").
                 ReportsRouter/AnalyticsRouter each pick the role-
-                appropriate page; the shared case-wide ReportsPage/
-                AnalyticsPage are unchanged in content for the four
-                roles below, and provincial_admin/super_admin now see
-                them too (identical underlying RLS access to
-                provincial_staff's — see permissions.ts). The four new
-                roles each get their own assignment/shelter-scoped
-                Reports (PDF) and Analytics (charts/KPIs) pages. */}
+                appropriate page. provincial_admin/super_admin are
+                deliberately EXCLUDED here — they're the technical/
+                system-administration tier (accounts, reference data,
+                system settings, audit log); reports/analytics/
+                announcements stay with municipal_admin and
+                provincial_staff (see permissions.ts' reports.view set,
+                which this list must keep matching). The four shelter/
+                support/police roles each get their own assignment- or
+                shelter-scoped Reports (PDF) and Analytics (charts/KPIs)
+                pages. */}
             <Route
               path="reports"
               element={
@@ -196,8 +199,6 @@ export default function App() {
                     'municipal_admin',
                     'provincial_staff',
                     'barangay_admin',
-                    'provincial_admin',
-                    'super_admin',
                     'law_enforcement',
                     'shelter_admin',
                     'shelter_staff',
@@ -216,8 +217,6 @@ export default function App() {
                     'municipal_admin',
                     'provincial_staff',
                     'barangay_admin',
-                    'provincial_admin',
-                    'super_admin',
                     'law_enforcement',
                     'shelter_admin',
                     'shelter_staff',

@@ -1,16 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Input, DropdownInput, PrimaryButton, Screen } from '../../components/ui';
+import { Input, PrimaryButton, Screen, DropdownInput } from '../../components/ui';
+import { RadioOptionRow } from '../../components/forms/RadioOptionRow';
+import { formatFullName } from '../../lib/personName';
+import { sanitizeDigitsOnly, parseWholeCount } from '../../lib/numericInput';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
 import { AppStackParamList } from '../../navigation/types';
 import type { Shelter, ShelterRequestUrgency } from '../../types/database.types';
 
-const URGENCY_LEVELS: ShelterRequestUrgency[] = ['Standard', 'Urgent', 'Emergency'];
+const URGENCY_OPTIONS: { value: ShelterRequestUrgency; description: string }[] = [
+  { value: 'Standard', description: 'A regular shelter request for review.' },
+  { value: 'Urgent', description: 'The request needs prompt attention.' },
+  { value: 'Emergency', description: 'Immediate accommodation or assistance may be needed.' },
+];
+
+function SectionLabel({ children }: { children: string }) {
+  const { palette } = useTheme();
+  return <Text style={[styles.sectionLabel, { color: palette.textMuted }]}>{children}</Text>;
+}
+
+const parseCount = parseWholeCount;
 
 export function RequestShelterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'RequestShelter'>>();
@@ -30,10 +45,22 @@ export function RequestShelterScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  // Per-field messages shown right under the field they belong to —
+  // `error` stays reserved for things not about one specific visible
+  // control (no shelter chosen, a failed submission). Mirrors the same
+  // split ReportIncidentScreen already uses.
+  const [fieldErrors, setFieldErrors] = useState<{ shelter?: string; contactName?: string; people?: string; children?: string }>({});
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (!profile) return;
-    setContactName(`${profile.first_name} ${profile.last_name}`.trim());
+    setContactName(formatFullName(profile));
+    // A starting point, not a forced value — reuses the phone number
+    // already on the survivor's own profile (brief: "use existing data
+    // appropriately rather than duplicating it") so they don't have to
+    // retype it, but it's the same editable Input as before, so they can
+    // change or clear it freely.
+    if (profile.phone_number) setContactPreference(`Call or text ${profile.phone_number}`);
 
     // General area only, from the survivor's own profile — never GPS.
     // Loading it here is purely a convenience default; a request can be
@@ -62,19 +89,39 @@ export function RequestShelterScreen() {
     }
   }, [profile, route.params?.shelterId]);
 
-  const onSubmit = async () => {
-    if (!profile) return;
-    if (!shelterId) {
-      setError('Please choose a shelter.');
-      return;
-    }
-    if (!contactName.trim()) {
-      setError('Please tell us what to call you.');
-      return;
-    }
-    const people = Math.max(1, Number(peopleCount) || 1);
-    const children = Math.max(0, Math.min(people, Number(childrenCount) || 0));
+  // Live household-count validation — re-checked whenever EITHER value
+  // changes, per the brief's own instruction, and never silently clamps
+  // one field to fit the other (the previous version did
+  // Math.min(people, children) silently on submit — replaced with a
+  // clear message the user corrects themselves).
+  const householdError = useMemo(() => {
+    const people = parseCount(peopleCount);
+    const children = parseCount(childrenCount);
+    if (people == null || people < 1) return { people: 'Enter at least 1 person.', children: undefined };
+    if (children == null || children < 0) return { people: undefined, children: 'Enter 0 or more.' };
+    if (children > people) return { people: undefined, children: "Can't be more than the total people above." };
+    return { people: undefined, children: undefined };
+  }, [peopleCount, childrenCount]);
 
+  const onSubmit = async () => {
+    if (submittingRef.current || submitting) return;
+    if (!profile) return;
+
+    const nextFieldErrors: typeof fieldErrors = {};
+    if (!shelterId) nextFieldErrors.shelter = 'Please choose a shelter.';
+    if (!contactName.trim()) nextFieldErrors.contactName = "Please tell us what to call you.";
+    if (householdError.people) nextFieldErrors.people = householdError.people;
+    if (householdError.children) nextFieldErrors.children = householdError.children;
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setError('Please complete the highlighted fields below.');
+      return;
+    }
+
+    const people = parseCount(peopleCount) as number;
+    const children = parseCount(childrenCount) as number;
+
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
 
@@ -110,6 +157,7 @@ export function RequestShelterScreen() {
       console.error('[RequestShelterScreen] onSubmit: request never reached Supabase', e);
       setError('Unable to connect to SafeSpace. Your request has NOT been submitted — please check your connection and try again.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -118,7 +166,9 @@ export function RequestShelterScreen() {
     return (
       <Screen>
         <View style={styles.confirmWrap}>
-          <View style={[styles.confirmIcon, { backgroundColor: palette.success + '33' }]} />
+          <View style={[styles.confirmIcon, { backgroundColor: palette.success + '1F' }]}>
+            <Ionicons name="checkmark-circle" size={48} color={palette.success} />
+          </View>
           <Text style={[styles.confirmTitle, { color: palette.text }]}>Request submitted</Text>
           <Text style={[styles.confirmBody, { color: palette.textMuted }]}>Your request reference is</Text>
           <Text style={[styles.confirmCaseNumber, { color: palette.primary }]}>{submittedRef}</Text>
@@ -135,84 +185,137 @@ export function RequestShelterScreen() {
   return (
     <Screen>
       <Text style={[styles.title, { color: palette.text }]}>Request shelter assistance</Text>
-      <Text style={[styles.subtitle, { color: palette.textMuted }]}>
-        Submitting a request does not guarantee immediate admission — the shelter will review it and follow up with you.
-      </Text>
 
+      <View style={[styles.infoBox, { backgroundColor: palette.primaryLight, borderColor: palette.primary + '33' }]}>
+        <Ionicons name="information-circle-outline" size={18} color={palette.primaryDark} />
+        <Text style={[styles.infoText, { color: palette.primaryDark }]}>
+          Share the information needed to review your request. The shelter will assess your request and follow up with you — submitting does not
+          guarantee admission.
+        </Text>
+      </View>
+
+      <SectionLabel>Contact information</SectionLabel>
       {route.params?.shelterId ? null : (
         <DropdownInput
           label="Shelter *"
           placeholder="Select a shelter"
           value={shelterId}
-          onSelect={setShelterId}
+          onSelect={(v) => {
+            setShelterId(v);
+            if (fieldErrors.shelter) setFieldErrors((prev) => ({ ...prev, shelter: undefined }));
+          }}
           options={shelters.map((s) => ({ label: s.shelter_name, value: s.shelter_id }))}
+          error={fieldErrors.shelter}
         />
       )}
-
-      <Input label="What should we call you? *" value={contactName} onChangeText={setContactName} placeholder="Your name or a name you're comfortable using" />
+      <Input
+        label="What should we call you? *"
+        value={contactName}
+        onChangeText={(v) => {
+          setContactName(v);
+          if (fieldErrors.contactName) setFieldErrors((prev) => ({ ...prev, contactName: undefined }));
+        }}
+        placeholder="Your name or a name you're comfortable using"
+        error={fieldErrors.contactName}
+      />
       <Input
         label="How can the shelter reach you?"
         value={contactPreference}
         onChangeText={setContactPreference}
-        placeholder="e.g. Call anytime, text only, contact through a friend"
+        placeholder="e.g., Preferred contact method or a safe time to contact you"
       />
+      <Text style={[styles.helperText, { color: palette.textMuted, marginTop: -spacing.sm, marginBottom: spacing.sm }]}>
+        Only visible to the shelter reviewing this request.
+      </Text>
 
+      <SectionLabel>Household and accommodation needs</SectionLabel>
       <View style={styles.row}>
-        <View style={{ flex: 1, marginRight: spacing.sm }}>
-          <Input label="People needing shelter" value={peopleCount} onChangeText={setPeopleCount} keyboardType="number-pad" />
+        <View style={styles.rowField}>
+          <Input
+            label="People needing shelter *"
+            value={peopleCount}
+            onChangeText={(v) => {
+              setPeopleCount(sanitizeDigitsOnly(v));
+              if (fieldErrors.people) setFieldErrors((prev) => ({ ...prev, people: undefined }));
+            }}
+            keyboardType="number-pad"
+            error={fieldErrors.people}
+          />
         </View>
-        <View style={{ flex: 1 }}>
-          <Input label="Children among them" value={childrenCount} onChangeText={setChildrenCount} keyboardType="number-pad" />
+        <View style={styles.rowField}>
+          <Input
+            label="Children among them"
+            value={childrenCount}
+            onChangeText={(v) => {
+              setChildrenCount(sanitizeDigitsOnly(v));
+              if (fieldErrors.children) setFieldErrors((prev) => ({ ...prev, children: undefined }));
+            }}
+            keyboardType="number-pad"
+            error={fieldErrors.children}
+          />
         </View>
       </View>
 
-      <Text style={[styles.label, { color: palette.text }]}>How urgent is this?</Text>
-      <View style={styles.chipRow}>
-        {URGENCY_LEVELS.map((u) => (
-          <Pressable
-            key={u}
-            onPress={() => setUrgency(u)}
-            style={[styles.chip, { borderColor: palette.border }, urgency === u && { backgroundColor: palette.primary, borderColor: palette.primary }]}
-          >
-            <Text style={[styles.chipText, { color: urgency === u ? palette.white : palette.text }]}>{u}</Text>
-          </Pressable>
+      <SectionLabel>Request urgency</SectionLabel>
+      <View style={{ gap: spacing.xs, marginBottom: spacing.sm }}>
+        {URGENCY_OPTIONS.map((u) => (
+          <RadioOptionRow key={u.value} title={u.value} description={u.description} selected={urgency === u.value} onPress={() => setUrgency(u.value)} />
         ))}
       </View>
+      <Text style={[styles.helperText, { color: palette.textMuted, marginBottom: spacing.sm }]}>
+        This helps the shelter prioritize review — it does not contact emergency services or guarantee a response time. If you're in immediate
+        danger, use SafeSpace's SOS feature or call 911.
+      </Text>
 
+      <SectionLabel>Additional information</SectionLabel>
       <Input
-        label="Anything else you'd like the shelter to know? (optional)"
+        label="Anything else you'd like the shelter to know?"
         value={message}
         onChangeText={setMessage}
+        placeholder="Share any additional information relevant to your request, if you feel comfortable."
         multiline
-        numberOfLines={4}
-        style={{ minHeight: 90, textAlignVertical: 'top' }}
+        numberOfLines={3}
+        style={{ minHeight: 80, textAlignVertical: 'top' }}
       />
 
       {error ? <Text style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
 
-      <PrimaryButton title="Submit request" onPress={onSubmit} loading={submitting} />
+      <PrimaryButton title="Submit Shelter Request" onPress={onSubmit} loading={submitting} />
+      {/* Screen's own scrollContent already adds spacing.xxl of bottom
+          padding inside its SafeAreaView, but the brief specifically
+          flagged this exact button as partially hidden before this
+          redesign shortened the form — this extra spacer is cheap
+          insurance on short devices/larger text scaling rather than
+          relying on the form being short enough to never need it. */}
+      <View style={{ height: spacing.xl }} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.display, fontSize: 22 },
-  subtitle: { ...typography.body, marginTop: spacing.xs, marginBottom: spacing.md },
-  label: { ...typography.bodyMedium, marginTop: spacing.sm, marginBottom: spacing.xs },
-  row: { flexDirection: 'row' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
+  title: { ...typography.display, fontSize: 22, marginBottom: spacing.sm },
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.md },
+  infoText: { ...typography.caption, flex: 1, lineHeight: 17 },
+  sectionLabel: {
+    ...typography.caption,
+    fontFamily: 'Inter_600SemiBold' as any,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
-  chipText: { ...typography.caption },
+  helperText: { ...typography.caption },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // flexBasis (not a plain flex:1 50/50 split) so a field wraps to its
+  // own full-width line instead of being squeezed when text scaling or a
+  // narrow screen makes two side-by-side columns impractical — the
+  // brief's own "stack vertically when two columns are impractical,
+  // don't force it on every screen size" requirement, handled with plain
+  // flexbox rather than a screen-width breakpoint.
+  rowField: { flexBasis: 140, flexGrow: 1 },
   error: { ...typography.caption, marginBottom: spacing.sm },
   confirmWrap: { alignItems: 'center', paddingTop: spacing.xxl },
-  confirmIcon: { width: 88, height: 88, borderRadius: radius.pill, marginBottom: spacing.lg },
+  confirmIcon: { width: 88, height: 88, borderRadius: radius.pill, marginBottom: spacing.lg, alignItems: 'center', justifyContent: 'center' },
   confirmTitle: { ...typography.heading },
   confirmBody: { ...typography.body, textAlign: 'center', marginTop: spacing.xs },
   confirmCaseNumber: { ...typography.display, fontSize: 22, marginVertical: spacing.sm },

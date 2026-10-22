@@ -1,0 +1,197 @@
+<!doctype html>
+<title>Agile Research Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #dcdfe4;
+
+    --blue: #1f4e8c;
+    --blue-soft: #e7eefb;
+    --blue-border: #c4d7f2;
+
+    --amber: #8a5a16;
+    --amber-soft: #faf1df;
+    --amber-border: #e9d2a3;
+
+    --green: #2c6a4e;
+    --green-soft: #e6f2ea;
+    --green-border: #bedac9;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #383b40;
+
+      --blue: #8fb6ec;
+      --blue-soft: #1f2c40;
+      --blue-border: #35496b;
+
+      --amber: #e3b46b;
+      --amber-soft: #352c1c;
+      --amber-border: #5c4a26;
+
+      --green: #8fcbab;
+      --green-soft: #1c3027;
+      --green-border: #2f5443;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #383b40;
+
+    --blue: #8fb6ec;
+    --blue-soft: #1f2c40;
+    --blue-border: #35496b;
+
+    --amber: #e3b46b;
+    --amber-soft: #352c1c;
+    --amber-border: #5c4a26;
+
+    --green: #8fcbab;
+    --green-soft: #1c3027;
+    --green-border: #2f5443;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .band {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 18px 24px;
+    text-align: center;
+  }
+
+  .band h2 {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+
+  .band p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .band-phase1 {
+    background: var(--blue-soft);
+    border-color: var(--blue-border);
+  }
+  .band-phase1 h2 { color: var(--blue); }
+  .band-phase1 p { color: var(--blue); opacity: 0.85; }
+
+  .band-phase2 {
+    background: var(--green-soft);
+    border-color: var(--green-border);
+    margin-top: 2px;
+  }
+  .band-phase2 h2 { color: var(--green); }
+  .band-phase2 p { color: var(--green); opacity: 0.9; }
+
+  .grid-2x2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 520px) {
+    .grid-2x2 { grid-template-columns: 1fr; }
+  }
+
+  .box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 16px;
+    text-align: center;
+  }
+
+  .box h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+  }
+
+  .band-refinement {
+    background: var(--amber-soft);
+    border-color: var(--amber-border);
+  }
+  .band-refinement h2 { color: var(--amber); font-size: 15px; }
+  .band-refinement p { color: var(--amber); opacity: 0.9; }
+
+  .arrow-row {
+    display: flex;
+    justify-content: center;
+    color: var(--ink-muted);
+    margin-top: 6px;
+  }
+
+  .after-note {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 4px;
+  }
+</style>
+
+<div class="sheet">
+  <div class="band band-phase1">
+    <h2>Phase 1: Developmental Phase</h2>
+    <p>Agile-Based Iterative and Incremental Development</p>
+  </div>
+
+  <div class="grid-2x2">
+    <div class="box"><h3>1. Planning and Analysis</h3></div>
+    <div class="box"><h3>2. Design</h3></div>
+    <div class="box"><h3>3. Implementation</h3></div>
+    <div class="box"><h3>4. Verification</h3></div>
+  </div>
+
+  <div class="band band-refinement">
+    <h2>5. Refinement</h2>
+    <p>Correct issues and improve features; repeat activities as needed.</p>
+  </div>
+
+  <div class="arrow-row" aria-hidden="true">
+    <svg width="18" height="24" viewBox="0 0 18 24" fill="none">
+      <path d="M9 1v18M3 14l6 7 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <p class="after-note">After development and integration</p>
+
+  <div class="band band-phase2">
+    <h2>Phase 2: Descriptive-Evaluative Phase</h2>
+    <p>ISO/IEC 25010:2023-Based Software Quality Evaluation</p>
+  </div>
+</div>

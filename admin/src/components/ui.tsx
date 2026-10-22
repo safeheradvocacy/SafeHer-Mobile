@@ -22,9 +22,10 @@ export function StatCard({ label, value, accent }: { label: string; value: strin
   );
 }
 
-export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
+export function EmptyState({ title, subtitle, icon }: { title: string; subtitle?: string; icon?: React.ReactNode }) {
   return (
     <div className="empty-state">
+      {icon && <div className="empty-state-icon">{icon}</div>}
       <h3>{title}</h3>
       {subtitle && <p>{subtitle}</p>}
     </div>

@@ -1,0 +1,402 @@
+<!doctype html>
+<title>SafeSpace Gantt Chart</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    color-scheme: light;
+    --page: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --grid: #e3e6ea;
+    --accent: #1f4e8c;
+
+    --head-fill: #1f4e8c;
+    --head-ink: #ffffff;
+    --subhead-fill: #e7eefb;
+    --subhead-ink: #1f4e8c;
+    --section-fill: #eef1f4;
+
+    --s1: #2a78d6; /* Proposal */
+    --s2: #eb6834; /* Planning */
+    --s3: #1baf7a; /* Research */
+    --s4: #eda100; /* Design and Prototype */
+    --s5: #e87ba4; /* Development */
+    --s6: #008300; /* Testing */
+    --s7: #4a3aa7; /* Review and Feedback */
+    --s8: #e34948; /* Implementation */
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --grid: #343a41;
+      --accent: #8fb6ec;
+
+      --head-fill: #16233a;
+      --head-ink: #dce8fa;
+      --subhead-fill: #1f2c40;
+      --subhead-ink: #8fb6ec;
+      --section-fill: #2a2d31;
+
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #15a315; --s7: #9085e9; --s8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --grid: #343a41;
+    --accent: #8fb6ec;
+
+    --head-fill: #16233a;
+    --head-ink: #dce8fa;
+    --subhead-fill: #1f2c40;
+    --subhead-ink: #8fb6ec;
+    --section-fill: #2a2d31;
+
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #15a315; --s7: #9085e9; --s8: #e66767;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    padding: 40px 20px 56px;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+  .sheet { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 27px);
+    text-align: center;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 16px;
+    margin-bottom: 16px;
+    padding: 11px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-muted); font-weight: 500; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+  .chart-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+
+  table.gantt { border-collapse: collapse; min-width: 1120px; width: 100%; }
+  table.gantt th, table.gantt td { border: 1px solid var(--grid); }
+
+  /* ---- Header: month band + week sub-band, like the reference sheet ---- */
+  .gantt thead th {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: center;
+    padding: 7px 4px;
+  }
+  .gantt thead tr.month-row th {
+    background: var(--head-fill);
+    color: var(--head-ink);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    padding: 9px 4px;
+  }
+  .gantt thead tr.month-row th.corner {
+    text-align: left;
+    padding-left: 14px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .gantt thead tr.week-row th {
+    background: var(--subhead-fill);
+    color: var(--subhead-ink);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 5px 2px;
+    width: 30px;
+  }
+
+  /* ---- Section (stage) header rows ---- */
+  .gantt tr.section td {
+    background: var(--section-fill);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: var(--ink);
+    padding: 7px 10px;
+  }
+  .gantt tr.section td.dot-cell { padding-left: 32px; position: relative; }
+  .gantt tr.section .stage-dot {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 9px; height: 9px; border-radius: 50%;
+  }
+
+  /* ---- Activity rows ---- */
+  .gantt tbody td.label {
+    text-align: left;
+    padding: 6px 10px 6px 26px;
+    font-size: 11.8px;
+    line-height: 1.3;
+    color: var(--ink);
+    white-space: normal;
+  }
+  .gantt tbody td.cell { padding: 0; height: 30px; }
+  .gantt tbody tr:hover td.label { color: var(--accent); }
+
+  .fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: default;
+  }
+  .fill:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+  .tooltip {
+    position: absolute;
+    z-index: 5;
+    background: var(--ink);
+    color: var(--surface);
+    font-size: 11.5px;
+    line-height: 1.5;
+    padding: 8px 11px;
+    border-radius: 8px;
+    max-width: 260px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip b { font-weight: 600; }
+  .tooltip .tt-meta { color: #d7dbe3; display: block; margin-top: 2px; }
+  @media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }
+
+  .caption {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-top: 16px;
+    font-style: italic;
+  }
+</style>
+
+<div class="sheet">
+  <p class="eyebrow">Research Design</p>
+  <h1 class="fig-title">Figure 2. Gantt Chart of Project Activities</h1>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="chart-scroll">
+    <table class="gantt" id="ganttTable">
+      <thead>
+        <tr class="month-row"><th class="corner" rowspan="2">Activities</th></tr>
+        <tr class="week-row"></tr>
+      </thead>
+      <tbody id="ganttBody"></tbody>
+    </table>
+  </div>
+
+  <p class="caption">Figure 2. Project schedule by stage and activity, June 13 &ndash; October 19, 2026. Each column is one week of its month; a filled cell marks the weeks an activity is active. Hover or focus a cell for exact dates and deliverables.</p>
+</div>
+
+<div class="tooltip" id="tooltip" role="tooltip"></div>
+
+<script>
+  // 5 months x 4 nominal weeks each (W1 = days 1-7, W2 = 8-14, W3 = 15-21,
+  // W4 = 22-end) -- the same week-of-month convention the reference sheet
+  // uses, applied here to this project's real June 13-October 19 span.
+  const MONTHS = ['June', 'July', 'August', 'September', 'October'];
+  const WEEKS_PER_MONTH = 4;
+
+  // week index is 0-based within MONTHS/WEEKS_PER_MONTH: [monthIdx, weekIdx]
+  const STAGES = [
+    {
+      name: 'Proposal', color: 'var(--s1)',
+      activities: [
+        { label: 'Submit capstone project title and elevator pitch', date: 'Jun 13, 2026', deliverable: 'Title Proposal, Elevator Pitch', weeks: [[0,1]] },
+        { label: 'Title and elevator pitch review and approval', date: 'Jun 14–27, 2026', deliverable: 'Approved Project Title', weeks: [[0,1],[0,2],[0,3]] },
+      ],
+    },
+    {
+      name: 'Planning', color: 'var(--s2)',
+      activities: [
+        { label: 'Define project objectives and identify stakeholders', date: 'Jun 28–Jul 4, 2026', deliverable: 'Objectives Document, Stakeholder List', weeks: [[0,3],[1,0]] },
+        { label: 'Create product backlog and establish Agile sprints', date: 'Jul 5–11, 2026', deliverable: 'Product Backlog, Sprint Schedule', weeks: [[1,0],[1,1]] },
+      ],
+    },
+    {
+      name: 'Research', color: 'var(--s3)',
+      activities: [
+        { label: 'Gather system requirements from PSWDO Aurora and partner agencies', date: 'Jul 12–18, 2026', deliverable: 'Requirements Document', weeks: [[1,1],[1,2]] },
+        { label: 'Study related abuse case-management systems and reference technologies (PSGC, Supabase)', date: 'Jul 19–25, 2026', deliverable: 'Reference Materials', weeks: [[1,2],[1,3]] },
+      ],
+    },
+    {
+      name: 'Design and Prototype', color: 'var(--s4)',
+      activities: [
+        { label: 'Create wireframes and UI/UX flows for the mobile app and web admin portal', date: 'Jul 26–Aug 8, 2026', deliverable: 'Wireframes, UI/UX Design', weeks: [[1,3],[2,0],[2,1]] },
+        { label: 'Design database schema (ERD) and system architecture', date: 'Aug 9–15, 2026', deliverable: 'Entity Relationship Diagram, System Architecture', weeks: [[2,1],[2,2]] },
+      ],
+    },
+    {
+      name: 'Development (Agile Sprints)', color: 'var(--s5)',
+      activities: [
+        { label: 'Develop branding, authentication, and registration modules, including PSGC-based address integration', date: 'Aug 16–22, 2026', deliverable: 'Branding Assets, Login & Registration Module', weeks: [[2,2],[2,3]] },
+        { label: 'Develop incident reporting and emergency SOS modules, including map repair and the real-time police dashboard', date: 'Aug 23–29, 2026', deliverable: 'Incident Reporting Module, Emergency SOS Module', weeks: [[2,3]] },
+        { label: 'Develop shelter management module, including shelter photo upload and shelter requests', date: 'Aug 30–Sep 5, 2026', deliverable: 'Shelter Management Module', weeks: [[2,3],[3,0]] },
+        { label: 'Develop profile and account module, including secure photo upload with rate limiting', date: 'Sep 6–12, 2026', deliverable: 'Profile & Account Module', weeks: [[3,0],[3,1]] },
+        { label: 'Develop cross-platform validation and standardization: numeric input rules, name standardization, pagination, and confirmation dialogs', date: 'Sep 13–19, 2026', deliverable: 'Validation Utilities, Standardized Components', weeks: [[3,1],[3,2]] },
+      ],
+    },
+    {
+      name: 'Testing', color: 'var(--s6)',
+      activities: [
+        { label: 'Conduct type-checking and build verification across the mobile and web applications', date: 'Sep 20–26, 2026', deliverable: 'Verification Reports', weeks: [[3,2],[3,3]] },
+        { label: 'Conduct functional, database-access, and security testing', date: 'Sep 27–Oct 3, 2026', deliverable: 'Test Results', weeks: [[3,3],[4,0]] },
+      ],
+    },
+    {
+      name: 'Review and Feedback', color: 'var(--s7)',
+      activities: [
+        { label: 'Gather feedback on implemented features', date: 'Oct 4–10, 2026', deliverable: 'Feedback Summary', weeks: [[4,0],[4,1]] },
+        { label: 'Refine system based on feedback', date: 'Oct 11–16, 2026', deliverable: 'Refined System', weeks: [[4,1],[4,2]] },
+      ],
+    },
+    {
+      name: 'Implementation', color: 'var(--s8)',
+      activities: [
+        { label: 'Deploy system and prepare documentation', date: 'Oct 17–19, 2026', deliverable: 'Deployed System, User Manual', weeks: [[4,2]] },
+      ],
+    },
+  ];
+
+  const WEEK_LABELS = ['W1', 'W2', 'W3', 'W4'];
+  const totalWeekCols = MONTHS.length * WEEKS_PER_MONTH;
+  const colIndex = (m, w) => m * WEEKS_PER_MONTH + w;
+
+  // ---- Header ----
+  const thead = document.querySelector('#ganttTable thead');
+  const monthRow = thead.querySelector('.month-row');
+  const weekRow = thead.querySelector('.week-row');
+  MONTHS.forEach((m) => {
+    const th = document.createElement('th');
+    th.colSpan = WEEKS_PER_MONTH;
+    th.textContent = m;
+    monthRow.appendChild(th);
+    for (let w = 0; w < WEEKS_PER_MONTH; w++) {
+      const wth = document.createElement('th');
+      wth.textContent = WEEK_LABELS[w];
+      weekRow.appendChild(wth);
+    }
+  });
+
+  // ---- Legend ----
+  const legend = document.getElementById('legend');
+  STAGES.forEach((s) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    item.innerHTML = `<span class="swatch" style="background:${s.color}"></span>${s.name}`;
+    legend.appendChild(item);
+  });
+
+  // ---- Tooltip ----
+  const tooltip = document.getElementById('tooltip');
+  function showTooltip(e, a, stageName) {
+    tooltip.innerHTML = `<b>${a.label}</b><span class="tt-meta">${stageName} &middot; ${a.date}</span><span class="tt-meta">Deliverable: ${a.deliverable}</span>`;
+    tooltip.classList.add('show');
+    positionTooltip(e);
+  }
+  function positionTooltip(e) {
+    const pad = 14;
+    let x = e.clientX + pad, y = e.clientY + pad;
+    const rect = tooltip.getBoundingClientRect();
+    if (x + rect.width > window.innerWidth - 8) x = e.clientX - rect.width - pad;
+    if (y + rect.height > window.innerHeight - 8) y = e.clientY - rect.height - pad;
+    tooltip.style.left = x + window.scrollX + 'px';
+    tooltip.style.top = y + window.scrollY + 'px';
+  }
+  function hideTooltip() { tooltip.classList.remove('show'); }
+
+  // ---- Body ----
+  const body = document.getElementById('ganttBody');
+  let stageNum = 0;
+  STAGES.forEach((stage) => {
+    stageNum++;
+    const secRow = document.createElement('tr');
+    secRow.className = 'section';
+    const secLabel = document.createElement('td');
+    secLabel.className = 'dot-cell';
+    secLabel.innerHTML = `<span class="stage-dot" style="background:${stage.color}"></span>${stageNum}. ${stage.name}`;
+    secRow.appendChild(secLabel);
+    for (let c = 0; c < totalWeekCols; c++) secRow.appendChild(document.createElement('td'));
+    body.appendChild(secRow);
+
+    stage.activities.forEach((a, i) => {
+      const row = document.createElement('tr');
+      const label = document.createElement('td');
+      label.className = 'label';
+      label.textContent = `${stageNum}.${i + 1} ${a.label}`;
+      row.appendChild(label);
+
+      const filled = new Set(a.weeks.map(([m, w]) => colIndex(m, w)));
+      for (let c = 0; c < totalWeekCols; c++) {
+        const td = document.createElement('td');
+        td.className = 'cell';
+        if (filled.has(c)) {
+          const fill = document.createElement('span');
+          fill.className = 'fill';
+          fill.style.background = stage.color;
+          fill.tabIndex = 0;
+          fill.setAttribute('aria-label', `${a.label}. ${stage.name}. ${a.date}. Deliverable: ${a.deliverable}.`);
+          fill.addEventListener('mouseenter', (e) => showTooltip(e, a, stage.name));
+          fill.addEventListener('mousemove', positionTooltip);
+          fill.addEventListener('mouseleave', hideTooltip);
+          fill.addEventListener('focus', (e) => showTooltip(e, a, stage.name));
+          fill.addEventListener('blur', hideTooltip);
+          td.appendChild(fill);
+        }
+        row.appendChild(td);
+      }
+      body.appendChild(row);
+    });
+  });
+</script>

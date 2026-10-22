@@ -1,0 +1,287 @@
+<!doctype html>
+<title>SafeSpace Context Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --accent: #1f4e8c;
+    --accent-soft: #e7eefb;
+    --sys-fill: #f1f3f7;
+    --ext-fill: #eceef1; --ext-border: #d3d7dd;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --accent: #8fb6ec;
+      --accent-soft: #1f2c40;
+      --sys-fill: #202327;
+      --ext-fill: #2a2d31; --ext-border: #44484e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --accent: #8fb6ec;
+    --accent-soft: #1f2c40;
+    --sys-fill: #202327;
+    --ext-fill: #2a2d31; --ext-border: #44484e;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 16px 56px;
+  }
+  .sheet { max-width: 1200px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 27px);
+    text-align: center;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 20px;
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .diagram-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  svg text { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  .sys-title { font-size: 19px; font-weight: 800; fill: var(--accent); font-family: 'Libre Franklin', system-ui, sans-serif; }
+  .sys-sub { font-size: 11.5px; fill: var(--ink); }
+  .entity-name { font-size: 12.5px; font-weight: 700; fill: var(--ink); font-family: 'Libre Franklin', system-ui, sans-serif; }
+  .flow-label { font-size: 10px; fill: var(--ink); }
+  .flow-dir { font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; fill: var(--accent); }
+
+  .caption {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-top: 16px;
+    font-style: italic;
+  }
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+</style>
+
+<div class="sheet">
+  <p class="eyebrow">Research Design</p>
+  <h1 class="fig-title">Figure 5. Context Diagram</h1>
+
+  <p class="note">
+    Level-0 data-flow view: SafeSpace shown as a single process, with every external entity it exchanges
+    data with &mdash; the eight real user roles and the five external systems it actually integrates with
+    (the PSA's PSGC reference data, push-notification delivery, outbound account/password-reset email,
+    the Groq-hosted language model behind the AI assistant, and Google Maps for geocoding and map display).
+    Supabase (the database, storage, and Edge Functions) is the system's own backend, not an external entity,
+    and is therefore shown as part of SafeSpace rather than around it.
+  </p>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="diagram-scroll">
+    <svg id="diagram" viewBox="0 0 1240 1240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Context diagram of the SafeSpace system and its external entities"></svg>
+  </div>
+
+  <p class="caption">Figure 5. SafeSpace and the external entities it exchanges data with.</p>
+</div>
+
+<script>
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  // Tighter than a naive "fill the canvas" radius on purpose: at 13
+  // entities, shrinking the gap between the system circle and each
+  // entity (instead of just shrinking the canvas) is what actually
+  // shortens the arrows — tangential spacing between neighboring
+  // entities still clears their label-block width at this radius.
+  const CX = 620, CY = 620, SYS_R = 130, ENTITY_R = 410;
+
+  const ENTITIES = [
+    { id: 'survivor', kind: 'actor', name: 'Survivor / Reporter', sends: 'Registration, incident reports, SOS triggers, shelter and support requests', receives: 'Case updates, SOS confirmation, shelter info, AI/expert replies, notifications' },
+    { id: 'barangay', kind: 'actor', name: 'Barangay Administrator', sends: 'Case status updates, barangay action responses', receives: 'Case assignments, identity verification submissions, barangay action requests, reports' },
+    { id: 'municipal', kind: 'actor', name: 'Municipal Admin (MSWDO)', sends: 'Case and referral decisions', receives: 'Case data, SOS alerts, identity verification submissions, municipal reports' },
+    { id: 'provincial', kind: 'actor', name: 'Provincial Admin\n(Super Admin)', sends: 'System, account, and police-account configuration', receives: 'Audit logs' },
+    { id: 'provStaff', kind: 'actor', name: 'Provincial Staff', sends: 'Case/shelter coordination, announcements, FAQ updates', receives: 'Case and SOS monitoring data, identity verification submissions, reports, support requests' },
+    { id: 'shelterAdmin', kind: 'actor', name: 'Shelter Administrator', sends: 'Shelter updates, request responses', receives: 'Shelter requests, referrals, reports' },
+    { id: 'supportExpert', kind: 'actor', name: 'Support Expert', sends: 'Support responses', receives: 'Assigned support requests, reports' },
+    { id: 'police', kind: 'actor', name: 'Police Officer\n(Law Enforcement)', sends: 'SOS and referral responses', receives: 'SOS alerts, referrals, reports' },
+    { id: 'psgc', kind: 'system', name: 'PSGC Reference Data\n(Philippine Statistics Authority)', receives: 'Official municipality and barangay geographic data', oneWay: true },
+    { id: 'push', kind: 'system', name: 'Push Notification\nDelivery', sends: 'Delivery status', receives: 'SOS, case, and announcement push requests' },
+    { id: 'email', kind: 'system', name: 'Email Delivery Service', sends: 'Delivery confirmation', receives: 'Account verification and password-reset email' },
+    { id: 'groq', kind: 'system', name: 'AI Language Model\n(Groq)', sends: 'Generated reply, risk assessment', receives: 'Chat messages for the AI assistant' },
+    { id: 'googleMaps', kind: 'system', name: 'Google Maps\n(Geocoding & Mapping)', sends: 'Geocoded coordinates, map tiles', receives: 'Address and location lookups' },
+  ];
+
+  const svg = document.getElementById('diagram');
+
+  function pos(i) {
+    const angle = (-90 + i * (360 / ENTITIES.length)) * Math.PI / 180;
+    return { x: CX + ENTITY_R * Math.cos(angle), y: CY + ENTITY_R * Math.sin(angle) };
+  }
+
+  // 1. Connecting lines (drawn first, covered by nodes)
+  ENTITIES.forEach((e, i) => {
+    const p = pos(i);
+    const line = el('line', { x1: p.x, y1: p.y, x2: CX, y2: CY, stroke: 'var(--ink-muted)', 'stroke-width': 1.2, opacity: 0.4 });
+    svg.appendChild(line);
+    // Arrowhead(s): pointing into the system for "receives" data, into the entity for "sends" data.
+    const dx = CX - p.x, dy = CY - p.y;
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len, uy = dy / len;
+    function arrowhead(atX, atY, dirX, dirY) {
+      const size = 9;
+      const leftX = atX - dirX * size - dirY * size * 0.55, leftY = atY - dirY * size + dirX * size * 0.55;
+      const rightX = atX - dirX * size + dirY * size * 0.55, rightY = atY - dirY * size - dirX * size * 0.55;
+      svg.appendChild(el('polygon', { points: `${atX},${atY} ${leftX},${leftY} ${rightX},${rightY}`, fill: 'var(--ink-muted)', opacity: 0.55 }));
+    }
+    // Arrow into system boundary (receives by system)
+    const sysEdgeX = CX - ux * SYS_R, sysEdgeY = CY - uy * SYS_R;
+    arrowhead(sysEdgeX, sysEdgeY, ux, uy);
+    if (!e.oneWay) {
+      // Arrow back into entity (sends by system) — offset point near entity's own edge
+      const entEdgeX = p.x + ux * 60, entEdgeY = p.y + uy * 60;
+      arrowhead(entEdgeX, entEdgeY, -ux, -uy);
+    }
+  });
+
+  // 2. Central system node
+  svg.appendChild(el('circle', { cx: CX, cy: CY, r: SYS_R, fill: 'var(--sys-fill)', stroke: 'var(--accent)', 'stroke-width': 2.5 }));
+  svg.appendChild(el('text', { x: CX, y: CY - 32, 'text-anchor': 'middle', class: 'sys-title' }, 'SAFESPACE'));
+  ['A Mobile and Web-Based Abuse', 'Reporting and Response System', 'for Aurora Province'].forEach((line, i) => {
+    svg.appendChild(el('text', { x: CX, y: CY - 6 + i * 15, 'text-anchor': 'middle', class: 'sys-sub' }, line));
+  });
+
+  // 3. Entity nodes
+  function drawActorIcon(cx, cy) {
+    const g = el('g');
+    g.appendChild(el('circle', { cx, cy: cy - 18, r: 9, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    g.appendChild(el('line', { x1: cx, y1: cy - 9, x2: cx, y2: cy + 12, stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    g.appendChild(el('line', { x1: cx - 14, y1: cy - 2, x2: cx + 14, y2: cy - 2, stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    g.appendChild(el('line', { x1: cx, y1: cy + 12, x2: cx - 14, y2: cy + 32, stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    g.appendChild(el('line', { x1: cx, y1: cy + 12, x2: cx + 14, y2: cy + 32, stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    return g;
+  }
+  function drawSystemIcon(cx, cy) {
+    const g = el('g');
+    g.appendChild(el('rect', { x: cx - 20, y: cy - 28, width: 40, height: 12, rx: 3, fill: 'var(--ext-fill)', stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    g.appendChild(el('rect', { x: cx - 20, y: cy - 14, width: 40, height: 12, rx: 3, fill: 'var(--ext-fill)', stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    g.appendChild(el('rect', { x: cx - 20, y: cy, width: 40, height: 12, rx: 3, fill: 'var(--ext-fill)', stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    return g;
+  }
+
+  function wrapLabel(text, maxChars) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((w) => {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > maxChars) { lines.push(line); line = w; } else { line = test; }
+    });
+    lines.push(line);
+    return lines;
+  }
+
+  ENTITIES.forEach((e, i) => {
+    const p = pos(i);
+    const g = el('g');
+    if (e.kind === 'actor') g.appendChild(drawActorIcon(p.x, p.y));
+    else g.appendChild(drawSystemIcon(p.x, p.y));
+
+    let y = p.y + 50;
+    const nameLines = e.name.split('\n');
+    nameLines.forEach((ln) => {
+      g.appendChild(el('text', { x: p.x, y, 'text-anchor': 'middle', class: 'entity-name' }, ln));
+      y += 14;
+    });
+    y += 4;
+
+    if (e.sends) {
+      g.appendChild(el('text', { x: p.x, y, 'text-anchor': 'middle', class: 'flow-dir' }, 'Sends'));
+      y += 12;
+      wrapLabel(e.sends, 30).forEach((ln) => {
+        g.appendChild(el('text', { x: p.x, y, 'text-anchor': 'middle', class: 'flow-label' }, ln));
+        y += 12;
+      });
+      y += 4;
+    }
+    if (e.receives) {
+      g.appendChild(el('text', { x: p.x, y, 'text-anchor': 'middle', class: 'flow-dir' }, 'Receives'));
+      y += 12;
+      wrapLabel(e.receives, 30).forEach((ln) => {
+        g.appendChild(el('text', { x: p.x, y, 'text-anchor': 'middle', class: 'flow-label' }, ln));
+        y += 12;
+      });
+    }
+    svg.appendChild(g);
+  });
+
+  // Legend
+  const legend = document.getElementById('legend');
+  [
+    ['○ SafeSpace System', 'The single process this diagram scopes'],
+    ['△ External Entity (person)', 'One of the eight real user roles'],
+    ['□ External Entity (system)', 'A real third-party system SafeSpace integrates with'],
+  ].forEach(([label, title]) => {
+    const span = document.createElement('span');
+    span.title = title;
+    span.textContent = label;
+    legend.appendChild(span);
+  });
+</script>

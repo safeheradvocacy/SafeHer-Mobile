@@ -3,18 +3,22 @@ import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RAnimated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
 import { IoniconName } from '../../components/ui';
-import { ClaySurface, clayShadow } from '../../theme/clay';
 import { useTheme } from '../../contexts/ThemeContext';
 import { spacing, typography, radius } from '../../theme/theme';
 
 /**
- * Claymorphic quick-action tile. Fixed overall height (not minHeight) with
- * a reserved, always-rendered description slot and badge slot — a card
- * without a badge ("Report Incident") renders an empty slot rather than
- * collapsing, so all four grid cards stay pixel-identical in height
- * whether or not they have a status to show. That equal-height guarantee
- * was the actual bug: minHeight let badge-bearing cards grow taller than
- * their neighbors.
+ * Plain bordered card — was a claymorphic tile (tinted shadow, animated
+ * shadow-softening on press) matching this app's older visual language;
+ * flattened to match every other screen already redesigned this way
+ * (Login/Register/ReportIncident/RequestShelter) — a white surface, a
+ * subtle border, a restrained press-scale, nothing else. Fixed height
+ * (not minHeight), with always-reserved description/badge slots, is kept
+ * from the prior version for the same reason it existed there: all grid
+ * tiles stay pixel-identical whether or not a given tile has a badge.
+ *
+ * `fullWidth` supports the Announcements tile spanning the row alone
+ * (HomeScreen's 5-card grid) instead of leaving an empty spacer column —
+ * same card, same height, just not wrapped in a `flex:1` sibling pair.
  */
 export function QuickActionCard({
   icon,
@@ -24,6 +28,7 @@ export function QuickActionCard({
   badge,
   reduced,
   onPress,
+  fullWidth,
 }: {
   icon: IoniconName;
   tint: string;
@@ -32,35 +37,17 @@ export function QuickActionCard({
   badge?: string;
   reduced: boolean;
   onPress: () => void;
+  fullWidth?: boolean;
 }) {
   const { palette } = useTheme();
-  const restShadowOpacity = clayShadow(palette.primaryDark, 'sm').shadowOpacity;
   const scale = useSharedValue(1);
-  const translateY = useSharedValue(0);
-  const shadowOpacity = useSharedValue<number>(restShadowOpacity);
-  const iconScale = useSharedValue(1);
-
-  const cardAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }, { translateY: translateY.value }],
-    shadowOpacity: shadowOpacity.value,
-  }));
-  const iconAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconScale.value }] }));
+  const cardAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   const pressIn = () => {
-    if (!reduced) {
-      scale.value = withTiming(0.97, { duration: 90 });
-      translateY.value = withTiming(3, { duration: 90 });
-      iconScale.value = withTiming(0.9, { duration: 90 });
-    }
-    shadowOpacity.value = withTiming(0.06, { duration: reduced ? 60 : 90 });
+    if (!reduced) scale.value = withTiming(0.97, { duration: 90 });
   };
   const pressOut = () => {
-    if (!reduced) {
-      scale.value = withSpring(1, { damping: 15, stiffness: 180 });
-      translateY.value = withSpring(0, { damping: 15, stiffness: 180 });
-      iconScale.value = withSpring(1, { damping: 13, stiffness: 200 });
-    }
-    shadowOpacity.value = withTiming(restShadowOpacity, { duration: reduced ? 90 : 180 });
+    if (!reduced) scale.value = withSpring(1, { damping: 15, stiffness: 180 });
   };
 
   return (
@@ -71,61 +58,44 @@ export function QuickActionCard({
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityHint={description}
-      style={{ flex: 1 }}
+      style={fullWidth ? undefined : { flex: 1 }}
     >
-      <ClaySurface
-        radius={18}
-        tint={palette.surface}
-        shadowTint={palette.primaryDark}
-        intensity="sm"
-        style={styles.cardShadow}
-        innerStyle={styles.cardInner}
-        highlightOpacity={0.24}
-        animatedStyle={cardAnimatedStyle}
-      >
-        <RAnimated.View style={iconAnimatedStyle}>
-          <ClaySurface radius={14} tint={tint + '1A'} shadowTint={tint} intensity="sm" style={styles.iconShadow} innerStyle={styles.iconInner} highlightOpacity={0.35}>
-            <Ionicons name={icon} size={18} color={tint} />
-          </ClaySurface>
-        </RAnimated.View>
-        <Text style={[styles.title, { color: palette.text }]} numberOfLines={1}>
-          {title}
-        </Text>
-        <View style={styles.descriptionSlot}>
-          <Text style={[styles.description, { color: palette.textMuted }]} numberOfLines={1}>
+      <RAnimated.View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }, fullWidth ? styles.cardFullWidth : null, cardAnimatedStyle]}>
+        <View style={[styles.iconWrap, { backgroundColor: tint + '14' }, fullWidth ? { marginTop: 0 } : null]}>
+          <Ionicons name={icon} size={18} color={tint} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: palette.text }, fullWidth ? styles.titleInline : null]} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={[styles.description, { color: palette.textMuted }, fullWidth ? styles.descriptionInline : null]} numberOfLines={1}>
             {description}
           </Text>
         </View>
-        <View style={styles.badgeSlot}>
-          {badge ? (
-            <View style={[styles.badge, { backgroundColor: tint + '1A' }]}>
-              <Text style={[styles.badgeText, { color: tint }]} numberOfLines={1}>
-                {badge}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </ClaySurface>
+        {badge ? (
+          <View style={[styles.badge, { backgroundColor: tint + '14' }, fullWidth ? styles.badgeInline : null]}>
+            <Text style={[styles.badgeText, { color: tint }]} numberOfLines={1}>
+              {badge}
+            </Text>
+          </View>
+        ) : null}
+      </RAnimated.View>
     </Pressable>
   );
 }
 
-// Fixed height (not minHeight) with always-reserved description/badge
-// slots — kept from the prior design, which deliberately guarantees all
-// four grid tiles stay pixel-identical whether or not a tile has a
-// badge. Trimmed from 160->132 and the description to one line (every
-// real description in this app — "Submit a report", "6 active cases" —
-// already fits on one line) for a more content-driven, less cavernous
-// card.
 const styles = StyleSheet.create({
-  cardShadow: { height: 132 },
-  cardInner: { padding: 14, flex: 1 },
-  iconShadow: { width: 34, height: 34 },
-  iconInner: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+  card: { borderWidth: 1, borderRadius: radius.lg, height: 132, padding: 14, flexDirection: 'column', justifyContent: 'space-between' },
+  // Full-width variant (Announcements): a row layout reads better than a
+  // tall square once there's a whole row's width to use — icon, title,
+  // and description sit side by side instead of stacked.
+  cardFullWidth: { height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm },
+  iconWrap: { width: 34, height: 34, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.bodyMedium, fontSize: 14.5, marginTop: 9 },
-  descriptionSlot: { height: 17, marginTop: 2, justifyContent: 'flex-start' },
-  description: { ...typography.caption, fontSize: 12.5, lineHeight: 17 },
-  badgeSlot: { height: 20, marginTop: 4, justifyContent: 'center' },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, alignSelf: 'flex-start' },
+  titleInline: { marginTop: 0 },
+  description: { ...typography.caption, fontSize: 12.5, marginTop: 2 },
+  descriptionInline: { marginTop: 0 },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, alignSelf: 'flex-start', marginTop: 4 },
+  badgeInline: { marginTop: 0, marginLeft: spacing.xs },
   badgeText: { ...typography.caption, fontSize: 10.5, fontFamily: 'Inter_600SemiBold' as any },
 });

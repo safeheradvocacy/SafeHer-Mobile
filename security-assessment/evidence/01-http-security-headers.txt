@@ -1,0 +1,45 @@
+============================================================
+SafeSpace security assessment — evidence capture
+Test     : HTTP security header inspection
+Target   : https://safespace-administrative.vercel.app
+Captured : 2026-10-21T15:12:36Z (UTC)
+Method   : non-destructive, unauthenticated
+============================================================
+
+--- Canonical host redirect chain -------------------------------
+HTTP/1.1 307 Temporary Redirect
+Cache-Control: public, max-age=0, must-revalidate
+Content-Type: text/plain
+Date: Wed, 21 Oct 2026 15:12:40 GMT
+Location: https://safespace-administrative.vercel.app/
+Server: Vercel
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Vercel-Id: sin1::7gzxw-1792595560153-494e0d923e2f
+
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Access-Control-Allow-Origin: *
+Age: 194693
+Cache-Control: public, max-age=0, must-revalidate
+Content-Disposition: inline
+Content-Length: 674
+Content-Type: text/html; charset=utf-8
+Date: Wed, 21 Oct 2026 15:12:40 GMT
+Etag: "32fc96751dcf7665bc0a35262488d84d"
+Last-Modified: Mon, 19 Oct 2026 09:07:46 GMT
+Server: Vercel
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Vercel-Cache: HIT
+X-Vercel-Id: sin1::56rnr-1792595560307-d8795b76793f
+
+
+--- Header presence summary -------------------------------------
+  Strict-Transport-Security    PRESENT  max-age=63072000; includeSubDomains; preload
+  Content-Security-Policy      ABSENT
+  X-Frame-Options              ABSENT
+  X-Content-Type-Options       ABSENT
+  Referrer-Policy              ABSENT
+  Permissions-Policy           ABSENT
+
+--- Source map exposure check -----------------------------------
+  /assets/index-DB3HaFqc.js.map -> HTTP 403   (403/404 = not exposed, expected)

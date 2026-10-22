@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -11,21 +11,32 @@ import { logAudit, generateCaseNumber } from '../../lib/audit';
 import { preflightLocation, acquireSosLocation } from '../../lib/sosLocation';
 import { Input, PrimaryButton, Screen, AlertMessage, DropdownInput } from '../../components/ui';
 import { LocationMapPicker, type LocationPickerResult } from '../../components/LocationMapPicker';
+import { RadioOptionRow } from '../../components/forms/RadioOptionRow';
+import { sanitizePhoneInput } from '../../lib/numericInput';
 import { useTheme } from '../../contexts/ThemeContext';
 import { radius, spacing, typography } from '../../theme/theme';
 import { AppStackParamList } from '../../navigation/types';
 import type { CaseType, PriorityLevel } from '../../types/database.types';
 
-const CASE_TYPES: CaseType[] = [
-  'Physical Abuse',
-  'Psychological Abuse',
-  'Sexual Abuse',
-  'Economic Abuse',
-  'Stalking',
-  'Neglect',
-  'Others',
+const CASE_TYPE_OPTIONS: { label: string; value: CaseType }[] = [
+  { label: 'Physical Abuse', value: 'Physical Abuse' },
+  { label: 'Psychological Abuse', value: 'Psychological Abuse' },
+  { label: 'Sexual Abuse', value: 'Sexual Abuse' },
+  { label: 'Economic Abuse', value: 'Economic Abuse' },
+  { label: 'Stalking', value: 'Stalking' },
+  { label: 'Neglect', value: 'Neglect' },
+  { label: 'Others', value: 'Others' },
 ];
-const PRIORITIES: PriorityLevel[] = ['Low', 'Medium', 'High', 'Critical'];
+
+// Guidance only, never a triage substitute — see the note rendered below
+// the list itself. Preserves the exact existing PriorityLevel values;
+// only the presentation (crowded chips -> stacked rows) changes.
+const PRIORITY_OPTIONS: { value: PriorityLevel; description: string }[] = [
+  { value: 'Low', description: 'No immediate danger reported.' },
+  { value: 'Medium', description: 'The situation needs timely attention.' },
+  { value: 'High', description: 'Serious concerns requiring prompt assessment.' },
+  { value: 'Critical', description: 'Immediate danger or urgent assistance may be needed.' },
+];
 
 // Government-reporting-alignment audit: case_reports.incident_date is a
 // real, separate column from reported_at (submission time) — Walk-In
@@ -66,6 +77,12 @@ const THIRD_PARTY_AGE_OPTIONS = [
   { label: 'Not sure', value: 'Not sure' },
 ];
 
+function SectionLabel({ children }: { children: string }) {
+  const { palette } = useTheme();
+  return <Text style={[styles.sectionLabel, { color: palette.textMuted }]}>{children}</Text>;
+}
+
+
 export function ReportIncidentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'ReportIncident'>>();
   const { palette } = useTheme();
@@ -87,7 +104,16 @@ export function ReportIncidentScreen() {
   const [incidentLocation, setIncidentLocation] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-field messages shown inline, right under the control they belong
+  // to — `error` above stays for things that aren't about one specific
+  // visible field (profile still loading, verification/passcode status,
+  // submission failures).
+  const [fieldErrors, setFieldErrors] = useState<{ caseType?: string; description?: string; incidentLocation?: string; thirdPartyName?: string; thirdPartyRelationship?: string }>({});
   const [submittedCaseNumber, setSubmittedCaseNumber] = useState<string | null>(null);
+  // Mirrors the same synchronous guard LoginScreen uses — `submitting`
+  // alone can't close the gap where a very fast double-tap fires onSubmit
+  // twice before React re-renders with the button disabled.
+  const submittingRef = useRef(false);
 
   // ---- Incident location (module12) — structured, optional enrichment
   // layered on top of the required free-text `incidentLocation` above,
@@ -178,16 +204,24 @@ export function ReportIncidentScreen() {
   };
 
   const onSubmit = async () => {
+    if (submittingRef.current || submitting) return;
+
     if (!survivorId || !municipalityId || !profile) {
       setError('Your profile is still loading. Please try again in a moment.');
       return;
     }
-    if (!caseType || !description || !incidentLocation) {
-      setError('Case type, description, and incident location are required.');
-      return;
+
+    const nextFieldErrors: typeof fieldErrors = {};
+    if (!caseType) nextFieldErrors.caseType = 'Please select a case type.';
+    if (!description.trim()) nextFieldErrors.description = 'Please describe what happened.';
+    if (!incidentLocation.trim()) nextFieldErrors.incidentLocation = 'Please provide the incident location.';
+    if (reportedFor === 'Other') {
+      if (!thirdPartyName.trim()) nextFieldErrors.thirdPartyName = "Please enter the person's name.";
+      if (!thirdPartyRelationship.trim()) nextFieldErrors.thirdPartyRelationship = 'Please enter your relationship to them.';
     }
-    if (reportedFor === 'Other' && (!thirdPartyName.trim() || !thirdPartyRelationship.trim())) {
-      setError("Please enter the person's name and your relationship to them.");
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setError('Please complete the highlighted fields below.');
       return;
     }
     // Defense in depth: re-check right before submitting, in case
@@ -214,6 +248,7 @@ export function ReportIncidentScreen() {
       setError('Please set up your SafeSpace security passcode before submitting an incident report.');
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
 
@@ -263,6 +298,7 @@ export function ReportIncidentScreen() {
 
       if (insertErr || !caseRow) {
         setSubmitting(false);
+        submittingRef.current = false;
         // This was previously silent — the generic message below gave no
         // way to tell a real RLS rejection apart from, say, a migration
         // that hadn't been run yet (a missing column surfaces here as a
@@ -307,9 +343,11 @@ export function ReportIncidentScreen() {
       });
 
       setSubmitting(false);
+      submittingRef.current = false;
       setSubmittedCaseNumber(caseRow.case_number);
     } catch (e) {
       setSubmitting(false);
+      submittingRef.current = false;
       console.error('[ReportIncidentScreen] onSubmit: request never reached Supabase', e);
       setError('Unable to connect to SafeSpace. Your report has NOT been submitted — please check your connection and try again.');
     }
@@ -319,7 +357,9 @@ export function ReportIncidentScreen() {
     return (
       <Screen>
         <View style={styles.confirmWrap}>
-          <View style={[styles.confirmIcon, { backgroundColor: palette.success + '33' }]} />
+          <View style={[styles.confirmIcon, { backgroundColor: palette.success + '1F' }]}>
+            <Ionicons name="checkmark-circle" size={48} color={palette.success} />
+          </View>
           <Text style={[styles.confirmTitle, { color: palette.text }]}>Report submitted</Text>
           <Text style={[styles.confirmBody, { color: palette.textMuted }]}>Your case reference number is</Text>
           <Text style={[styles.confirmCaseNumber, { color: palette.primary }]}>{submittedCaseNumber}</Text>
@@ -334,28 +374,38 @@ export function ReportIncidentScreen() {
 
   return (
     <Screen>
-      <Text style={[styles.title, { color: palette.text }]}>Report an incident</Text>
       <Text style={[styles.subtitle, { color: palette.textMuted }]}>
-        What you share here is confidential and only seen by authorized staff.
+        Share what happened at your own pace. Your report will be handled by authorized personnel.
+      </Text>
+      <Text style={[styles.confidentialityNote, { color: palette.textMuted }]}>
+        What you share here is only visible to authorized SafeSpace staff.
       </Text>
 
+      <SectionLabel>About the report</SectionLabel>
       <Text style={[styles.label, { color: palette.text }]}>Who is this report about? *</Text>
-      <View style={styles.chipRow}>
-        {(['Self', 'Other'] as const).map((who) => (
-          <Pressable
-            key={who}
-            onPress={() => setReportedFor(who)}
-            style={[
-              styles.chip,
-              { borderColor: palette.border },
-              reportedFor === who && { backgroundColor: palette.primary, borderColor: palette.primary },
-            ]}
-          >
-            <Text style={[styles.chipText, { color: reportedFor === who ? palette.white : palette.text }]}>
-              {who === 'Self' ? 'Myself' : 'Someone else'}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.whoRow}>
+        {(['Self', 'Other'] as const).map((who) => {
+          const active = reportedFor === who;
+          return (
+            <Pressable
+              key={who}
+              onPress={() => setReportedFor(who)}
+              style={[styles.whoCard, { borderColor: active ? palette.primary : palette.border, backgroundColor: active ? palette.primary : palette.surface }]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: active }}
+            >
+              <Ionicons
+                name={who === 'Self' ? 'person-outline' : 'people-outline'}
+                size={20}
+                color={active ? palette.white : palette.textMuted}
+              />
+              <Text style={[styles.whoCardText, { color: active ? palette.white : palette.text }]}>
+                {who === 'Self' ? 'Myself' : 'Someone else'}
+              </Text>
+              {active ? <Ionicons name="checkmark-circle" size={16} color={palette.white} style={{ position: 'absolute', top: 8, right: 8 }} /> : null}
+            </Pressable>
+          );
+        })}
       </View>
 
       {reportedFor === 'Other' && (
@@ -363,12 +413,25 @@ export function ReportIncidentScreen() {
           <Text style={[styles.helperText, { color: palette.textMuted, marginBottom: spacing.xs }]}>
             Tell us who you're reporting for. It's okay if you don't know everything.
           </Text>
-          <Input label="Their name *" value={thirdPartyName} onChangeText={setThirdPartyName} placeholder="Full name" />
+          <Input
+            label="Their name *"
+            value={thirdPartyName}
+            onChangeText={(v) => {
+              setThirdPartyName(v);
+              if (fieldErrors.thirdPartyName) setFieldErrors((prev) => ({ ...prev, thirdPartyName: undefined }));
+            }}
+            placeholder="Full name"
+            error={fieldErrors.thirdPartyName}
+          />
           <Input
             label="Your relationship to them *"
             value={thirdPartyRelationship}
-            onChangeText={setThirdPartyRelationship}
+            onChangeText={(v) => {
+              setThirdPartyRelationship(v);
+              if (fieldErrors.thirdPartyRelationship) setFieldErrors((prev) => ({ ...prev, thirdPartyRelationship: undefined }));
+            }}
             placeholder="e.g. Parent, relative, neighbor, friend"
+            error={fieldErrors.thirdPartyRelationship}
           />
           <DropdownInput
             label="Their approximate age (optional)"
@@ -379,46 +442,57 @@ export function ReportIncidentScreen() {
           <Input
             label="Their contact number (optional)"
             value={thirdPartyContact}
-            onChangeText={setThirdPartyContact}
+            onChangeText={(v) => setThirdPartyContact(sanitizePhoneInput(v))}
             placeholder="If known"
             keyboardType="phone-pad"
           />
         </View>
       )}
 
-      <Text style={[styles.label, { color: palette.text }]}>Case type *</Text>
-      <View style={styles.chipRow}>
-        {CASE_TYPES.map((t) => (
-          <Pressable
-            key={t}
-            onPress={() => setCaseType(t)}
-            style={[
-              styles.chip,
-              { borderColor: palette.border },
-              caseType === t && { backgroundColor: palette.primary, borderColor: palette.primary },
-            ]}
-          >
-            <Text style={[styles.chipText, { color: caseType === t ? palette.white : palette.text }]}>{t}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <SectionLabel>Incident details</SectionLabel>
+
+      <DropdownInput
+        label="Case type *"
+        placeholder="Select a case type"
+        value={caseType}
+        options={CASE_TYPE_OPTIONS}
+        onSelect={(v) => {
+          setCaseType(v as CaseType);
+          if (fieldErrors.caseType) setFieldErrors((prev) => ({ ...prev, caseType: undefined }));
+        }}
+        indicator="radio"
+        error={fieldErrors.caseType}
+      />
 
       <Text style={[styles.label, { color: palette.text }]}>How urgent is this? *</Text>
-      <View style={styles.chipRow}>
-        {PRIORITIES.map((p) => (
-          <Pressable
-            key={p}
-            onPress={() => setPriority(p)}
-            style={[
-              styles.chip,
-              { borderColor: palette.border },
-              priority === p && { backgroundColor: palette.primary, borderColor: palette.primary },
-            ]}
-          >
-            <Text style={[styles.chipText, { color: priority === p ? palette.white : palette.text }]}>{p}</Text>
-          </Pressable>
+      <View style={{ gap: spacing.xs, marginBottom: spacing.xs }}>
+        {PRIORITY_OPTIONS.map((p) => (
+          <RadioOptionRow
+            key={p.value}
+            title={p.value}
+            description={p.description}
+            selected={priority === p.value}
+            onPress={() => setPriority(p.value)}
+          />
         ))}
       </View>
+      <Text style={[styles.helperText, { color: palette.textMuted, marginBottom: spacing.sm }]}>
+        This helps authorized staff prioritize review — it is not a professional safety assessment.
+      </Text>
+      {priority === 'Critical' && (
+        <View style={[styles.emergencyNotice, { backgroundColor: palette.danger + '14', borderColor: palette.danger + '40' }]}>
+          <Ionicons name="alert-circle" size={18} color={palette.danger} />
+          <View style={{ flex: 1, marginLeft: spacing.sm }}>
+            <Text style={[styles.optionTitle, { color: palette.text }]}>If you're in immediate danger</Text>
+            <Text style={[styles.optionDescription, { color: palette.textMuted }]}>
+              You can use SafeSpace's SOS feature for faster assistance while you finish this report.
+            </Text>
+            <Pressable onPress={() => navigation.navigate('Tabs', { screen: 'SosTab' })} hitSlop={6} style={{ marginTop: spacing.xs }}>
+              <Text style={[styles.optionTitle, { color: palette.danger }]}>Open SOS</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       <DropdownInput
         label="When did this happen?"
@@ -427,71 +501,65 @@ export function ReportIncidentScreen() {
         onSelect={setIncidentTiming}
       />
       <Text style={[styles.helperText, { color: palette.textMuted, marginTop: -spacing.sm, marginBottom: spacing.sm }]}>
-        An approximate timeframe is fine — exact dates aren't required.
+        An approximate timeframe is fine if you do not remember the exact date.
       </Text>
 
-      <Text style={[styles.label, { color: palette.text }]}>Where did the incident occur?</Text>
-      <View style={{ marginBottom: spacing.sm }}>
-        <Pressable
+      <SectionLabel>Incident location</SectionLabel>
+      <View style={{ gap: spacing.xs, marginBottom: spacing.xs }}>
+        <RadioOptionRow
+          icon="home-outline"
+          title="Use Registered Address"
+          description={registeredAddressPreview || 'Use the address saved in your profile.'}
+          selected={locationChoice === 'registered'}
           onPress={chooseRegisteredLocation}
-          style={[styles.locationChoiceRow, { borderColor: locationChoice === 'registered' ? palette.primary : palette.border }]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: locationChoice === 'registered' }}
-        >
-          <Ionicons name={locationChoice === 'registered' ? 'radio-button-on' : 'radio-button-off'} size={18} color={locationChoice === 'registered' ? palette.primary : palette.textMuted} />
-          <View style={{ flex: 1, marginLeft: spacing.sm }}>
-            <Text style={[styles.locationChoiceLabel, { color: palette.text }]}>Use Registered Address</Text>
-            {registeredAddressPreview ? <Text style={[styles.helperText, { color: palette.textMuted }]}>{registeredAddressPreview}</Text> : null}
-          </View>
-        </Pressable>
-
-        <Pressable
+        />
+        <RadioOptionRow
+          icon="locate-outline"
+          title="Use My Current Location"
+          description="Use your device's current GPS location, if permission is granted."
+          selected={locationChoice === 'current'}
           onPress={chooseCurrentLocation}
-          style={[styles.locationChoiceRow, { borderColor: locationChoice === 'current' ? palette.primary : palette.border }]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: locationChoice === 'current' }}
-        >
-          <Ionicons name={locationChoice === 'current' ? 'radio-button-on' : 'radio-button-off'} size={18} color={locationChoice === 'current' ? palette.primary : palette.textMuted} />
-          <View style={{ flex: 1, marginLeft: spacing.sm }}>
-            <Text style={[styles.locationChoiceLabel, { color: palette.text }]}>Use My Current Location</Text>
-          </View>
-          {locatingCurrent ? <ActivityIndicator color={palette.primary} /> : null}
-        </Pressable>
-
-        <Pressable
+          trailing={locatingCurrent ? <ActivityIndicator color={palette.primary} /> : undefined}
+        />
+        <RadioOptionRow
+          icon="map-outline"
+          title="Select a Different Location"
+          description="Enter or select another incident location."
+          selected={locationChoice === 'different'}
           onPress={chooseDifferentLocation}
-          style={[styles.locationChoiceRow, { borderColor: locationChoice === 'different' ? palette.primary : palette.border }]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: locationChoice === 'different' }}
-        >
-          <Ionicons name={locationChoice === 'different' ? 'radio-button-on' : 'radio-button-off'} size={18} color={locationChoice === 'different' ? palette.primary : palette.textMuted} />
-          <View style={{ flex: 1, marginLeft: spacing.sm }}>
-            <Text style={[styles.locationChoiceLabel, { color: palette.text }]}>Select Different Location</Text>
-          </View>
-        </Pressable>
-
-        {locateError ? <AlertMessage variant="error" title="Location unavailable" message={locateError} /> : null}
+        />
       </View>
+      {locateError ? <AlertMessage variant="error" title="Location unavailable" message={locateError} /> : null}
 
       <Input
         label="Incident location *"
         value={incidentLocation}
-        onChangeText={setIncidentLocation}
+        onChangeText={(v) => {
+          setIncidentLocation(v);
+          if (fieldErrors.incidentLocation) setFieldErrors((prev) => ({ ...prev, incidentLocation: undefined }));
+        }}
         placeholder="Barangay, street, or landmark"
+        error={fieldErrors.incidentLocation}
       />
+
+      <SectionLabel>Description</SectionLabel>
       <Input
-        label="Description *"
+        label="What happened? *"
         value={description}
-        onChangeText={setDescription}
-        placeholder="Describe what happened, when, and who was involved"
+        onChangeText={(v) => {
+          setDescription(v);
+          if (fieldErrors.description) setFieldErrors((prev) => ({ ...prev, description: undefined }));
+        }}
+        placeholder="Describe what happened, when it occurred, and any relevant details you feel comfortable sharing."
+        error={fieldErrors.description}
         multiline
         numberOfLines={5}
-        style={{ minHeight: 110, textAlignVertical: 'top' }}
+        style={{ minHeight: 120, textAlignVertical: 'top' }}
       />
 
       {error ? <Text style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
 
-      <PrimaryButton title="Submit report" onPress={onSubmit} loading={submitting} />
+      <PrimaryButton title="Submit Report" onPress={onSubmit} loading={submitting} />
 
       <LocationMapPicker
         visible={showLocationPicker}
@@ -510,32 +578,39 @@ export function ReportIncidentScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.display, fontSize: 22 },
-  subtitle: { ...typography.body, marginTop: spacing.xs, marginBottom: spacing.md },
-  label: { ...typography.bodyMedium, marginTop: spacing.sm, marginBottom: spacing.xs },
+  subtitle: { ...typography.body, marginTop: spacing.xs },
+  confidentialityNote: { ...typography.caption, marginTop: spacing.xs, marginBottom: spacing.md },
+  sectionLabel: { ...typography.caption, fontFamily: 'Inter_600SemiBold' as any, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: spacing.lg, marginBottom: spacing.xs },
+  label: { ...typography.bodyMedium, marginTop: spacing.xs, marginBottom: spacing.xs },
   helperText: { ...typography.caption },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  chipText: { ...typography.caption },
-  locationChoiceRow: {
-    flexDirection: 'row',
+
+  whoRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  whoCard: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  whoCardText: { ...typography.bodyMedium },
+
+  optionTitle: { ...typography.bodyMedium },
+  optionDescription: { ...typography.caption, marginTop: 2 },
+
+  emergencyNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.sm,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  locationChoiceLabel: { ...typography.bodyMedium },
+
   error: { ...typography.caption, marginBottom: spacing.sm },
   confirmWrap: { alignItems: 'center', paddingTop: spacing.xxl },
-  confirmIcon: { width: 88, height: 88, borderRadius: radius.pill, marginBottom: spacing.lg },
+  confirmIcon: { width: 88, height: 88, borderRadius: radius.pill, marginBottom: spacing.lg, alignItems: 'center', justifyContent: 'center' },
   confirmTitle: { ...typography.heading },
   confirmBody: { ...typography.body, textAlign: 'center', marginTop: spacing.xs },
   confirmCaseNumber: { ...typography.display, fontSize: 22, marginVertical: spacing.sm },

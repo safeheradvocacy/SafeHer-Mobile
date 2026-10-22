@@ -12,9 +12,9 @@ import RAnimated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, wi
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useGoToReportIncident } from '../../lib/reportIncidentGuard';
-import { PressableScale, AlertMessage, FadeInUp, useReducedMotion } from '../../components/ui';
+import { AlertMessage, FadeInUp, useReducedMotion } from '../../components/ui';
 import { HeaderActions } from '../../components/ScreenHeader';
-import { LogoMark } from '../../components/branding/LogoMark';
+import { LogoFull } from '../../components/branding/LogoMark';
 import { useTour } from '../../contexts/TourContext';
 import { measureAndRegister } from '../../lib/tourMeasure';
 import { ClaySurface } from '../../theme/clay';
@@ -22,7 +22,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { spacing, radius, typography } from '../../theme/theme';
 import { AppStackParamList, AppTabParamList } from '../../navigation/types';
 import type { CaseReport } from '../../types/database.types';
-import { AnimatedBackground } from './AnimatedBackground';
 import { QuickActionCard } from './QuickActionCard';
 import { CaseSummaryCard, CaseSectionHeader, EmptyCaseCard } from './CaseSummaryCard';
 import { SosConfirmSheet } from './SosConfirmSheet';
@@ -41,19 +40,24 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-/** Very subtle breathing pulse for the SOS icon — icon gently scales, a
- * soft outer glow expands slightly, both return to rest, slow loop. Never
- * runs under Reduce Motion. This is the ONLY continuously-looping
- * animation on Home, deliberately restrained so the card reads as "help
- * is available" rather than a constant, anxious warning. */
 function SosIcon({ reduced }: { reduced: boolean }) {
   const { palette } = useTheme();
   const pulse = useSharedValue(0);
   useEffect(() => {
     if (reduced) return;
-    pulse.value = withRepeat(withSequence(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), withTiming(0, { duration: 1800, easing: Easing.inOut(Easing.sin) })), -1, false);
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 1800, easing: Easing.inOut(Easing.sin) })
+      ),
+      -1,
+      false
+    );
   }, [reduced, pulse]);
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.16 + pulse.value * 0.16, transform: [{ scale: 1 + pulse.value * 0.14 }] }));
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: 0.16 + pulse.value * 0.16,
+    transform: [{ scale: 1 + pulse.value * 0.14 }],
+  }));
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.05 }] }));
   return (
     <View style={styles.sosIconWrap}>
@@ -158,7 +162,6 @@ export function HomeScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: palette.background }]}>
-      <AnimatedBackground reduced={reduced} />
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -173,9 +176,16 @@ export function HomeScreen() {
         // coordinate captured before the scroll just goes stale.
         scrollEnabled={!tourActive}
       >
-        {/* Header */}
+        {/* Header — the full mark+wordmark lockup (LogoFull), not the
+            compact symbol (LogoMark), per the brief: the old symbol-only
+            mark at 20px was "too small to recognize." 56px keeps it
+            squarely a header element (not a hero), and this asset's own
+            wordmark text strip was confirmed, by directly viewing the
+            image, to stay legible at this size — no second "SafeSpace"
+            text is added beside it, since the asset already bakes the
+            name in. */}
         <FadeInUp reduced={reduced} delay={0} duration={320} style={styles.header}>
-          <LogoMark size="md" />
+          <LogoFull width={56} />
           <View style={{ flex: 1 }} />
           <HeaderActions />
         </FadeInUp>
@@ -191,7 +201,9 @@ export function HomeScreen() {
             </View>
           ) : null}
 
-          {/* Greeting */}
+          {/* Greeting — one line (was "Good evening,\n{name}" on two
+              lines); a very long name still wraps naturally rather than
+              clipping, since no numberOfLines is set. */}
           <FadeInUp reduced={reduced} delay={60} duration={320}>
             <View
               ref={greetingRef}
@@ -200,8 +212,7 @@ export function HomeScreen() {
               }}
             >
               <Text style={[styles.greeting, { color: palette.text }]}>
-                {getGreeting()},{'\n'}
-                {profile?.first_name ?? 'there'}
+                {getGreeting()}, {profile?.first_name ?? 'there'}
               </Text>
               <Text style={[styles.subtitle, { color: palette.textMuted }]}>How can we help you today?</Text>
             </View>
@@ -231,7 +242,15 @@ export function HomeScreen() {
               accessibilityLabel="Emergency SOS"
               accessibilityHint="Opens the emergency SOS confirmation"
             >
-              <ClaySurface radius={24} tint="transparent" shadowTint={palette.dangerDark} intensity="lg" style={styles.sosCardShadow} innerStyle={styles.sosCardInner} highlightOpacity={0}>
+              <ClaySurface
+                radius={24}
+                tint="transparent"
+                shadowTint={palette.dangerDark}
+                intensity="lg"
+                style={styles.sosCardShadow}
+                innerStyle={styles.sosCardInner}
+                highlightOpacity={0}
+              >
                 <LinearGradient
                   colors={[palette.danger, palette.dangerDark]}
                   start={{ x: 0, y: 0 }}
@@ -239,10 +258,6 @@ export function HomeScreen() {
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
                 />
-                {/* Controlled upper-portion sheen, same physical-surface
-                    language as the primary auth CTA — not the generic
-                    diagonal white gloss, which read as messy over a
-                    saturated fill in an earlier pass on this palette. */}
                 <LinearGradient
                   colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']}
                   start={{ x: 0, y: 0 }}
@@ -257,7 +272,9 @@ export function HomeScreen() {
             </Pressable>
           </FadeInUp>
 
-          {/* Quick Actions */}
+          {/* Quick Actions — the fifth card (Announcements) now spans the
+              row on its own (fullWidth) instead of leaving an empty
+              flex:1 spacer beside it. */}
           <FadeInUp reduced={reduced} delay={180} duration={320}>
             <Text style={[styles.sectionTitle, { color: palette.text }]}>Quick Actions</Text>
             <View style={styles.actionsGrid}>
@@ -306,17 +323,15 @@ export function HomeScreen() {
                   onPress={() => navigation.navigate('SheltersTab')}
                 />
               </View>
-              <View style={styles.actionsRow}>
-                <QuickActionCard
-                  icon="megaphone"
-                  tint={palette.primary}
-                  title="Announcements"
-                  description="Provincial updates"
-                  reduced={reduced}
-                  onPress={() => navigation.navigate('Announcements')}
-                />
-                <View style={{ flex: 1 }} />
-              </View>
+              <QuickActionCard
+                icon="megaphone"
+                tint={palette.primary}
+                title="Announcements"
+                description="Provincial updates"
+                reduced={reduced}
+                onPress={() => navigation.navigate('Announcements')}
+                fullWidth
+              />
             </View>
           </FadeInUp>
 
@@ -327,9 +342,10 @@ export function HomeScreen() {
                 <Text style={[styles.sectionTitle, { color: palette.text }]}>Your Cases</Text>
                 {!loading && !loadError ? <CaseSectionHeader activeCount={activeCaseCount} /> : null}
               </View>
-              <PressableScale onPress={() => navigation.navigate('CasesTab')} hitSlop={8} style={styles.viewAllButton}>
+              <Pressable onPress={() => navigation.navigate('CasesTab')} hitSlop={8} style={styles.viewAllButton}>
                 <Text style={[styles.viewAllLink, { color: palette.primary }]}>View all</Text>
-              </PressableScale>
+                <Ionicons name="chevron-forward" size={14} color={palette.primary} />
+              </Pressable>
             </View>
 
             {loading ? (
@@ -343,14 +359,13 @@ export function HomeScreen() {
             )}
           </FadeInUp>
 
-          {/* Privacy indicator */}
-          <FadeInUp reduced={reduced} delay={300} style={{ alignItems: 'center', marginTop: spacing.xl }}>
-            <Pressable onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Privacy and security">
-              <ClaySurface radius={18} tint={palette.primaryLight} shadowTint={palette.primaryDark} intensity="sm" style={undefined} innerStyle={styles.privacyPillInner} highlightOpacity={0.2}>
-                <Ionicons name="lock-closed" size={13} color={palette.primaryDark} />
-                <Text style={[styles.privacyPillText, { color: palette.primaryDark }]}>Your information is protected</Text>
-              </ClaySurface>
-            </Pressable>
+          {/* Privacy indicator — a plain inline row (was a raised,
+              tinted, tappable-looking pill). Not interactive, so it no
+              longer looks pressable; a profile shortcut already exists
+              in the header. */}
+          <FadeInUp reduced={reduced} delay={300} style={styles.privacyRow}>
+            <Ionicons name="lock-closed-outline" size={13} color={palette.textMuted} />
+            <Text style={[styles.privacyText, { color: palette.textMuted }]}>Your information is handled with care.</Text>
           </FadeInUp>
         </View>
       </ScrollView>
@@ -389,8 +404,8 @@ const styles = StyleSheet.create({
   },
   offlineTitle: { ...typography.bodyMedium, fontSize: 12.5 },
   offlineBody: { ...typography.caption, fontSize: 11, marginTop: 1 },
-  greeting: { ...typography.display, fontSize: 27, lineHeight: 33, marginTop: spacing.md },
-  subtitle: { ...typography.body, fontSize: 15, marginTop: spacing.sm, marginBottom: 20 },
+  greeting: { ...typography.display, fontSize: 24, lineHeight: 30, marginTop: spacing.sm },
+  subtitle: { ...typography.body, fontSize: 15, marginTop: 4, marginBottom: spacing.md },
 
   sosCardShadow: { borderRadius: 24, marginBottom: 24 },
   sosCardInner: { height: 112, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center' },
@@ -400,20 +415,20 @@ const styles = StyleSheet.create({
   sosTitle: { ...typography.heading, fontSize: 18, color: '#FFFFFF' },
   sosSubtitle: { ...typography.caption, fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 2 },
 
-  sectionTitle: { ...typography.heading, fontSize: 20 },
+  sectionTitle: { ...typography.heading, fontSize: 19 },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginTop: 28,
-    marginBottom: 12,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
   },
-  viewAllButton: { paddingVertical: 4, paddingHorizontal: 4 },
+  viewAllButton: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 4 },
   viewAllLink: { ...typography.bodyMedium },
-  actionsGrid: { marginTop: 12, gap: spacing.md },
+  actionsGrid: { marginTop: spacing.sm, gap: spacing.md },
   actionsRow: { flexDirection: 'row', gap: spacing.md },
   skeleton: { height: 96, borderRadius: radius.lg },
 
-  privacyPillInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9 },
-  privacyPillText: { ...typography.caption, fontSize: 12, marginLeft: 6, fontFamily: 'Inter_500Medium' as any },
+  privacyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.lg },
+  privacyText: { ...typography.caption, fontSize: 12 },
 });

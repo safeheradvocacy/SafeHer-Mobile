@@ -209,6 +209,7 @@ export interface Municipality {
   province: string;
   contact_number: string | null;
   is_active: boolean;
+  psgc_code: string | null; // official PSA PSGC code (module38)
   created_at: string;
   updated_at: string;
 }
@@ -219,6 +220,7 @@ export interface Barangay {
   barangay_name: string; // unique per municipality
   contact_number: string | null;
   is_active: boolean;
+  psgc_code: string | null; // official PSA PSGC code (module38)
   created_at: string;
   updated_at: string;
 }
@@ -233,6 +235,7 @@ export interface UserProfile {
   first_name: string;
   middle_name: string | null;
   last_name: string;
+  suffix: string | null; // module39
   phone_number: string | null;
   profile_picture: string | null;
   is_active: boolean;
@@ -271,6 +274,15 @@ export interface Survivor {
   address_updated_at: string | null;
   emergency_contact_name: string | null;
   emergency_contact_number: string | null;
+  // module39 — structured parts, authoritative going forward;
+  // emergency_contact_name above is kept in sync (recomposed on every
+  // save) for the one existing admin display that still reads it
+  // directly (CaseDetailPage.tsx).
+  emergency_contact_first_name: string | null;
+  emergency_contact_middle_name: string | null;
+  emergency_contact_last_name: string | null;
+  emergency_contact_suffix: string | null;
+  emergency_contact_name_needs_review: boolean;
   // module20 — admin-facing government-report field; not collected
   // anywhere in the mobile app's own survivor profile flow today.
   educational_attainment: string | null;
@@ -291,6 +303,11 @@ export interface Shelter {
   latitude: number | null;
   longitude: number | null;
   is_active: boolean;
+  // module35 — storage OBJECT PATH (e.g. 'shelters/<id>/169...jpg'), not
+  // a full URL. Derive the displayable URL via
+  // supabase.storage.from('shelter-photos').getPublicUrl(photo_path) —
+  // see lib/shelterPhotos.ts. Null means no photo has been uploaded yet.
+  photo_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -527,6 +544,7 @@ export interface Notification {
   case_id: string | null; // FK -> case_reports.case_id
   sos_id: string | null; // FK -> sos_alerts.sos_id
   announcement_id: string | null; // FK -> announcements.announcement_id (module28)
+  request_id: string | null; // FK -> expert_support_requests.request_id (module41)
   notification_type: NotificationType;
   title: string;
   message: string;

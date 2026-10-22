@@ -1,0 +1,234 @@
+<!doctype html>
+<title>SafeSpace User Specification</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --header-bg: #e9ecf1;
+    --accent: #1f4e8c;
+    --stripe: #f1f3f7;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --header-bg: #2b2e33;
+      --accent: #8fb6ec;
+      --stripe: #26292e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --header-bg: #2b2e33;
+    --accent: #8fb6ec;
+    --stripe: #26292e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet { max-width: 1040px; margin: 0 auto; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 4px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 26px);
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .table-label {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 22px 0 0;
+  }
+  .table-caption {
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 16px;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 880px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--header-bg);
+    color: var(--ink);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th:last-child, td:last-child { border-right: none; }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.48;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .role-cell { font-weight: 600; color: var(--accent); width: 190px; }
+  .platform-cell { width: 130px; }
+  .platform-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .platform-mobile { background: #e7eefb; color: #1f4e8c; }
+  .platform-web { background: #e6f2ea; color: #2c6a4e; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .platform-mobile { background: #1f2c40; color: #8fb6ec; }
+    :root:not([data-theme="light"]) .platform-web { background: #1c3027; color: #8fcbab; }
+  }
+  :root[data-theme="dark"] .platform-mobile { background: #1f2c40; color: #8fb6ec; }
+  :root[data-theme="dark"] .platform-web { background: #1c3027; color: #8fcbab; }
+
+  .scope-cell { color: var(--ink-muted); font-size: 12.5px; width: 150px; }
+  .desc-cell { width: 340px; }
+
+  .legend {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+</style>
+
+<div class="sheet">
+  <p class="section-label">System Requirements</p>
+  <h1 class="fig-title">User Specification</h1>
+
+  <p class="note">
+    Scope reflects each role's real jurisdiction boundary as enforced by the system's access-control rules
+    (row-level security), not just a title &mdash; e.g. a Barangay Administrator's access is confined to their
+    own barangay, and a Shelter Administrator's to their own shelter, regardless of what they can see in the
+    interface.
+  </p>
+
+  <p class="table-label">Table 4</p>
+  <p class="table-caption">User Specification</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>User Category</th>
+          <th>Platform</th>
+          <th>Scope</th>
+          <th>Description and Authorized Responsibilities</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="role-cell">Survivor / Reporter</td>
+          <td class="platform-cell"><span class="platform-pill platform-mobile">Mobile Application</span></td>
+          <td class="scope-cell">Individual &mdash; own account only</td>
+          <td class="desc-cell">Submits incident reports with supporting evidence, tracks the status and history of their own case, requests shelter assistance, triggers Emergency SOS with real-time location sharing, and manages their own profile and emergency contact information.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Barangay Administrator</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Barangay &mdash; assigned barangay only</td>
+          <td class="desc-cell">Reviews and acts on barangay-level action requests (e.g., Barangay Protection Orders) and monitors cases routed to the barangay, within the assigned barangay's jurisdiction.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Municipal Administrator (MSWDO)</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Municipality &mdash; assigned municipality only</td>
+          <td class="desc-cell">Oversees case management and shelter referrals for the assigned municipality, coordinates with barangay and shelter partners, creates and manages municipal- and barangay-level accounts, and generates municipal-level reports.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Provincial Admin (Super Administrator)</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Province-wide</td>
+          <td class="desc-cell">Administers the system province-wide: creates and manages every account type and role, maintains municipality, barangay, and shelter reference data, configures system-wide settings, and oversees audit logs and data backup/restore.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Provincial Staff</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Province-wide &mdash; operational, no jurisdiction assignment</td>
+          <td class="desc-cell">Supports provincial-level case monitoring, coordination, and reporting activities without full administrative privileges.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Shelter Administrator</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Own shelter only</td>
+          <td class="desc-cell">Maintains their shelter's listing and photos, reviews and responds to incoming shelter requests, and manages case-to-shelter referrals directed to their shelter.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Support Expert</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Assigned requests only &mdash; no jurisdiction assignment</td>
+          <td class="desc-cell">Responds to confidential support requests assigned to them through the system's support queue.</td>
+        </tr>
+        <tr>
+          <td class="role-cell">Police Officer (Law Enforcement)</td>
+          <td class="platform-cell"><span class="platform-pill platform-web">Web Administration Dashboard</span></td>
+          <td class="scope-cell">Assigned SOS alerts and referrals</td>
+          <td class="desc-cell">Monitors and responds to Emergency SOS alerts routed to law enforcement, and acts on law-enforcement case referrals within their authorized response role.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="legend">All eight roles are enforced server-side; a user cannot read or act outside their listed scope regardless of what the client interface requests.</p>
+</div>

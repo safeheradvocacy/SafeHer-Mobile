@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
 import { ShelterMap } from '../../components/maps/ShelterMap';
+import { ShelterPhotoUploader } from '../../components/shelters/ShelterPhotoUploader';
 
 // Shelter Information — the single consolidated management page (master
 // prompt: "Consolidate Shelter Information and Services Management,
@@ -163,6 +164,11 @@ export function ShelterInformationPage() {
               No location on file for this shelter yet.
             </p>
           )}
+
+          {/* ---------- E. Shelter Photos ---------- */}
+          <div className="card">
+            <ShelterPhotoUploader shelterId={profile.shelter_id as string} photoPath={shelter?.photo_path ?? null} onChanged={() => refreshProfile()} />
+          </div>
 
           {/* ---------- D. Services Offered ---------- */}
           <div className="card">

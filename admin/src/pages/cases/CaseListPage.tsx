@@ -1,12 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { EmptyState, LoadingRow, PageHeader, StatusBadge } from '../../components/ui';
 import { WalkInCaseModal } from '../../components/cases/WalkInCaseModal';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
+import { Pagination } from '../../components/Pagination';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import type { CaseReport, CaseStatus, CaseType, Municipality, PriorityLevel } from '../../types/database.types';
+
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUSES: CaseStatus[] = ['Pending', 'Under Review', 'Assigned', 'In Progress', 'Referred', 'Resolved', 'Closed'];
 const TYPES: CaseType[] = ['Physical Abuse', 'Psychological Abuse', 'Sexual Abuse', 'Economic Abuse', 'Stalking', 'Neglect', 'Others'];
@@ -18,6 +21,7 @@ export function CaseListPage() {
   const isProvincial = roleTier === 'province';
 
   const [cases, setCases] = useState<CaseReport[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWalkInModal, setShowWalkInModal] = useState(false);
@@ -38,20 +42,47 @@ export function CaseListPage() {
   const [sourceFilter, setSourceFilter] = useState('');
   const [sortDesc, setSortDesc] = useState(true);
 
+  // Server-side pagination state — province-wide case_reports can grow
+  // without bound over the life of the system, so this list is never
+  // fetched in full (previously: a plain `.select('*')` with every
+  // filter/sort applied client-side afterward on the whole table).
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // Any filter/search/sort change invalidates the current page — always
+  // re-land on page 0 rather than showing (or erroring on) a page
+  // number that may no longer exist under the new filter.
+  useEffect(() => {
+    setPage(0);
+  }, [search, statusFilter, typeFilter, priorityFilter, municipalityFilter, sourceFilter, sortDesc]);
+
   const load = useCallback(async () => {
+    setLoading(true);
     if (isProvincial) {
       const { data } = await supabase.from('municipalities').select('*').eq('is_active', true).order('municipality_name');
       setMunicipalities(data ?? []);
     }
 
-    let query = supabase.from('case_reports').select('*');
+    let query = supabase.from('case_reports').select('*', { count: 'exact' });
     if (!isProvincial && profile?.municipality_id) {
       query = query.eq('municipality_id', profile.municipality_id);
     }
-    const { data } = await query.order('reported_at', { ascending: false });
+    if (search.trim()) {
+      const q = search.trim().replace(/[%,]/g, '');
+      query = query.or(`case_number.ilike.%${q}%,incident_location.ilike.%${q}%`);
+    }
+    if (statusFilter) query = query.eq('status', statusFilter);
+    if (typeFilter) query = query.eq('case_type', typeFilter);
+    if (priorityFilter) query = query.eq('priority_level', priorityFilter);
+    if (municipalityFilter) query = query.eq('municipality_id', municipalityFilter);
+    if (sourceFilter) query = query.eq('source_channel', sourceFilter);
+
+    const from = page * pageSize;
+    const { data, count } = await query.order('reported_at', { ascending: !sortDesc }).range(from, from + pageSize - 1);
     setCases(data ?? []);
+    setTotalCount(count ?? 0);
     setLoading(false);
-  }, [isProvincial, profile?.municipality_id]);
+  }, [isProvincial, profile?.municipality_id, search, statusFilter, typeFilter, priorityFilter, municipalityFilter, sourceFilter, sortDesc, page, pageSize]);
 
   useEffect(() => {
     load();
@@ -59,22 +90,9 @@ export function CaseListPage() {
 
   const { refreshing, lastUpdated, onRefresh } = useHeaderRefresh(loading, load);
 
-  const filtered = useMemo(() => {
-    let rows = cases;
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter((c) => c.case_number.toLowerCase().includes(q) || c.incident_location.toLowerCase().includes(q));
-    }
-    if (statusFilter) rows = rows.filter((c) => c.status === statusFilter);
-    if (typeFilter) rows = rows.filter((c) => c.case_type === typeFilter);
-    if (priorityFilter) rows = rows.filter((c) => c.priority_level === priorityFilter);
-    if (municipalityFilter) rows = rows.filter((c) => c.municipality_id === municipalityFilter);
-    if (sourceFilter) rows = rows.filter((c) => c.source_channel === sourceFilter);
-    rows = [...rows].sort((a, b) =>
-      sortDesc ? +new Date(b.reported_at) - +new Date(a.reported_at) : +new Date(a.reported_at) - +new Date(b.reported_at)
-    );
-    return rows;
-  }, [cases, search, statusFilter, typeFilter, priorityFilter, municipalityFilter, sourceFilter, sortDesc]);
+  // No client-side filtering/sorting left — `cases` is already exactly
+  // this page's rows, already filtered and ordered by the query above.
+  const filtered = cases;
 
   const municipalityName = (id: string) => municipalities.find((m) => m.municipality_id === id)?.municipality_name ?? '—';
 
@@ -197,6 +215,17 @@ export function CaseListPage() {
         </table>
         {!loading && filtered.length === 0 && <EmptyState title="No cases match your filters" />}
       </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(0);
+        }}
+        loading={loading}
+      />
     </div>
   );
 }

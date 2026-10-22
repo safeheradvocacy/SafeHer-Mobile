@@ -7,9 +7,13 @@ import { AppStackParamList, AppTabParamList } from './types';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { CaseListScreen } from '../screens/cases/CaseListScreen';
 import { SosScreen } from '../screens/sos/SosScreen';
+import { SosHistoryScreen } from '../screens/sos/SosHistoryScreen';
+import { SosHistoryDetailScreen } from '../screens/sos/SosHistoryDetailScreen';
 import { SafeHerAssistantScreen } from '../screens/assistant/SafeHerAssistantScreen';
 import { ShelterLocatorScreen } from '../screens/shelters/ShelterLocatorScreen';
 import { RequestShelterScreen } from '../screens/shelters/RequestShelterScreen';
+import { ShelterDetailScreen } from '../screens/shelters/ShelterDetailScreen';
+import { MyShelterRequestsScreen } from '../screens/shelters/MyShelterRequestsScreen';
 import { ReportIncidentScreen } from '../screens/incident/ReportIncidentScreen';
 import { CaseDetailScreen } from '../screens/cases/CaseDetailScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
@@ -122,7 +126,11 @@ export function AppNavigator() {
     >
       <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
       <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ title: 'Report Incident' }} />
+      <Stack.Screen name="SosHistory" component={SosHistoryScreen} options={{ title: 'SOS History' }} />
+      <Stack.Screen name="SosHistoryDetail" component={SosHistoryDetailScreen} options={{ title: 'Alert Details' }} />
       <Stack.Screen name="RequestShelter" component={RequestShelterScreen} options={{ title: 'Request Shelter' }} />
+      <Stack.Screen name="ShelterDetail" component={ShelterDetailScreen} options={{ title: 'Shelter Details' }} />
+      <Stack.Screen name="MyShelterRequests" component={MyShelterRequestsScreen} options={{ title: 'My Shelter Requests' }} />
       <Stack.Screen name="CaseDetail" component={CaseDetailScreen} options={{ title: 'Case Details' }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile & Account' }} />

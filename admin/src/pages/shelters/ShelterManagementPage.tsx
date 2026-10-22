@@ -3,10 +3,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { describeCoordinateError } from '../../lib/geo';
-import { EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
+import { ConfirmDialog, EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import { ShelterLocationPicker } from '../../components/maps/ShelterLocationPicker';
+import { ShelterPhotoUploader } from '../../components/shelters/ShelterPhotoUploader';
+import { sanitizePhoneInput } from '../../lib/validators';
 import type { Municipality, Shelter } from '../../types/database.types';
 
 const KNOWN_SERVICES = ['Counseling', 'Legal Aid', 'Medical Care', 'Childcare', 'Skills Training', 'Food & Meals', 'Transportation', 'Emergency Response'];
@@ -64,6 +66,7 @@ export function ShelterManagementPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingOccupancy, setEditingOccupancy] = useState(0);
+  const [editingPhotoPath, setEditingPhotoPath] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +96,7 @@ export function ShelterManagementPage() {
   const openCreate = () => {
     setEditingId(null);
     setEditingOccupancy(0);
+    setEditingPhotoPath(null);
     setForm({ ...EMPTY_FORM, municipality_id: isProvincial ? '' : profile?.municipality_id ?? '' });
     setError(null);
     setModalOpen(true);
@@ -102,6 +106,7 @@ export function ShelterManagementPage() {
     const { checked, other } = parseServices(s.services_available ?? '');
     setEditingId(s.shelter_id);
     setEditingOccupancy(s.current_occupancy ?? 0);
+    setEditingPhotoPath(s.photo_path ?? null);
     setForm({
       municipality_id: s.municipality_id,
       shelter_name: s.shelter_name,
@@ -121,6 +126,16 @@ export function ShelterManagementPage() {
   const toggleActive = async (s: Shelter) => {
     await supabase.from('shelters').update({ is_active: !s.is_active }).eq('shelter_id', s.shelter_id);
     setShelters((prev) => prev.map((x) => (x.shelter_id === s.shelter_id ? { ...x, is_active: !x.is_active } : x)));
+  };
+
+  // Deactivating a shelter removes it from the active list survivors
+  // and caseworkers see — materially consequential, so it gets a
+  // confirm step. Reactivating is not (it only restores visibility),
+  // so that direction still fires immediately.
+  const [pendingDeactivate, setPendingDeactivate] = useState<Shelter | null>(null);
+  const onToggleActiveClick = (s: Shelter) => {
+    if (s.is_active) setPendingDeactivate(s);
+    else toggleActive(s);
   };
 
   const toggleService = (name: string) => {
@@ -238,7 +253,7 @@ export function ShelterManagementPage() {
                       <button className="btn btn-outline btn-sm" style={{ marginRight: 6 }} onClick={() => openEdit(s)}>
                         Edit
                       </button>
-                      <button className="btn btn-outline btn-sm" onClick={() => toggleActive(s)}>
+                      <button className="btn btn-outline btn-sm" onClick={() => onToggleActiveClick(s)}>
                         {s.is_active ? 'Deactivate' : 'Activate'}
                       </button>
                     </td>
@@ -279,8 +294,10 @@ export function ShelterManagementPage() {
               <label className="label">Contact number</label>
               <input
                 className="input"
+                type="tel"
+                inputMode="tel"
                 value={form.contact_number}
-                onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, contact_number: sanitizePhoneInput(e.target.value) }))}
                 disabled={saving}
               />
             </div>
@@ -327,6 +344,22 @@ export function ShelterManagementPage() {
             />
           </div>
 
+          <SectionHeading>Shelter Photos</SectionHeading>
+          {editingId ? (
+            <ShelterPhotoUploader
+              shelterId={editingId}
+              photoPath={editingPhotoPath}
+              onChanged={(path) => {
+                setEditingPhotoPath(path);
+                load();
+              }}
+            />
+          ) : (
+            <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+              Save this shelter first, then reopen it from Edit to add a photo.
+            </p>
+          )}
+
           <SectionHeading>Location</SectionHeading>
           <ShelterLocationPicker
             latitude={form.latitude}
@@ -361,6 +394,20 @@ export function ShelterManagementPage() {
 
           {error && <p style={{ color: 'var(--color-danger)', fontSize: 13, marginTop: 16 }}>{error}</p>}
         </Modal>
+      )}
+
+      {pendingDeactivate && (
+        <ConfirmDialog
+          title="Deactivate this shelter?"
+          body={`"${pendingDeactivate.shelter_name}" will no longer appear in the active shelter list for survivors or caseworkers. You can reactivate it at any time.`}
+          confirmLabel="Deactivate"
+          danger
+          onCancel={() => setPendingDeactivate(null)}
+          onConfirm={() => {
+            toggleActive(pendingDeactivate);
+            setPendingDeactivate(null);
+          }}
+        />
       )}
     </div>
   );

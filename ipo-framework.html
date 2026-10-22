@@ -1,0 +1,306 @@
+<title>SafeSpace Conceptual Framework</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  color-scheme: light;
+  --page:      #eef1f5;
+  --surface:   #ffffff;
+  --band:      #f4f6f9;
+  --ink:       #121a26;
+  --ink-2:     #3f4a5a;
+  --ink-muted: #6b7686;
+  --rule:      #d7dde5;
+  --navy:      #0B3A82;
+  --blue:      #1456A0;
+  --accent:    #2F80C9;
+  --tint:      #eaf3fb;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page:      #0c0f14;
+    --surface:   #161b23;
+    --band:      #1c222c;
+    --ink:       #eef2f7;
+    --ink-2:     #c2cad6;
+    --ink-muted: #8d97a6;
+    --rule:      #2a3340;
+    --navy:      #9cc2ef;
+    --blue:      #7fb0e4;
+    --accent:    #5e9fd8;
+    --tint:      #16233a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:      #0c0f14;
+  --surface:   #161b23;
+  --band:      #1c222c;
+  --ink:       #eef2f7;
+  --ink-2:     #c2cad6;
+  --ink-muted: #8d97a6;
+  --rule:      #2a3340;
+  --navy:      #9cc2ef;
+  --blue:      #7fb0e4;
+  --accent:    #5e9fd8;
+  --tint:      #16233a;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  margin: 0;
+  padding-inline: 18px;
+  padding-block: 28px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+.frame { max-width: 1080px; margin: 0 auto; }
+
+.figtitle { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 0 3px; letter-spacing: -0.01em; }
+.figsub { font-size: 12.5px; color: var(--ink-muted); margin: 0 0 22px; }
+
+/* ---- column grid ---- */
+.ipo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; align-items: stretch; }
+.col { display: flex; flex-direction: column; min-width: 0; }
+
+.colhead {
+  background: var(--band); border: 1px solid var(--rule); border-radius: 8px;
+  text-align: center; padding: 11px 10px; font-weight: 700; font-size: 13px;
+  letter-spacing: 0.13em; color: var(--ink-2); margin-bottom: 13px;
+}
+.col--out .colhead { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 9px;
+  padding: 15px 16px; flex: 1; min-width: 0;
+}
+.col--out .card { border-color: var(--blue); border-width: 1.5px; }
+
+.arrow { display: flex; align-items: center; justify-content: center; padding: 0 9px; }
+.arrow svg { display: block; }
+
+h4 {
+  font-size: 12px; font-weight: 700; color: var(--navy); margin: 0 0 6px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+h4 + ul { margin-top: 0; }
+.group + .group { margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--rule); }
+
+ul { margin: 0; padding-left: 15px; }
+li { font-size: 12.3px; color: var(--ink-2); margin-bottom: 3.5px; }
+li::marker { color: var(--accent); }
+ol { margin: 0; padding-left: 17px; counter-reset: step; }
+ol li { font-size: 12.3px; margin-bottom: 5px; }
+.note { font-size: 11.3px; color: var(--ink-muted); font-style: italic; margin: 7px 0 0; padding-left: 2px; }
+.sysname {
+  background: var(--tint); border-radius: 6px; padding: 10px 12px; margin: 0 0 14px;
+}
+.sysname b { display: block; font-size: 13.5px; color: var(--navy); margin-bottom: 2px; }
+.sysname span { font-size: 11.8px; color: var(--ink-2); line-height: 1.4; }
+.repeat {
+  font-size: 11.3px; color: var(--ink-muted); background: var(--band);
+  border-left: 2px solid var(--accent); padding: 5px 9px; margin: 8px 0 9px; border-radius: 0 4px 4px 0;
+}
+
+/* ---- feedback loop ---- */
+.feedback { margin-top: 16px; }
+.fbline { position: relative; height: 26px; }
+.fbline svg { width: 100%; height: 26px; display: block; }
+.fbtext {
+  text-align: center; font-size: 11.8px; color: var(--ink-muted);
+  margin-top: 7px; max-width: 76ch; margin-inline: auto;
+}
+.fbtext b { color: var(--ink-2); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .ipo { grid-template-columns: 1fr; gap: 0; }
+  .arrow { padding: 10px 0; transform: rotate(90deg); }
+  .col { margin-bottom: 0; }
+}
+@media print {
+  body { background: #fff; padding: 0; }
+  .card, .colhead { break-inside: avoid; }
+}
+</style>
+
+<div class="frame">
+
+  <p class="figtitle">Figure 1. Conceptual Framework of the Study</p>
+  <p class="figsub">Input&ndash;Process&ndash;Output model with feedback, showing the development and evaluation of SafeSpace.</p>
+
+  <div class="ipo">
+
+    <!-- ============ INPUT ============ -->
+    <div class="col">
+      <div class="colhead">INPUT</div>
+      <div class="card">
+
+        <div class="group">
+          <h4>Knowledge requirements</h4>
+          <ul>
+            <li>Reporting and case-handling workflow in Aurora Province <em>(preliminary consultations)</em></li>
+            <li>RA 9262, RA 7610, RA 11313, RA 11930, RA 10173</li>
+            <li>NPC Circular No. 2023-06</li>
+            <li>Nine user roles and their jurisdictional scopes</li>
+            <li>PSA Philippine Standard Geographic Codes</li>
+            <li>Review of related literature</li>
+            <li>ISO/IEC 25010:2023 quality model</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h4>Software requirements</h4>
+          <ul>
+            <li>React Native with Expo (mobile)</li>
+            <li>React with Vite (web dashboard)</li>
+            <li>TypeScript</li>
+            <li>Supabase &mdash; Auth, PostgreSQL with Row Level Security, Storage, Realtime, Edge Functions</li>
+            <li>Vercel (web hosting), Expo EAS (mobile builds)</li>
+            <li>Google Maps and Groq APIs</li>
+            <li>Git and GitHub</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h4>Hardware requirements</h4>
+          <ul>
+            <li>Computers for development and administration</li>
+            <li>Android devices for testing and deployment</li>
+            <li>Internet connection</li>
+          </ul>
+          <p class="note">Mobile delivery is Android; iOS is configured but not built.</p>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="arrow" aria-hidden="true">
+      <svg width="30" height="20" viewBox="0 0 30 20" fill="none">
+        <path d="M0 10 H22" stroke="var(--accent)" stroke-width="1.6"/>
+        <path d="M21 4 L29 10 L21 16 Z" fill="var(--accent)"/>
+      </svg>
+    </div>
+
+    <!-- ============ PROCESS ============ -->
+    <div class="col">
+      <div class="colhead">PROCESS</div>
+      <div class="card">
+
+        <div class="group">
+          <h4>Iterative and incremental development</h4>
+          <ol>
+            <li>Gathered and analyzed requirements</li>
+            <li>Designed the baseline: database schema, RLS policies, and user interface</li>
+            <li>Built one module at a time &mdash; a new function, a refinement, or a correction</li>
+            <li>Verified each increment: type checks, production builds, and live database queries</li>
+            <li>Corrected gaps before beginning the next increment</li>
+          </ol>
+          <p class="repeat">Steps 3&ndash;5 repeated for every module</p>
+          <ol start="6">
+            <li>Integrated the mobile application and the web platform</li>
+          </ol>
+        </div>
+
+        <div class="group">
+          <h4>Security assessment</h4>
+          <ul>
+            <li>Static review of source, migrations, and dependencies</li>
+            <li>Live testing of the deployed system: authorization boundaries, transport security, and the mobile artifact</li>
+            <li>Findings classified by severity and remediated by priority</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h4>Evaluation</h4>
+          <ul>
+            <li>ISO/IEC 25010:2023-based questionnaires administered to IT professionals and end users</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="arrow" aria-hidden="true">
+      <svg width="30" height="20" viewBox="0 0 30 20" fill="none">
+        <path d="M0 10 H22" stroke="var(--accent)" stroke-width="1.6"/>
+        <path d="M21 4 L29 10 L21 16 Z" fill="var(--accent)"/>
+      </svg>
+    </div>
+
+    <!-- ============ OUTPUT ============ -->
+    <div class="col col--out">
+      <div class="colhead">OUTPUT</div>
+      <div class="card">
+
+        <div class="sysname">
+          <b>SafeSpace</b>
+          <span>A Mobile and Web-Based Abuse Reporting and Response System for Aurora Province</span>
+        </div>
+
+        <div class="group">
+          <h4>Mobile application &mdash; survivors</h4>
+          <ul>
+            <li>Submit abuse reports with evidence</li>
+            <li>Send SOS alerts with live location</li>
+            <li>Consult the AI support assistant, with handoff to a human expert</li>
+            <li>Locate and request shelter</li>
+            <li>Track case status and receive notifications</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h4>Web platform &mdash; nine authorized roles</h4>
+          <ul>
+            <li>Review, assign, and escalate cases</li>
+            <li>Monitor and dispatch SOS alerts</li>
+            <li>Manage shelter referrals and occupancy</li>
+            <li>Coordinate police referrals</li>
+            <li>Verify identity and walk-in case access</li>
+            <li>Generate reports and analytics</li>
+            <li>Maintain audit logs and system backups</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h4>Data protection</h4>
+          <ul>
+            <li>Role-based access control across administrative levels</li>
+            <li>Row Level Security enforced on every table</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h4>Evaluation results</h4>
+          <ul>
+            <li>Assessments by IT professionals and end users</li>
+            <li>Identified strengths and areas for improvement</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ FEEDBACK ============ -->
+  <div class="feedback">
+    <div class="fbline" aria-hidden="true">
+      <svg viewBox="0 0 1000 26" preserveAspectRatio="none">
+        <path d="M992 0 V14 H16 V0" fill="none" stroke="var(--ink-muted)" stroke-width="1.3"
+              stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+        <path d="M10 0 L22 0 L16 9 Z" fill="var(--ink-muted)"/>
+      </svg>
+    </div>
+    <p class="fbtext">
+      <b>Feedback.</b> Verification findings guided corrections within each increment; security assessment results
+      directed remediation; and evaluation results informed refinements and recommendations.
+    </p>
+  </div>
+
+</div>

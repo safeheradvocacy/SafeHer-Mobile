@@ -35,6 +35,7 @@ import { logAudit } from '../../lib/audit';
 import { currentDeviceLabel } from '../../lib/deviceInfo';
 import { ROLE_LABEL } from '../../lib/roleLabels';
 import { permissionsFor, PERMISSION_LABEL, hasPermission } from '../../lib/permissions';
+import { readNotifPrefs, writeNotifPrefs, type NotifPrefs } from '../../lib/notifPrefs';
 import { PageHeader } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { ConfirmModal } from '../../components/ConfirmModal';
@@ -59,34 +60,7 @@ const SECTIONS = [
 
 type SectionKey = (typeof SECTIONS)[number]['key'];
 
-const NOTIF_PREFS_KEY = 'safeher_admin_notif_prefs';
 const DENSITY_KEY = 'safeher_admin_density_compact';
-
-interface NotifPrefs {
-  caseReports: boolean;
-  sosAlerts: boolean;
-  caseUpdates: boolean;
-  referralUpdates: boolean;
-  systemNotifications: boolean;
-}
-
-const DEFAULT_NOTIF_PREFS: NotifPrefs = {
-  caseReports: true,
-  sosAlerts: true,
-  caseUpdates: true,
-  referralUpdates: true,
-  systemNotifications: true,
-};
-
-function readNotifPrefs(): NotifPrefs {
-  try {
-    const raw = localStorage.getItem(NOTIF_PREFS_KEY);
-    if (raw) return { ...DEFAULT_NOTIF_PREFS, ...JSON.parse(raw) };
-  } catch {
-    // ignore
-  }
-  return DEFAULT_NOTIF_PREFS;
-}
 
 function readDensityCompact(): boolean {
   try {
@@ -278,11 +252,7 @@ export function SettingsPage() {
 
   const persistNotifPrefs = (next: NotifPrefs) => {
     setNotifPrefs(next);
-    try {
-      localStorage.setItem(NOTIF_PREFS_KEY, JSON.stringify(next));
-    } catch {
-      // best-effort only
-    }
+    writeNotifPrefs(next);
   };
 
   const toggleNotifPref = (key: keyof NotifPrefs, label: string, turningOff: boolean, critical: boolean) => {

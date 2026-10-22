@@ -35,7 +35,9 @@ interface AuthContextValue {
     email: string;
     password: string;
     firstName: string;
+    middleName?: string;
     lastName: string;
+    suffix?: string;
     phoneNumber: string;
     municipalityId: string;
     // Registered-address fields (module12) — all optional. Barangay/
@@ -234,7 +236,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email,
     password,
     firstName,
+    middleName,
     lastName,
+    suffix,
     phoneNumber,
     municipalityId,
     barangayId,
@@ -275,7 +279,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           data: {
             first_name: firstName,
+            middle_name: middleName,
             last_name: lastName,
+            suffix,
             phone_number: phoneNumber,
             municipality_id: municipalityId,
             barangay_id: barangayId,

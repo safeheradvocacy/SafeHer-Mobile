@@ -1,0 +1,29 @@
+============================================================
+SafeSpace security assessment — evidence capture
+Test     : TLS protocol and certificate inspection
+Target   : safespace-administrative.vercel.app:443
+Captured : 2026-10-21T15:12:36Z (UTC)
+Method   : non-destructive, unauthenticated
+============================================================
+
+--- Protocol support --------------------------------------------
+  tls1       rejected
+  tls1_1     rejected
+  tls1_2     SUPPORTED
+  tls1_3     SUPPORTED
+
+--- Negotiated connection ---------------------------------------
+Verification: OK
+Protocol: TLSv1.3
+Verify return code: 0 (ok)
+    Protocol  : TLSv1.3
+    Cipher    : TLS_AES_128_GCM_SHA256
+    Verify return code: 0 (ok)
+
+--- Certificate -------------------------------------------------
+issuer=C=US, O=Google Trust Services, CN=WR1
+subject=CN=*.vercel.app
+notBefore=Aug 29 19:48:09 2026 GMT
+notAfter=Nov 27 19:48:08 2026 GMT
+X509v3 Subject Alternative Name: 
+    DNS:*.vercel.app

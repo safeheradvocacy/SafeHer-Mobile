@@ -39,6 +39,16 @@ export function isCriticalSos(a: SosAlert): boolean {
   return a.status === 'Triggered';
 }
 
+/** A short, human-readable reference derived from the real sos_id — sos_
+ * alerts has no separate case-number/reference column, so this is display
+ * formatting only, never stored or treated as a second identifier. Moved
+ * here (from SosReferralsPage) so the new-alert pop-up can show the exact
+ * same reference for the exact same alert without a second, divergent
+ * implementation. */
+export function sosReference(a: SosAlert): string {
+  return `SOS-${a.sos_id.slice(0, 8).toUpperCase()}`;
+}
+
 /**
  * Direct, unconditional SOS access for police officers (module19) — no
  * law_enforcement_referrals row required. RLS grants every active

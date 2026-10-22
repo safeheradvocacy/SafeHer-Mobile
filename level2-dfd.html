@@ -1,0 +1,350 @@
+<!doctype html>
+<title>SafeSpace Level-2 DFD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --accent: #1f4e8c;
+    --accent-soft: #e7eefb;
+    --process-fill: #faf1df; --process-border: #e9d2a3;
+    --store-fill: #e6f2ea; --store-border: #2c6a4e;
+    --ext-fill: #eceef1; --ext-border: #d3d7dd;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --accent: #8fb6ec;
+      --accent-soft: #1f2c40;
+      --process-fill: #352c1c; --process-border: #5c4a26;
+      --store-fill: #1c3027; --store-border: #8fcbab;
+      --ext-fill: #2a2d31; --ext-border: #44484e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --accent: #8fb6ec;
+    --accent-soft: #1f2c40;
+    --process-fill: #352c1c; --process-border: #5c4a26;
+    --store-fill: #1c3027; --store-border: #8fcbab;
+    --ext-fill: #2a2d31; --ext-border: #44484e;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 16px 56px;
+  }
+  .sheet { max-width: 1300px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 27px);
+    text-align: center;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 18px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+  .note + .note { margin-top: -10px; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 22px;
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch-circle { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid; display: inline-block; }
+  .swatch-rect { width: 16px; height: 11px; border: 1.5px solid; display: inline-block; }
+
+  .diagram-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  svg text { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  .row-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; fill: var(--ink-muted); }
+  .node-label { font-size: 11px; fill: var(--ink); }
+  .process-num { font-size: 10px; font-weight: 700; fill: var(--accent); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  .store-num { font-size: 10px; font-weight: 700; fill: var(--store-border); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  .flow-label { font-size: 9px; fill: var(--ink-muted); }
+
+  .caption {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-top: 16px;
+    font-style: italic;
+  }
+</style>
+
+<div class="sheet">
+  <p class="eyebrow">Research Design</p>
+  <h1 class="fig-title">Figure 17. Level-2 Data Flow Diagram</h1>
+
+  <p class="note">
+    Decomposes Process 2.0 &ldquo;Process Incident Reports&rdquo; from Figure 16 (Level-1 DFD) into its six
+    constituent sub-processes. Every external entity crossing this diagram's boundary &mdash; Survivor/Reporter,
+    Barangay Admin, Municipal Admin, Provincial Staff, and Google Maps &mdash; and every flow into or out of them
+    is exactly the set Figure 16 shows entering or leaving Process 2.0: nothing is added or dropped at the
+    boundary, only expanded in detail. Provincial Admin is correctly absent here, the same as in Figure 16 &mdash;
+    it holds no <code>cases.view</code> permission, so it was never connected to Process 2.0 at any level.
+  </p>
+  <p class="note">
+    Figure 16 abstracted case handling into two stores, D3 Case Reports and D4 Case History &amp; Referrals. This
+    level reveals the finer-grained tables underneath that abstraction: case assignment and case-service records
+    each get their own store (D12, D13), and D4 here is scoped specifically to the status-history table it was
+    always backed by &mdash; the case_referrals half of D4 belongs to Process 5.0 and is out of this diagram's scope.
+  </p>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="diagram-scroll">
+    <svg id="diagram" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Level 2 data flow diagram decomposing the Process Incident Reports function"></svg>
+  </div>
+
+  <p class="caption">Figure 17. Sub-processes 2.1&ndash;2.6 of Process 2.0, and the data stores each one reads from or writes to.</p>
+</div>
+
+<script>
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  function wrapLines(text, maxChars) {
+    if (text.includes('\n')) return text.split('\n');
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((w) => {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > maxChars) { lines.push(line); line = w; } else { line = test; }
+    });
+    lines.push(line);
+    return lines;
+  }
+  function arrowheadAt(svg, x, y, ux, uy) {
+    const size = 7;
+    const leftX = x - ux * size - uy * size * 0.55, leftY = y - uy * size + ux * size * 0.55;
+    const rightX = x - ux * size + uy * size * 0.55, rightY = y - uy * size - ux * size * 0.55;
+    svg.appendChild(el('polygon', { points: `${x},${y} ${leftX},${leftY} ${rightX},${rightY}`, fill: 'var(--ink-muted)', opacity: 0.6 }));
+  }
+  function drawLink(svg, p1, p2, label, bidirectional) {
+    svg.appendChild(el('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: 'var(--ink-muted)', 'stroke-width': 1, opacity: 0.4 }));
+    const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    arrowheadAt(svg, p2.x - ux * 22, p2.y - uy * 22, ux, uy);
+    if (bidirectional) arrowheadAt(svg, p1.x + ux * 22, p1.y + uy * 22, -ux, -uy);
+    if (label) {
+      const mx = p1.x + dx * 0.5, my = p1.y + dy * 0.5;
+      svg.appendChild(el('rect', { x: mx - label.length * 2.5, y: my - 8, width: label.length * 5, height: 14, fill: 'var(--surface)' }));
+      svg.appendChild(el('text', { x: mx, y: my + 3, 'text-anchor': 'middle', class: 'flow-label' }, label));
+    }
+  }
+
+  // ---- Layout ----
+  const COL_W = 118, MARGIN_X = 90;
+  const ROW_ENTITY = 70, ROW_PROCESS = 330, ROW_STORE = 600;
+
+  function entityX(i) { return MARGIN_X + i * COL_W; }
+
+  // Exactly the five external entities Figure 16 (Level-1, corrected)
+  // connects to Process 2.0 — shelter_admin, support_expert, police, and
+  // the PSGC/push/email/Groq systems never touch p2 in Figure 16, so none
+  // of them appear here either (balancing). Provincial Admin is likewise
+  // correctly absent: it holds no cases.view permission in
+  // admin/src/lib/permissions.ts, so it was never connected to Process
+  // 2.0 at any level — it is not simply "abstracted away" at Level 1 and
+  // then "revealed" here; it genuinely never touches this function.
+  const ENTITIES = [
+    { id: 'survivor', kind: 'actor', name: 'Survivor /\nReporter', col: 0.3 },
+    { id: 'googleMaps', kind: 'system', name: 'Google\nMaps', col: 1.5 },
+    { id: 'barangay', kind: 'actor', name: 'Barangay\nAdmin', col: 2.7 },
+    { id: 'municipal', kind: 'actor', name: 'Municipal\nAdmin', col: 3.9 },
+    { id: 'provStaff', kind: 'actor', name: 'Provincial\nStaff', col: 5.1 },
+  ];
+
+  const PROCESSES = [
+    { id: 'p21', num: '2.1', name: 'Verify Reporting\nEligibility', col: 0.3 },
+    { id: 'p22', num: '2.2', name: 'Submit Incident\nReport', col: 1.3 },
+    { id: 'p23', num: '2.3', name: 'Assign Case\nHandler', col: 2.3 },
+    { id: 'p24', num: '2.4', name: 'Update Case\nStatus', col: 3.3 },
+    { id: 'p25', num: '2.5', name: 'Document Case\nServices', col: 4.3 },
+    { id: 'p26', num: '2.6', name: 'Track Case\nProgress', col: 5.3 },
+  ];
+
+  const STORES = [
+    { id: 'd1', num: 'D1', name: 'User Profiles', col: 0.3 },
+    { id: 'd3', num: 'D3', name: 'Case Reports', col: 1.6 },
+    { id: 'd4', num: 'D4', name: 'Case Status\nHistory', col: 2.9 },
+    { id: 'd12', num: 'D12', name: 'Case\nAssignments', col: 4.0 },
+    { id: 'd13', num: 'D13', name: 'Case Services', col: 5.1 },
+  ];
+
+  const entityMap = {}; ENTITIES.forEach((e) => (entityMap[e.id] = e));
+  const processMap = {}; PROCESSES.forEach((p) => (processMap[p.id] = p));
+  const storeMap = {}; STORES.forEach((s) => (storeMap[s.id] = s));
+
+  function ePos(id) { const e = entityMap[id]; return { x: entityX(e.col), y: ROW_ENTITY }; }
+  function pPos(id) { const p = processMap[id]; return { x: entityX(p.col), y: ROW_PROCESS }; }
+  function sPos(id) { const s = storeMap[id]; return { x: entityX(s.col), y: ROW_STORE }; }
+
+  // Every one of these, grouped by entity, reproduces exactly what
+  // Figure 16 (corrected) showed crossing into/out of Process 2.0 as a whole:
+  //   survivor <-> p2:     "Incident report <-> case status"  -> split into eligibility (2.1) + submit (2.2) + track (2.6)
+  //   barangay <-> p2:     "Case data"                        -> status update (2.4) + monitoring/inquiry (2.6)
+  //   municipal <-> p2:    "Case data <-> status update"       -> assign (2.3) + status (2.4) + service record (2.5)
+  //   provStaff <-> p2:    "Case data <-> status update"       -> assign (2.3) + status (2.4) + service record (2.5) + monitoring (2.6)
+  //   googleMaps <-> p2:   "Location lookup <-> geocoded address" -> incident report submission (2.2)
+  // provincial_admin is absent here for the same reason it's absent from Figure 16: it holds
+  // no cases.view permission, so it was never connected to Process 2.0 at any level.
+  const EP_EDGES = [
+    ['survivor', 'p21', 'Verification/passcode check', false],
+    ['survivor', 'p22', 'Incident report details'],
+    ['survivor', 'p26', 'Case status ⇄ inquiry'],
+    ['googleMaps', 'p22', 'Location lookup ⇄ geocoded address'],
+    ['barangay', 'p24', 'Status update'],
+    ['barangay', 'p26', 'Case monitoring ⇄ inquiry'],
+    ['municipal', 'p23', 'Handler assignment'],
+    ['municipal', 'p24', 'Status update'],
+    ['municipal', 'p25', 'Service record'],
+    ['provStaff', 'p23', 'Handler assignment'],
+    ['provStaff', 'p24', 'Status update'],
+    ['provStaff', 'p25', 'Service record'],
+    ['provStaff', 'p26', 'Case monitoring data'],
+  ];
+
+  const PS_EDGES = [
+    ['p21', 'd1', 'Eligibility flags (read)', false],
+    ['p22', 'd3', 'New case record (write)', false],
+    ['p22', 'd4', 'Initial status entry (write)', false],
+    ['p23', 'd12', 'Assignment record R/W'],
+    ['p24', 'd3', 'Status field (write)', false],
+    ['p24', 'd4', 'Status history (write)', false],
+    ['p25', 'd13', 'Service record R/W'],
+    ['p26', 'd3', 'Case record (read)', false],
+    ['p26', 'd4', 'Status history (read)', false],
+  ];
+
+  const svg = document.getElementById('diagram');
+  const width = MARGIN_X * 2 + 5.4 * COL_W;
+  const height = 760;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+  // Row labels
+  [[ROW_ENTITY - 46, 'External Entities'], [ROW_PROCESS - 74, 'Sub-Processes of 2.0'], [ROW_STORE - 58, 'Data Stores']].forEach(([y, t]) => {
+    svg.appendChild(el('text', { x: 10, y, class: 'row-label' }, t));
+  });
+
+  // Edges first
+  EP_EDGES.forEach(([eId, pId, label, bidir]) => drawLink(svg, ePos(eId), pPos(pId), label, bidir !== false));
+  PS_EDGES.forEach(([pId, sId, label, bidir]) => drawLink(svg, pPos(pId), sPos(sId), label, bidir !== false));
+
+  // Entities
+  function drawActorIcon(cx, cy) {
+    const g = el('g');
+    g.appendChild(el('circle', { cx, cy: cy - 14, r: 7, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    g.appendChild(el('line', { x1: cx, y1: cy - 7, x2: cx, y2: cy + 9, stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    g.appendChild(el('line', { x1: cx - 10, y1: cy - 2, x2: cx + 10, y2: cy - 2, stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    g.appendChild(el('line', { x1: cx, y1: cy + 9, x2: cx - 10, y2: cy + 23, stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    g.appendChild(el('line', { x1: cx, y1: cy + 9, x2: cx + 10, y2: cy + 23, stroke: 'var(--ink)', 'stroke-width': 1.3 }));
+    return g;
+  }
+  function drawSystemIcon(cx, cy) {
+    const g = el('g');
+    [0, 1, 2].forEach((i) => {
+      g.appendChild(el('rect', { x: cx - 16, y: cy - 20 + i * 11, width: 32, height: 9, rx: 2, fill: 'var(--ext-fill)', stroke: 'var(--ink)', 'stroke-width': 1 }));
+    });
+    return g;
+  }
+  ENTITIES.forEach((e) => {
+    const p = ePos(e.id);
+    svg.appendChild(e.kind === 'system' ? drawSystemIcon(p.x, p.y) : drawActorIcon(p.x, p.y));
+    const lines = e.name.split('\n');
+    let ty = p.y + 36;
+    lines.forEach((ln) => { svg.appendChild(el('text', { x: p.x, y: ty, 'text-anchor': 'middle', class: 'node-label' }, ln)); ty += 12; });
+  });
+
+  // Processes (numbered circles)
+  PROCESSES.forEach((pr) => {
+    const p = pPos(pr.id);
+    const r = 46;
+    svg.appendChild(el('circle', { cx: p.x, cy: p.y, r, fill: 'var(--process-fill)', stroke: 'var(--process-border)', 'stroke-width': 1.6 }));
+    svg.appendChild(el('text', { x: p.x, y: p.y - r - 8, 'text-anchor': 'middle', class: 'process-num' }, pr.num));
+    const lines = wrapLines(pr.name, 15);
+    let ty = p.y - (lines.length - 1) * 6.5;
+    lines.forEach((ln) => { svg.appendChild(el('text', { x: p.x, y: ty, 'text-anchor': 'middle', class: 'node-label' }, ln)); ty += 13; });
+  });
+
+  // Stores (open rectangle, DFD convention)
+  STORES.forEach((s) => {
+    const p = sPos(s.id);
+    const w = 100, h = 48;
+    const x = p.x - w / 2, y = p.y - h / 2;
+    svg.appendChild(el('rect', { x, y, width: w, height: h, fill: 'var(--store-fill)', stroke: 'none' }));
+    svg.appendChild(el('line', { x1: x, y1: y, x2: x + w, y2: y, stroke: 'var(--store-border)', 'stroke-width': 1.6 }));
+    svg.appendChild(el('line', { x1: x, y1: y + h, x2: x + w, y2: y + h, stroke: 'var(--store-border)', 'stroke-width': 1.6 }));
+    svg.appendChild(el('line', { x1: x, y1: y, x2: x, y2: y + h, stroke: 'var(--store-border)', 'stroke-width': 1.6 }));
+    svg.appendChild(el('text', { x: p.x, y: y - 6, 'text-anchor': 'middle', class: 'store-num' }, s.num));
+    const lines = wrapLines(s.name, 14);
+    let ty = p.y - (lines.length - 1) * 6.5;
+    lines.forEach((ln) => { svg.appendChild(el('text', { x: p.x, y: ty, 'text-anchor': 'middle', class: 'node-label' }, ln)); ty += 13; });
+  });
+
+  // Legend
+  const legend = document.getElementById('legend');
+  legend.innerHTML = `
+    <span><span class="swatch-circle" style="border-color:var(--ink)"></span>External entity (person)</span>
+    <span><span class="swatch-circle" style="border-color:var(--ink);background:var(--ext-fill)"></span>External entity (system)</span>
+    <span><span class="swatch-circle" style="border-color:var(--process-border);background:var(--process-fill)"></span>Sub-process (numbered 2.x)</span>
+    <span><span class="swatch-rect" style="border-color:var(--store-border);background:var(--store-fill)"></span>Data store</span>
+    <span>⇄ Two-headed line = data flows both ways</span>
+  `;
+</script>

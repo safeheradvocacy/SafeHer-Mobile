@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -17,6 +18,7 @@ function formatDate(iso: string): string {
 // alert (SOS) — routine unread counts stay still.
 export function NotificationBell() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -81,6 +83,22 @@ export function NotificationBell() {
     await supabase.from('notifications').update({ is_read: true }).eq('notification_id', n.notification_id);
   };
 
+  // Support-request notifications (module41) are the one type this
+  // dropdown deep-links from today — each viewer's own role decides
+  // where "the relevant conversation" actually lives: a support_expert
+  // opens it directly in My Conversations, anyone else who can receive
+  // this type (Expert Support Queue managers) lands on the queue page.
+  // Other notification types keep their existing mark-read-only
+  // behavior (the full Notifications page is the only place that
+  // navigates for them today) — unchanged, out of this fix's scope.
+  const openNotification = (n: Notification) => {
+    markRead(n);
+    if (n.request_id) {
+      setOpen(false);
+      navigate(profile?.role === 'support_expert' ? `/admin/dashboard?open=${n.request_id}` : '/admin/support-queue');
+    }
+  };
+
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
@@ -116,7 +134,7 @@ export function NotificationBell() {
                   key={n.notification_id}
                   type="button"
                   className={`dash-dropdown-item${!n.is_read ? ' unread' : ''}`}
-                  onClick={() => markRead(n)}
+                  onClick={() => openNotification(n)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: n.notification_type === 'SOS' ? 'var(--color-danger)' : 'var(--color-primary)', textTransform: 'uppercase' }}>

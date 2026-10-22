@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, Image, Modal, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,19 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePasscode } from '../../contexts/PasscodeContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
-import { readFileAsArrayBuffer } from '../../lib/uploadFile';
+import { useAvatarUrl } from '../../lib/useAvatarUrl';
+import { formatFullName, SUFFIX_OPTIONS } from '../../lib/personName';
+import { PH_PHONE_RE, sanitizePhoneInput } from '../../lib/numericInput';
+import {
+  fetchPhotoQuota,
+  commitPhotoChange,
+  processAvatarImage,
+  uploadAvatarImage,
+  removeAvatarObject,
+  formatNextEligible,
+  AvatarProcessingError,
+  type PhotoQuota,
+} from '../../lib/avatarPhoto';
 import { Input, PrimaryButton, Screen, Card, StatusBadge, AlertMessage, DropdownInput } from '../../components/ui';
 import { MunicipalityPicker, type MunicipalityLoadState } from '../../components/MunicipalityPicker';
 import { BarangayPicker } from '../../components/BarangayPicker';
@@ -32,8 +44,6 @@ import {
   isSurvivorInfoComplete,
 } from '../../lib/survivorInfo';
 
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-const PH_PHONE_RE = /^(09\d{9}|\+639\d{9})$/;
 
 function identityBadge(status: IdentityVerificationStatus): { label: string; icon: React.ComponentProps<typeof Ionicons>['name'] } {
   switch (status) {
@@ -46,18 +56,6 @@ function identityBadge(status: IdentityVerificationStatus): { label: string; ico
     default:
       return { label: 'Not Verified', icon: 'alert-circle-outline' };
   }
-}
-
-// The public bucket's URL shape is always
-// .../storage/v1/object/public/avatars/<path> — parsed back out so a
-// successful replacement can clean up the file it's replacing, rather
-// than leaking one orphaned file per photo change.
-function avatarPathFromPublicUrl(url: string | null): string | null {
-  if (!url) return null;
-  const marker = '/object/public/avatars/';
-  const idx = url.indexOf(marker);
-  if (idx === -1) return null;
-  return url.slice(idx + marker.length);
 }
 
 export function ProfileScreen() {
@@ -79,12 +77,23 @@ export function ProfileScreen() {
   };
 
   const [firstName, setFirstName] = useState(profile?.first_name ?? '');
+  const [middleName, setMiddleName] = useState(profile?.middle_name ?? '');
   const [lastName, setLastName] = useState(profile?.last_name ?? '');
+  const [suffixChoice, setSuffixChoice] = useState<string | null>(
+    profile?.suffix && !(SUFFIX_OPTIONS as readonly string[]).includes(profile.suffix) ? 'Other' : (profile?.suffix ?? null)
+  );
+  const [suffixOther, setSuffixOther] = useState(
+    profile?.suffix && !(SUFFIX_OPTIONS as readonly string[]).includes(profile.suffix) ? profile.suffix : ''
+  );
+  const suffixValue = suffixChoice === 'Other' ? suffixOther.trim() : (suffixChoice ?? '');
   const [phoneNumber, setPhoneNumber] = useState(profile?.phone_number ?? '');
   const [savingInfo, setSavingInfo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const [emergencyName, setEmergencyName] = useState(survivor?.emergency_contact_name ?? '');
+  const [emergencyFirstName, setEmergencyFirstName] = useState(survivor?.emergency_contact_first_name ?? '');
+  const [emergencyMiddleName, setEmergencyMiddleName] = useState(survivor?.emergency_contact_middle_name ?? '');
+  const [emergencyLastName, setEmergencyLastName] = useState(survivor?.emergency_contact_last_name ?? '');
+  const [emergencySuffix, setEmergencySuffix] = useState(survivor?.emergency_contact_suffix ?? '');
   const [emergencyNumber, setEmergencyNumber] = useState(survivor?.emergency_contact_number ?? '');
   const [emergencyError, setEmergencyError] = useState<string | null>(null);
   const [savingEmergency, setSavingEmergency] = useState(false);
@@ -126,6 +135,24 @@ export function ProfileScreen() {
   };
 
   const [avatarState, setAvatarState] = useState<'idle' | 'uploading' | 'saving'>('idle');
+  const avatarUrl = useAvatarUrl(profile?.profile_picture);
+  const [photoQuota, setPhotoQuota] = useState<PhotoQuota | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+  const [pendingImage, setPendingImage] = useState<{ uri: string } | null>(null);
+  const [showCropPreview, setShowCropPreview] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  const loadPhotoQuota = () => {
+    setQuotaLoading(true);
+    fetchPhotoQuota()
+      .then((q) => setPhotoQuota(q))
+      .catch((e) => console.warn('[ProfileScreen] fetchPhotoQuota:', e.message))
+      .finally(() => setQuotaLoading(false));
+  };
+
+  useEffect(() => {
+    loadPhotoQuota();
+  }, []);
 
   // ---- Registered address (module12) ----
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
@@ -136,7 +163,6 @@ export function ProfileScreen() {
   const [addrMunicipalityId, setAddrMunicipalityId] = useState<string | null>(survivor?.municipality_id ?? null);
   const [addrBarangayId, setAddrBarangayId] = useState<string | null>(survivor?.barangay_id ?? null);
   const [addrBarangayName, setAddrBarangayName] = useState('');
-  const [streetAddress, setStreetAddress] = useState(survivor?.address ?? '');
   const [purokSitio, setPurokSitio] = useState(survivor?.purok_sitio ?? '');
   const [mapResult, setMapResult] = useState<LocationPickerResult | null>(
     survivor?.latitude != null && survivor?.longitude != null
@@ -187,21 +213,20 @@ export function ProfileScreen() {
 
   const saveAddress = async () => {
     if (!survivor || !profile) return;
-    if (!addrMunicipalityId || !addrBarangayId || !streetAddress.trim()) {
-      Alert.alert('Missing information', 'Please select your municipality, barangay, and enter your house number or street.');
+    if (!addrMunicipalityId || !addrBarangayId) {
+      Alert.alert('Missing information', 'Please select your municipality and barangay.');
       return;
     }
 
     const doSave = async () => {
       setSavingAddress(true);
-      const oldValues = { municipality_id: survivor.municipality_id, barangay_id: survivor.barangay_id, address: survivor.address };
+      const oldValues = { municipality_id: survivor.municipality_id, barangay_id: survivor.barangay_id };
       try {
         const { error } = await supabase
           .from('survivors')
           .update({
             municipality_id: addrMunicipalityId,
             barangay_id: addrBarangayId,
-            address: streetAddress.trim(),
             purok_sitio: purokSitio.trim() || null,
             latitude: mapResult?.latitude ?? null,
             longitude: mapResult?.longitude ?? null,
@@ -220,7 +245,7 @@ export function ProfileScreen() {
           tableName: 'survivors',
           recordId: survivor.survivor_id,
           oldValues,
-          newValues: { municipality_id: addrMunicipalityId, barangay_id: addrBarangayId, address: streetAddress.trim() },
+          newValues: { municipality_id: addrMunicipalityId, barangay_id: addrBarangayId },
         });
         await refreshProfile();
         Alert.alert('Saved', 'Your registered address has been updated.');
@@ -255,7 +280,27 @@ export function ProfileScreen() {
   const identity = identityBadge(profile?.identity_verification_status ?? 'unverified');
 
   const choosePhoto = () => {
-    if (avatarState !== 'idle') return;
+    if (avatarState !== 'idle' || quotaLoading) return;
+
+    if (photoQuota && photoQuota.remaining <= 0) {
+      Alert.alert(
+        'Photo change limit reached',
+        `You have used all three allowed photo changes within the last seven days. You can change your photo again after ${formatNextEligible(photoQuota.nextEligibleAt)}.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Use your own profile photo',
+      'Please upload a genuine photo of yourself. Use a clear image that helps identify you as the account owner. You can change your profile photo up to three times within a seven-day period.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: openPhotoSourceChooser },
+      ]
+    );
+  };
+
+  const openPhotoSourceChooser = () => {
     Alert.alert('Change photo', 'Choose how you want to update your profile photo.', [
       { text: 'Take Photo', onPress: () => pickAvatar('camera') },
       { text: 'Choose from Gallery', onPress: () => pickAvatar('library') },
@@ -275,56 +320,102 @@ export function ProfileScreen() {
         'Permission needed',
         source === 'camera'
           ? 'SafeSpace needs camera access to take a new profile photo.'
-          : 'SafeSpace needs photo library access to choose a profile photo.'
+          : 'SafeSpace needs photo library access to choose a profile photo.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Try again', onPress: () => pickAvatar(source) },
+        ]
       );
       return;
     }
 
+    // allowsEditing + a square aspect gives a real, native interactive
+    // crop UI (reposition/zoom) on both platforms with zero extra native
+    // dependency — quality:1 here because the actual size/compression
+    // pass happens afterward in processAvatarImage, once the user has
+    // confirmed this exact crop in the preview step below.
     const result =
       source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-    // Cancelling leaves the existing photo completely unchanged.
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 1 });
+    // Cancelling (either the picker or the native crop step) leaves the
+    // existing photo completely unchanged.
     if (result.canceled || !result.assets?.[0]) return;
 
-    const asset = result.assets[0];
-    if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) {
-      Alert.alert('File too large', 'Please choose a photo under 5 MB.');
+    setPhotoError(null);
+    setPendingImage({ uri: result.assets[0].uri });
+    setShowCropPreview(true);
+  };
+
+  const cancelCropPreview = () => {
+    setShowCropPreview(false);
+    setPendingImage(null);
+    setPhotoError(null);
+  };
+
+  const confirmAndUploadPhoto = async () => {
+    if (!profile || !pendingImage) return;
+    setPhotoError(null);
+    setAvatarState('uploading');
+
+    let processed: { uri: string };
+    try {
+      processed = await processAvatarImage(pendingImage.uri);
+    } catch (e) {
+      setPhotoError(e instanceof AvatarProcessingError ? e.message : 'That photo could not be processed. Please choose another.');
+      setAvatarState('idle');
       return;
     }
 
-    const previousPath = avatarPathFromPublicUrl(profile.profile_picture);
-    const path = `${profile.profile_id}/${Date.now()}.jpg`;
-
-    setAvatarState('uploading');
+    let path: string;
     try {
-      const fileBuffer = await readFileAsArrayBuffer(asset.uri);
-      const { error: uploadErr } = await supabase.storage
-        .from('avatars')
-        .upload(path, fileBuffer, { contentType: 'image/jpeg', upsert: true });
-      if (uploadErr) {
-        console.error('[ProfileScreen] avatar upload failed:', uploadErr.message);
-        Alert.alert('Unable to update your profile photo', 'Please try again.');
+      path = await uploadAvatarImage(profile.profile_id, processed.uri);
+    } catch (e) {
+      console.error('[ProfileScreen] avatar upload failed:', e instanceof Error ? e.message : e);
+      setPhotoError('Unable to upload your profile photo. Please check your connection and try again.');
+      setAvatarState('idle');
+      return;
+    }
+
+    setAvatarState('saving');
+    try {
+      const commit = await commitPhotoChange(path);
+
+      if (!commit.success) {
+        // Upload itself succeeded but the server-enforced quota rejected
+        // the commit (e.g. a race against another device using up the
+        // last slot) — the change never actually happened, so clean up
+        // the now-orphaned object and never claim success.
+        await removeAvatarObject(path);
+        setPhotoQuota({ used: 3, remaining: 0, nextEligibleAt: commit.nextEligibleAt });
+        cancelCropPreview();
+        Alert.alert(
+          'Photo change limit reached',
+          `You have used all three allowed photo changes within the last seven days. You can change your photo again after ${formatNextEligible(commit.nextEligibleAt)}.`
+        );
         return;
       }
 
-      setAvatarState('saving');
-      const { data: publicUrl } = supabase.storage.from('avatars').getPublicUrl(path);
-      const { error: updateErr } = await supabase
-        .from('user_profiles')
-        .update({ profile_picture: publicUrl.publicUrl })
-        .eq('profile_id', profile.profile_id);
-      if (updateErr) {
-        Alert.alert('Unable to update your profile photo', 'Please try again.');
-        return;
-      }
-
-      if (previousPath) {
-        await supabase.storage.from('avatars').remove([previousPath]);
-      }
       await refreshProfile();
-    } catch {
-      Alert.alert('Unable to update your profile photo', 'Please try again.');
+      await removeAvatarObject(commit.previousPath);
+      setPhotoQuota({ used: 3 - commit.remaining, remaining: commit.remaining, nextEligibleAt: commit.nextEligibleAt });
+      await logAudit({
+        profileId: profile.profile_id,
+        action: 'UPDATE',
+        tableName: 'user_profiles',
+        recordId: profile.profile_id,
+        oldValues: { profile_picture_changed: false },
+        newValues: { profile_picture_changed: true },
+      });
+
+      cancelCropPreview();
+      Alert.alert('Saved', 'Your profile photo has been updated.');
+    } catch (e) {
+      // The upload itself succeeded but we could not confirm the save —
+      // never claim success here; the image stays selected so the user
+      // can retry without re-picking/re-cropping.
+      console.error('[ProfileScreen] commitPhotoChange failed:', e instanceof Error ? e.message : e);
+      setPhotoError('Your photo uploaded, but we could not save it to your profile. Please try again.');
     } finally {
       setAvatarState('idle');
     }
@@ -333,7 +424,7 @@ export function ProfileScreen() {
   const saveProfile = async () => {
     if (!profile) return;
     setSavingInfo(true);
-    const oldValues = { first_name: profile.first_name, last_name: profile.last_name, phone_number: profile.phone_number };
+    const oldValues = { first_name: profile.first_name, middle_name: profile.middle_name, last_name: profile.last_name, suffix: profile.suffix, phone_number: profile.phone_number };
     // Previously never checked `error` (or even caught a thrown
     // exception) — this update could silently fail (RLS rejection,
     // constraint violation, lost connection) and the screen would still
@@ -342,7 +433,7 @@ export function ProfileScreen() {
     try {
       const { error } = await supabase
         .from('user_profiles')
-        .update({ first_name: firstName, last_name: lastName, phone_number: phoneNumber })
+        .update({ first_name: firstName, middle_name: middleName.trim() || null, last_name: lastName, suffix: suffixValue || null, phone_number: phoneNumber })
         .eq('profile_id', profile.profile_id);
 
       if (error) {
@@ -357,7 +448,7 @@ export function ProfileScreen() {
         tableName: 'user_profiles',
         recordId: profile.profile_id,
         oldValues,
-        newValues: { first_name: firstName, last_name: lastName, phone_number: phoneNumber },
+        newValues: { first_name: firstName, middle_name: middleName.trim(), last_name: lastName, suffix: suffixValue, phone_number: phoneNumber },
       });
 
       await refreshProfile();
@@ -372,10 +463,18 @@ export function ProfileScreen() {
 
   const saveEmergencyContact = async () => {
     if (!survivor) return;
-    const trimmedName = emergencyName.trim();
+    const trimmedFirst = emergencyFirstName.trim();
+    const trimmedMiddle = emergencyMiddleName.trim();
+    const trimmedLast = emergencyLastName.trim();
+    const trimmedSuffix = emergencySuffix.trim();
     const trimmedNumber = emergencyNumber.trim();
-    if ((trimmedName && !trimmedNumber) || (!trimmedName && trimmedNumber)) {
+    const hasAnyName = !!(trimmedFirst || trimmedLast);
+    if (hasAnyName !== !!trimmedNumber) {
       setEmergencyError('Please provide both a name and a number, or leave both blank.');
+      return;
+    }
+    if (trimmedFirst && !trimmedLast) {
+      setEmergencyError("Please enter the emergency contact's last name.");
       return;
     }
     if (trimmedNumber && !PH_PHONE_RE.test(trimmedNumber)) {
@@ -384,13 +483,27 @@ export function ProfileScreen() {
     }
     setEmergencyError(null);
     setSavingEmergency(true);
+    // emergency_contact_name is kept in sync (recomposed from the
+    // structured parts) purely so the one existing admin screen that
+    // still reads it directly (CaseDetailPage.tsx) keeps working
+    // unmodified — the structured columns are the authoritative data.
+    const combinedName = hasAnyName
+      ? formatFullName({ first_name: trimmedFirst, middle_name: trimmedMiddle, last_name: trimmedLast, suffix: trimmedSuffix })
+      : null;
     // Same fix as saveProfile above — this previously never checked
     // `error` or caught an exception, so a silently-failed update still
     // showed "Saved".
     try {
       const { error } = await supabase
         .from('survivors')
-        .update({ emergency_contact_name: trimmedName || null, emergency_contact_number: trimmedNumber || null })
+        .update({
+          emergency_contact_first_name: trimmedFirst || null,
+          emergency_contact_middle_name: trimmedMiddle || null,
+          emergency_contact_last_name: trimmedLast || null,
+          emergency_contact_suffix: trimmedSuffix || null,
+          emergency_contact_name: combinedName,
+          emergency_contact_number: trimmedNumber || null,
+        })
         .eq('survivor_id', survivor.survivor_id);
 
       if (error) {
@@ -466,29 +579,34 @@ export function ProfileScreen() {
         <FirstVisitTip id="profile" title="Manage your information" body="Update your available personal and account information from this screen." />
       </View>
       <View style={{ alignItems: 'center', marginBottom: spacing.lg }}>
-        <Pressable onPress={choosePhoto} disabled={avatarState !== 'idle'}>
-          {profile?.profile_picture ? (
-            <Image source={{ uri: profile.profile_picture }} style={styles.avatar} />
+        <Pressable onPress={choosePhoto} disabled={avatarState !== 'idle'} accessibilityRole="button" accessibilityLabel="Change profile photo">
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatarPlaceholder, { backgroundColor: palette.primaryLight }]}>
               <Text style={[styles.avatarInitial, { color: palette.primaryDark }]}>{profile?.first_name?.[0] ?? '?'}</Text>
             </View>
           )}
           <Text style={[styles.changePhoto, { color: palette.primary }]}>
-            {avatarState === 'uploading' ? 'Uploading...' : avatarState === 'saving' ? 'Saving...' : 'Change photo'}
+            {avatarState === 'uploading' ? 'Processing…' : avatarState === 'saving' ? 'Saving…' : 'Change photo'}
           </Text>
         </Pressable>
+        {!quotaLoading && photoQuota ? (
+          <Text style={[styles.quotaNote, { color: photoQuota.remaining > 0 ? palette.textMuted : palette.danger }]}>
+            {photoQuota.remaining > 0
+              ? `Photo changes remaining this week: ${photoQuota.remaining} of 3.`
+              : `Photo change limit reached. Next eligible ${formatNextEligible(photoQuota.nextEligibleAt)}.`}
+          </Text>
+        ) : null}
 
-        <Text style={[styles.name, { color: palette.text }]}>
-          {profile?.first_name} {profile?.last_name}
-        </Text>
+        <Text style={[styles.name, { color: palette.text }]}>{profile ? formatFullName(profile) : ''}</Text>
         {session?.user?.email ? (
           <Text style={[styles.emailSubtitle, { color: palette.textMuted }]} numberOfLines={1}>
             {session.user.email}
           </Text>
         ) : null}
         <View style={{ marginTop: 4 }}>
-          <StatusBadge label={identity.label} icon={identity.icon} />
+          <StatusBadge label={emailVerified ? 'Email Verified' : 'Email Not Verified'} icon={emailVerified ? 'checkmark-circle' : 'alert-circle-outline'} />
         </View>
       </View>
 
@@ -496,8 +614,17 @@ export function ProfileScreen() {
       <Card>
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Personal information</Text>
         <Input label="First name" value={firstName} onChangeText={setFirstName} />
+        <Input label="Middle name" value={middleName} onChangeText={setMiddleName} />
         <Input label="Last name" value={lastName} onChangeText={setLastName} />
-        <Input label="Phone number" value={phoneNumber} onChangeText={setPhoneNumber} keyboardType="phone-pad" />
+        <DropdownInput
+          label="Suffix (optional)"
+          placeholder="Select suffix"
+          value={suffixChoice}
+          options={[...SUFFIX_OPTIONS.map((s) => ({ label: s, value: s })), { label: 'Other', value: 'Other' }]}
+          onSelect={setSuffixChoice}
+        />
+        {suffixChoice === 'Other' ? <Input label="Enter suffix" value={suffixOther} onChangeText={setSuffixOther} /> : null}
+        <Input label="Phone number" value={phoneNumber} onChangeText={(v) => setPhoneNumber(sanitizePhoneInput(v))} keyboardType="phone-pad" />
         <PrimaryButton title="Save changes" onPress={saveProfile} loading={savingInfo} />
       </Card>
 
@@ -552,7 +679,6 @@ export function ProfileScreen() {
           </Pressable>
 
           <View style={{ marginTop: spacing.sm }}>
-            <Input label="House No. / Street" value={streetAddress} onChangeText={setStreetAddress} />
             <Input label="Purok / Sitio" value={purokSitio} onChangeText={setPurokSitio} />
           </View>
 
@@ -673,11 +799,14 @@ export function ProfileScreen() {
       {survivor ? (
         <Card>
           <Text style={[styles.sectionTitle, { color: palette.text }]}>Emergency contact</Text>
-          <Input label="Emergency contact name" value={emergencyName} onChangeText={setEmergencyName} />
+          <Input label="First name" value={emergencyFirstName} onChangeText={setEmergencyFirstName} />
+          <Input label="Middle name" value={emergencyMiddleName} onChangeText={setEmergencyMiddleName} />
+          <Input label="Last name" value={emergencyLastName} onChangeText={setEmergencyLastName} />
+          <Input label="Suffix (optional)" value={emergencySuffix} onChangeText={setEmergencySuffix} placeholder="e.g. Jr., Sr., III" />
           <Input
             label="Emergency contact number"
             value={emergencyNumber}
-            onChangeText={setEmergencyNumber}
+            onChangeText={(v) => setEmergencyNumber(sanitizePhoneInput(v))}
             keyboardType="phone-pad"
             placeholder="09XXXXXXXXX"
           />
@@ -689,10 +818,6 @@ export function ProfileScreen() {
       <Text style={[styles.groupHeader, { color: palette.textMuted }]}>Security</Text>
       <Card>
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Security & Password</Text>
-        <View style={styles.inlineRow}>
-          <Text style={[styles.inlineLabel, { color: palette.textMuted }]}>Email verified</Text>
-          <StatusBadge label={emailVerified ? 'Verified' : 'Not Verified'} icon={emailVerified ? 'checkmark-circle' : 'alert-circle-outline'} />
-        </View>
         <Pressable
           onPress={() => navigation.navigate('ChangePassword')}
           style={styles.navRow}
@@ -802,6 +927,36 @@ export function ProfileScreen() {
         }}
       />
       <SettingsSheet visible={showSettings} onClose={() => setShowSettings(false)} title="Settings" />
+
+      <Modal visible={showCropPreview} transparent animationType="fade" onRequestClose={cancelCropPreview}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <Text style={[styles.sectionTitle, { color: palette.text, textAlign: 'center' }]}>Use this photo?</Text>
+            {pendingImage ? <Image source={{ uri: pendingImage.uri }} style={styles.cropPreview} /> : null}
+            <Text style={[styles.helperNote, { color: palette.textMuted, textAlign: 'center' }]}>
+              This is how your profile photo will look.
+            </Text>
+            {photoError ? <AlertMessage variant="error" title="Couldn't update your photo" message={photoError} /> : null}
+            {avatarState !== 'idle' ? (
+              <View style={{ paddingVertical: spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator color={palette.primary} />
+                <Text style={[styles.helperNote, { color: palette.textMuted, marginTop: spacing.xs }]}>
+                  {avatarState === 'uploading' ? 'Processing photo…' : 'Saving…'}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.editActionsRow}>
+                <View style={{ flex: 1 }}>
+                  <PrimaryButton title="Cancel" variant="outline" onPress={cancelCropPreview} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <PrimaryButton title="Use this photo" onPress={confirmAndUploadPhoto} />
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -817,6 +972,7 @@ const styles = StyleSheet.create({
   },
   avatarInitial: { ...typography.display, fontSize: 32 },
   changePhoto: { ...typography.caption, textAlign: 'center', marginTop: spacing.xs },
+  quotaNote: { ...typography.caption, fontSize: 11.5, textAlign: 'center', marginTop: 2 },
   name: { ...typography.heading, marginTop: spacing.sm },
   emailSubtitle: { ...typography.caption, marginTop: 2 },
   sectionTitle: { ...typography.heading, fontSize: 17, marginBottom: spacing.sm },
@@ -851,4 +1007,25 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   navRowLabel: { ...typography.bodyMedium },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  cropPreview: {
+    width: 160,
+    height: 160,
+    borderRadius: radius.pill,
+    alignSelf: 'center',
+    marginVertical: spacing.md,
+  },
 });

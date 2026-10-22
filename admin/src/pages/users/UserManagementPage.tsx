@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
-import { EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
+import { ConfirmDialog, EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import { hasPermission } from '../../lib/permissions';
 import { ROLE_LABEL } from '../../lib/roleLabels';
 import { type AdminMetadata, formatDateTime, extractInvokeError } from '../../lib/adminUserHelpers';
+import { formatFullName, SUFFIX_OPTIONS } from '../../lib/personName';
+import { sanitizePhoneInput, PH_PHONE_RE } from '../../lib/validators';
 import type { Barangay, Municipality, Shelter, UserProfile, UserRole } from '../../types/database.types';
 
 // shelter_admin and support_expert are deliberately province-only (not
@@ -68,7 +70,9 @@ export function UserManagementPage() {
     email: '',
     password: '',
     firstName: '',
+    middleName: '',
     lastName: '',
+    suffix: '',
     phoneNumber: '',
     role: '' as UserRole | '',
     municipalityId: '',
@@ -83,7 +87,9 @@ export function UserManagementPage() {
   const [editForm, setEditForm] = useState({
     profileId: '',
     firstName: '',
+    middleName: '',
     lastName: '',
+    suffix: '',
     phoneNumber: '',
     role: '' as UserRole | '',
     municipalityId: '',
@@ -198,6 +204,15 @@ export function UserManagementPage() {
     setUsers((prev) => prev.map((x) => (x.profile_id === u.profile_id ? { ...x, is_active: !x.is_active } : x)));
   };
 
+  // Deactivating an administrator account immediately blocks their
+  // sign-in — materially consequential, so it gets a confirm step.
+  // Reactivating does not (it only restores access they already had).
+  const [pendingDeactivate, setPendingDeactivate] = useState<UserProfile | null>(null);
+  const onToggleActiveClick = (u: UserProfile) => {
+    if (u.is_active) setPendingDeactivate(u);
+    else toggleActive(u);
+  };
+
   const resetAccess = async (u: UserProfile) => {
     const email = metadata[u.profile_id]?.email;
     if (!email) return;
@@ -217,13 +232,17 @@ export function UserManagementPage() {
   const barangayName = (id: string | null) => barangays.find((b) => b.barangay_id === id)?.barangay_name ?? '—';
 
   const resetForm = () => {
-    setForm({ email: '', password: '', firstName: '', lastName: '', phoneNumber: '', role: '', municipalityId: '', barangayId: '', shelterId: '' });
+    setForm({ email: '', password: '', firstName: '', middleName: '', lastName: '', suffix: '', phoneNumber: '', role: '', municipalityId: '', barangayId: '', shelterId: '' });
     setCreateError(null);
   };
 
   const submitCreate = async () => {
     if (!form.email || !form.password || !form.firstName || !form.lastName || !form.role) {
       setCreateError('Please fill in all required fields.');
+      return;
+    }
+    if (form.phoneNumber.trim() && !PH_PHONE_RE.test(form.phoneNumber.trim())) {
+      setCreateError('Enter a valid Philippine mobile number (e.g. 09XXXXXXXXX) or leave it blank.');
       return;
     }
     if (form.role === 'municipal_admin' && isProvincial && !form.municipalityId) {
@@ -247,7 +266,9 @@ export function UserManagementPage() {
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim(),
+        middleName: form.middleName.trim() || undefined,
         lastName: form.lastName.trim(),
+        suffix: form.suffix.trim() || undefined,
         phoneNumber: form.phoneNumber.trim() || undefined,
         role: form.role,
         // support_expert, law_enforcement, and provincial_staff carry no
@@ -286,7 +307,9 @@ export function UserManagementPage() {
     setEditForm({
       profileId: u.profile_id,
       firstName: u.first_name,
+      middleName: u.middle_name ?? '',
       lastName: u.last_name,
+      suffix: u.suffix ?? '',
       phoneNumber: u.phone_number ?? '',
       role: u.role,
       municipalityId: u.municipality_id ?? '',
@@ -300,6 +323,10 @@ export function UserManagementPage() {
   const submitEdit = async () => {
     if (!editForm.firstName || !editForm.lastName || !editForm.role) {
       setEditError('Please fill in all required fields.');
+      return;
+    }
+    if (editForm.phoneNumber.trim() && !PH_PHONE_RE.test(editForm.phoneNumber.trim())) {
+      setEditError('Enter a valid Philippine mobile number (e.g. 09XXXXXXXXX) or leave it blank.');
       return;
     }
     if (editForm.role === 'municipal_admin' && isProvincial && !editForm.municipalityId) {
@@ -319,7 +346,9 @@ export function UserManagementPage() {
         action: 'update',
         profileId: editForm.profileId,
         firstName: editForm.firstName.trim(),
+        middleName: editForm.middleName.trim() || undefined,
         lastName: editForm.lastName.trim(),
+        suffix: editForm.suffix.trim() || undefined,
         phoneNumber: editForm.phoneNumber.trim() || undefined,
         role: editForm.role,
         municipalityId:
@@ -354,6 +383,11 @@ export function UserManagementPage() {
 
   return (
     <div>
+      <datalist id="suffix-options">
+        {SUFFIX_OPTIONS.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
       <PageHeader
         title={isProvincial ? 'Administrator Management' : 'User Management'}
         actions={
@@ -391,9 +425,7 @@ export function UserManagementPage() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.profile_id}>
-                    <td>
-                      {u.first_name} {u.last_name}
-                    </td>
+                    <td>{formatFullName(u)}</td>
                     <td>{ROLE_LABEL[u.role]}</td>
                     {isProvincial && <td>{municipalityName(u.municipality_id)}</td>}
                     <td>{u.barangay_id ? barangayName(u.barangay_id) : '—'}</td>
@@ -414,7 +446,7 @@ export function UserManagementPage() {
                         >
                           {resetState[u.profile_id] === 'sending' ? 'Sending...' : resetState[u.profile_id] === 'sent' ? 'Sent' : 'Reset Access'}
                         </button>
-                        <button className="btn btn-outline btn-sm" onClick={() => toggleActive(u)} disabled={u.profile_id === profile?.profile_id}>
+                        <button className="btn btn-outline btn-sm" onClick={() => onToggleActiveClick(u)} disabled={u.profile_id === profile?.profile_id}>
                           {u.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                       </div>
@@ -450,7 +482,7 @@ export function UserManagementPage() {
                     ) : (
                       admins.map((a) => (
                         <div key={a.profile_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0' }}>
-                          <span>{a.first_name} {a.last_name}</span>
+                          <span>{formatFullName(a)}</span>
                           <StatusBadge label={a.is_active ? 'Active' : 'Inactive'} />
                         </div>
                       ))
@@ -561,14 +593,36 @@ export function UserManagementPage() {
               <input className="input" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
             </div>
             <div className="field">
+              <label className="label">Middle name</label>
+              <input className="input" value={form.middleName} onChange={(e) => setForm((f) => ({ ...f, middleName: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="field">
               <label className="label">Last name</label>
               <input className="input" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label className="label">Suffix (optional)</label>
+              <input
+                className="input"
+                list="suffix-options"
+                placeholder="e.g. Jr., Sr., III"
+                value={form.suffix}
+                onChange={(e) => setForm((f) => ({ ...f, suffix: e.target.value }))}
+              />
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="field">
               <label className="label">Phone number</label>
-              <input className="input" value={form.phoneNumber} onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))} />
+              <input
+                className="input"
+                type="tel"
+                inputMode="tel"
+                value={form.phoneNumber}
+                onChange={(e) => setForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
+              />
             </div>
             <div className="field">
               <label className="label">Email</label>
@@ -671,13 +725,35 @@ export function UserManagementPage() {
               <input className="input" value={editForm.firstName} onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))} />
             </div>
             <div className="field">
+              <label className="label">Middle name</label>
+              <input className="input" value={editForm.middleName} onChange={(e) => setEditForm((f) => ({ ...f, middleName: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="field">
               <label className="label">Last name</label>
               <input className="input" value={editForm.lastName} onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label className="label">Suffix (optional)</label>
+              <input
+                className="input"
+                list="suffix-options"
+                placeholder="e.g. Jr., Sr., III"
+                value={editForm.suffix}
+                onChange={(e) => setEditForm((f) => ({ ...f, suffix: e.target.value }))}
+              />
             </div>
           </div>
           <div className="field">
             <label className="label">Phone number</label>
-            <input className="input" value={editForm.phoneNumber} onChange={(e) => setEditForm((f) => ({ ...f, phoneNumber: e.target.value }))} />
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              value={editForm.phoneNumber}
+              onChange={(e) => setEditForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
+            />
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
             Email cannot be changed here. Use Reset Access on the table row to let this administrator set a new password.
@@ -685,6 +761,20 @@ export function UserManagementPage() {
 
           {editError && <p style={{ color: 'var(--color-danger)', fontSize: 13 }}>{editError}</p>}
         </Modal>
+      )}
+
+      {pendingDeactivate && (
+        <ConfirmDialog
+          title="Deactivate this account?"
+          body={`${formatFullName(pendingDeactivate)} will immediately lose sign-in access. You can reactivate this account at any time.`}
+          confirmLabel="Deactivate"
+          danger
+          onCancel={() => setPendingDeactivate(null)}
+          onConfirm={() => {
+            toggleActive(pendingDeactivate);
+            setPendingDeactivate(null);
+          }}
+        />
       )}
     </div>
   );

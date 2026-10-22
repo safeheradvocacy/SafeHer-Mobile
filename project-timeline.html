@@ -1,0 +1,287 @@
+<!doctype html>
+<title>SafeSpace Project Timeline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --header-bg: #e9ecf1;
+    --accent: #1f4e8c;
+    --stripe: #f1f3f7;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --header-bg: #2b2e33;
+      --accent: #8fb6ec;
+      --stripe: #26292e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --header-bg: #2b2e33;
+    --accent: #8fb6ec;
+    --stripe: #26292e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 20px 56px;
+  }
+
+  .sheet { max-width: 980px; margin: 0 auto; }
+
+  .table-label {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 0;
+  }
+  .table-caption {
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 2px 0 16px;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 20px;
+    background: var(--surface);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 760px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--header-bg);
+    color: var(--ink);
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th:last-child, td:last-child { border-right: none; }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  .stage-cell {
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--stripe);
+    width: 128px;
+  }
+
+  .date-cell, .dur-cell {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .upcoming td { font-style: italic; }
+  .upcoming .stage-cell { font-style: normal; }
+
+  .legend {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+</style>
+
+<div class="sheet">
+  <p class="table-label">Table 2</p>
+  <p class="table-caption">Project Timeline</p>
+
+  <p class="note">
+    Proposal, Planning, Research, and Design and Prototype durations are planning estimates, not verified
+    records. Development, Testing, and Review and Feedback dates are grounded in this project's actual
+    build and verification history.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Stage</th>
+          <th>Activities</th>
+          <th>Date</th>
+          <th>Duration</th>
+          <th>Deliverables</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="stage-cell" rowspan="2">Proposal</td>
+          <td>Submit capstone project title and elevator pitch</td>
+          <td class="date-cell">Jun 13, 2026</td>
+          <td class="dur-cell">1 day</td>
+          <td>Title Proposal, Elevator Pitch</td>
+        </tr>
+        <tr>
+          <td>Title and elevator pitch review and approval</td>
+          <td class="date-cell">Jun 14&ndash;27, 2026</td>
+          <td class="dur-cell">2 weeks</td>
+          <td>Approved Project Title</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell" rowspan="2">Planning</td>
+          <td>Define project objectives and identify stakeholders</td>
+          <td class="date-cell">Jun 28&ndash;Jul 4, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Objectives Document, Stakeholder List</td>
+        </tr>
+        <tr>
+          <td>Create product backlog and establish Agile sprints</td>
+          <td class="date-cell">Jul 5&ndash;11, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Product Backlog, Sprint Schedule</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell" rowspan="2">Research</td>
+          <td>Gather system requirements from PSWDO Aurora and partner agencies</td>
+          <td class="date-cell">Jul 12&ndash;18, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Requirements Document</td>
+        </tr>
+        <tr>
+          <td>Study related abuse case-management systems and reference technologies (PSGC, Supabase)</td>
+          <td class="date-cell">Jul 19&ndash;25, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Reference Materials</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell" rowspan="2">Design and<br>Prototype</td>
+          <td>Create wireframes and UI/UX flows for the mobile app and web admin portal</td>
+          <td class="date-cell">Jul 26&ndash;Aug 8, 2026</td>
+          <td class="dur-cell">2 weeks</td>
+          <td>Wireframes, UI/UX Design</td>
+        </tr>
+        <tr>
+          <td>Design database schema (ERD) and system architecture</td>
+          <td class="date-cell">Aug 9&ndash;15, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Entity Relationship Diagram, System Architecture</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell" rowspan="5">Development</td>
+          <td>Develop branding, authentication, and registration modules, including PSGC-based address integration</td>
+          <td class="date-cell">Aug 16&ndash;22, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Branding Assets, Login &amp; Registration Module</td>
+        </tr>
+        <tr>
+          <td>Develop incident reporting and emergency SOS modules, including map repair and the real-time police dashboard</td>
+          <td class="date-cell">Aug 23&ndash;29, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Incident Reporting Module, Emergency SOS Module</td>
+        </tr>
+        <tr>
+          <td>Develop shelter management module, including shelter photo upload and shelter requests</td>
+          <td class="date-cell">Aug 30&ndash;Sep 5, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Shelter Management Module</td>
+        </tr>
+        <tr>
+          <td>Develop profile and account module, including secure photo upload with rate limiting</td>
+          <td class="date-cell">Sep 6&ndash;12, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Profile &amp; Account Module</td>
+        </tr>
+        <tr>
+          <td>Develop cross-platform validation and standardization: numeric input rules, name standardization, pagination, and confirmation dialogs</td>
+          <td class="date-cell">Sep 13&ndash;19, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Validation Utilities, Standardized Components</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell" rowspan="2">Testing</td>
+          <td>Conduct type-checking and build verification across the mobile and web applications</td>
+          <td class="date-cell">Sep 20&ndash;26, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Verification Reports</td>
+        </tr>
+        <tr>
+          <td>Conduct functional, database-access, and security testing</td>
+          <td class="date-cell">Sep 27&ndash;Oct 3, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Test Results</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell" rowspan="2">Review and<br>Feedback</td>
+          <td>Gather feedback on implemented features</td>
+          <td class="date-cell">Oct 4&ndash;10, 2026</td>
+          <td class="dur-cell">1 week</td>
+          <td>Feedback Summary</td>
+        </tr>
+        <tr>
+          <td>Refine system based on feedback</td>
+          <td class="date-cell">Oct 11&ndash;16, 2026</td>
+          <td class="dur-cell">6 days</td>
+          <td>Refined System</td>
+        </tr>
+
+        <tr>
+          <td class="stage-cell">Implementation</td>
+          <td>Deploy system and prepare documentation</td>
+          <td class="date-cell">Oct 17&ndash;19, 2026</td>
+          <td class="dur-cell">3 days</td>
+          <td>Deployed System, User Manual</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="legend">Total planned duration: approximately 18 weeks (June 13 &ndash; October 19, 2026).</p>
+</div>

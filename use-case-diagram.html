@@ -1,0 +1,380 @@
+<!doctype html>
+<title>SafeSpace Use Case Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --paper: #f6f4ef;
+    --surface: #ffffff;
+    --ink: #22262c;
+    --ink-muted: #5c6470;
+    --border: #d6dae1;
+    --accent: #1f4e8c;
+    --boundary: #2a4a74;
+
+    --ga-fill: #e7eefb; --ga-border: #c4d7f2;
+    --gb-fill: #efeaf9; --gb-border: #d8cdf0;
+    --gc-fill: #fbe9e9; --gc-border: #f0c9c9;
+    --gd-fill: #e6f2ea; --gd-border: #bedac9;
+    --ge-fill: #faf1df; --ge-border: #e9d2a3;
+    --gf-fill: #eceef1; --gf-border: #d3d7dd;
+    --gg-fill: #f7e9f0; --gg-border: #ecd0e0;
+
+    /* One fixed, validated categorical color per actor/role (8 slots,
+       same default order used across every other figure in this set —
+       never reassigned per-diagram). Each actor's glyph AND every edge
+       leaving it share this color, so a line can be traced to its actor
+       without following it end-to-end. */
+    --act1: #2a78d6; /* Survivor / Reporter */
+    --act2: #eb6834; /* Barangay Admin */
+    --act3: #1baf7a; /* Municipal Admin */
+    --act4: #eda100; /* Provincial Staff */
+    --act5: #e87ba4; /* Support Expert */
+    --act6: #008300; /* Shelter Administrator */
+    --act7: #4a3aa7; /* Provincial Admin / Super Admin */
+    --act8: #e34948; /* Police Officer (Law Enforcement) */
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1b1d20;
+      --surface: #242629;
+      --ink: #eceae4;
+      --ink-muted: #a3a9b2;
+      --border: #3a3d42;
+      --accent: #8fb6ec;
+      --boundary: #5c7ea6;
+
+      --ga-fill: #1f2c40; --ga-border: #35496b;
+      --gb-fill: #2a2340; --gb-border: #4a3d6b;
+      --gc-fill: #3a2222; --gc-border: #5c3636;
+      --gd-fill: #1c3027; --gd-border: #2f5443;
+      --ge-fill: #352c1c; --ge-border: #5c4a26;
+      --gf-fill: #2a2d31; --gf-border: #44484e;
+      --gg-fill: #332530; --gg-border: #55394a;
+
+      --act1: #3987e5; --act2: #d95926; --act3: #199e70; --act4: #c98500;
+      --act5: #d55181; --act6: #008300; --act7: #9085e9; --act8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1b1d20;
+    --surface: #242629;
+    --ink: #eceae4;
+    --ink-muted: #a3a9b2;
+    --border: #3a3d42;
+    --accent: #8fb6ec;
+    --boundary: #5c7ea6;
+
+    --ga-fill: #1f2c40; --ga-border: #35496b;
+    --gb-fill: #2a2340; --gb-border: #4a3d6b;
+    --gc-fill: #3a2222; --gc-border: #5c3636;
+    --gd-fill: #1c3027; --gd-border: #2f5443;
+    --ge-fill: #352c1c; --ge-border: #5c4a26;
+    --gf-fill: #2a2d31; --gf-border: #44484e;
+    --gg-fill: #332530; --gg-border: #55394a;
+
+    --act1: #3987e5; --act2: #d95926; --act3: #199e70; --act4: #c98500;
+    --act5: #d55181; --act6: #008300; --act7: #9085e9; --act8: #e66767;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 16px 56px;
+  }
+  .sheet { max-width: 760px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  .fig-title {
+    font-family: 'Libre Franklin', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 3vw, 27px);
+    text-align: center;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 6px 14px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
+  .legend-divider { grid-column: 1 / -1; border-top: 1px dashed var(--border); margin: 2px 0 0; padding-top: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+
+  .diagram-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  #diagram { display: block; width: 100%; max-width: 640px; height: auto; margin: 0 auto; }
+  svg text { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  .uc-label { font-size: 11px; fill: var(--ink); }
+  .actor-label { font-size: 10.5px; font-weight: 700; fill: var(--ink); }
+  .group-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; fill: var(--ink-muted); }
+  .boundary-label { font-size: 14px; font-weight: 800; fill: var(--accent); font-family: 'Libre Franklin', system-ui, sans-serif; }
+
+  .caption {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-top: 16px;
+    font-style: italic;
+  }
+</style>
+
+<div class="sheet">
+  <p class="eyebrow">Research Design</p>
+  <h1 class="fig-title">Figure 3. Use Case Diagram</h1>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="diagram-scroll">
+    <svg id="diagram" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Use case diagram of the SafeSpace system, with one color per actor"></svg>
+  </div>
+
+  <p class="caption">Figure 3. All 8 active SafeSpace roles and their authorized use cases. Each actor and every line leaving it share one fixed color, so a role's full reach can be traced at a glance.</p>
+</div>
+
+<script>
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  // ---------------------------------------------------------------------
+  // Actors — the 8 roles that actually reach this system today. Colors
+  // are the fixed 8-slot validated categorical set (see dataviz skill),
+  // never reassigned. super_admin is folded into Provincial Admin and
+  // the retired shelter_staff role is omitted, matching every other
+  // figure in this set.
+  // ---------------------------------------------------------------------
+  const ACTORS = {
+    survivor:        { label: 'Survivor /\nReporter',              color: 'var(--act1)' },
+    barangayAdmin:   { label: 'Barangay\nAdministrator',           color: 'var(--act2)' },
+    municipalAdmin:  { label: 'Municipal Admin\n(MSWDO)',          color: 'var(--act3)' },
+    provincialStaff: { label: 'Provincial\nStaff',                 color: 'var(--act4)' },
+    supportExpert:   { label: 'Support\nExpert',                   color: 'var(--act5)' },
+    shelterAdmin:    { label: 'Shelter\nAdministrator',            color: 'var(--act6)' },
+    provincialAdmin: { label: 'Provincial Admin\n(Super Admin)',   color: 'var(--act7)' },
+    police:          { label: 'Police Officer\n(Law Enforcement)', color: 'var(--act8)' },
+  };
+  const ACTOR_ORDER = ['survivor', 'barangayAdmin', 'municipalAdmin', 'provincialStaff', 'supportExpert', 'shelterAdmin', 'provincialAdmin', 'police'];
+
+  // ---------------------------------------------------------------------
+  // Use-case groups. Grounded in admin/src/lib/permissions.ts's actual
+  // ROLE_PERMISSIONS map, not approximated — see the EDGES list below for
+  // the per-role citations.
+  // ---------------------------------------------------------------------
+  const GROUPS = {
+    A: { label: 'Account & Security', fill: 'var(--ga-fill)', border: 'var(--ga-border)', items: ['ua1', 'ua2', 'ua3', 'ua4', 'ua5'] },
+    B: { label: 'Incident Reporting', fill: 'var(--gb-fill)', border: 'var(--gb-border)', items: ['ub1', 'ub3', 'ub4'] },
+    C: { label: 'Emergency SOS', fill: 'var(--gc-fill)', border: 'var(--gc-border)', items: ['uc1', 'uc2', 'uc3'] },
+    D: { label: 'Shelter Services', fill: 'var(--gd-fill)', border: 'var(--gd-border)', items: ['ud1', 'ud2', 'ud3', 'ud4'] },
+    E: { label: 'Case Management & Referral', fill: 'var(--ge-fill)', border: 'var(--ge-border)', items: ['ue1', 'ue2', 'ue3', 'ue4', 'ue5'] },
+    F: { label: 'Administration', fill: 'var(--gf-fill)', border: 'var(--gf-border)', items: ['uf1', 'uf2', 'uf3', 'uf4', 'uf5', 'uf6', 'uf7', 'uf8'] },
+    G: { label: 'Reports & Support', fill: 'var(--gg-fill)', border: 'var(--gg-border)', items: ['ug1', 'ug2', 'ug3', 'ug4', 'ug5', 'ug6'] },
+  };
+
+  const UC_LABELS = {
+    ua1: 'Register Account', ua2: 'Log In', ua3: 'Manage Security Passcode', ua4: 'Manage Profile', ua5: 'Submit Identity Verification',
+    ub1: 'Submit Incident Report', ub3: 'Track Case Status', ub4: 'Access Case via QR Code',
+    uc1: 'Trigger Emergency SOS', uc2: 'Monitor SOS Alerts', uc3: 'Respond to SOS Alert',
+    ud1: 'Request Shelter Assistance', ud2: 'Locate Nearby Shelters', ud3: 'Manage Shelter Listing', ud4: 'Respond to Shelter Request',
+    ue1: 'Monitor Assigned Cases', ue2: 'Manage Barangay Action Request', ue3: 'Refer Case to Shelter', ue4: 'Manage Law-Enforcement Referral', ue5: 'Review Identity Verification',
+    uf1: 'Manage User Accounts', uf2: 'Manage Reference Data', uf3: 'Configure System Settings', uf4: 'View Audit Logs', uf5: 'Backup and Restore Data', uf6: 'Manage Provincial Announcements', uf7: 'Manage Police Officer Accounts', uf8: 'View Roles & Permissions',
+    ug1: 'Generate Reports', ug2: 'Respond to Support Request', ug3: 'Receive Notifications', ug4: 'Request Expert Support', ug5: 'Manage FAQ Content', ug6: 'Assign Support Request to Expert',
+  };
+
+  // actorId -> [ucId, ...]. Each line below cites the real permission key
+  // (admin/src/lib/permissions.ts) or RLS rule it reflects, so every edge
+  // traces back to actual code rather than an assumption.
+  const ROLE_EDGES = {
+    // A survivor's own account + reporting + SOS + shelter + support surface.
+    survivor: ['ua1', 'ua2', 'ua3', 'ua4', 'ua5', 'ub1', 'ub3', 'ub4', 'uc1', 'ud1', 'ud2', 'ug3', 'ug4'],
+    // barangay_admin: cases.view, identity.verify, reports.view, barangayRequests.manage
+    barangayAdmin: ['ue1', 'ue2', 'ue5', 'ub4', 'ug1'],
+    // municipal_admin: cases.view, sos.monitor, identity.verify, barangays.manage,
+    // shelters.refer, shelters.manage, reports.view, admins.manage
+    municipalAdmin: ['ue1', 'ue2', 'ue3', 'ue4', 'ue5', 'ub4', 'uc2', 'ud3', 'uf1', 'uf2', 'ug1'],
+    // provincial_staff: the broadest OPERATIONAL role — cases.view, sos.monitor,
+    // identity.verify, municipalities.manage, barangays.manage, shelters.refer,
+    // shelters.manage, support.manage, faqs.manage, reports.view,
+    // announcements.manage, police.manage
+    provincialStaff: ['ue1', 'ue2', 'ue3', 'ue4', 'ue5', 'ub4', 'uc2', 'ud3', 'uf2', 'uf6', 'uf7', 'ug1', 'ug5', 'ug6'],
+    // support_expert: reports.view + its own assigned-conversation workflow
+    supportExpert: ['ug1', 'ug2'],
+    // shelter_admin: reports.view + its own shelter's listing/requests
+    shelterAdmin: ['ud3', 'ud4', 'ug1'],
+    // provincial_admin/super_admin: technical/system-administration tier ONLY —
+    // admins.manage, audit.view, roles.view, backups.manage, police.manage.
+    // Deliberately holds NO cases.view/reports.view/municipalities.manage —
+    // this is the exact corrected scope from the rest of this figure set.
+    provincialAdmin: ['uf1', 'uf3', 'uf4', 'uf5', 'uf7', 'uf8'],
+    // law_enforcement: reports.view + province-wide SOS access (module19) +
+    // the referral surfaces it actually appears in
+    police: ['uc2', 'uc3', 'ue2', 'ue4', 'ug1'],
+  };
+
+  const EDGES = [];
+  ACTOR_ORDER.forEach((actorId) => (ROLE_EDGES[actorId] || []).forEach((ucId) => EDGES.push([actorId, ucId])));
+
+  // ---------------------------------------------------------------------
+  // Layout — portrait: actors in one row across the top, system boundary
+  // below containing the 7 groups stacked vertically. Any group with more
+  // than MAX_PER_ROW items wraps onto additional sub-rows within its own
+  // box, which is what keeps the boundary (and therefore the whole
+  // canvas) narrow instead of landscape.
+  // ---------------------------------------------------------------------
+  const MAX_PER_ROW = 4;
+  const ELLIPSE_W = 138, ELLIPSE_H = 42, GAP_X = 14, ROW_H = 64;
+  const HEADER_H = 24, GROUP_PAD_BOTTOM = 12, GROUP_GAP = 14;
+  const BOUND_PAD = 20;
+
+  const rowWidth = MAX_PER_ROW * ELLIPSE_W + (MAX_PER_ROW - 1) * GAP_X;
+  const BOUND_X1 = 110, BOUND_X2 = BOUND_X1 + rowWidth + BOUND_PAD * 2;
+  const BOUND_CENTER = (BOUND_X1 + BOUND_X2) / 2;
+
+  const ACTOR_Y = 46;
+  const ACTOR_X_START = 50, ACTOR_X_END = BOUND_X2 + 60;
+  const actorX = {};
+  ACTOR_ORDER.forEach((id, i) => {
+    actorX[id] = ACTOR_X_START + (ACTOR_X_END - ACTOR_X_START) * (i / (ACTOR_ORDER.length - 1));
+  });
+  const ACTOR_ANCHOR_Y = ACTOR_Y + 92; // below the glyph + 2-line label
+
+  const BOUND_Y1 = 150;
+  let cursorY = BOUND_Y1 + 40;
+  const nodes = {};
+  const groupBoxes = [];
+  Object.entries(GROUPS).forEach(([key, g]) => {
+    const rows = [];
+    for (let i = 0; i < g.items.length; i += MAX_PER_ROW) rows.push(g.items.slice(i, i + MAX_PER_ROW));
+    const boxTop = cursorY;
+    const headerY = boxTop + HEADER_H;
+    rows.forEach((rowItems, rIdx) => {
+      const n = rowItems.length;
+      const thisRowWidth = n * ELLIPSE_W + (n - 1) * GAP_X;
+      let x = BOUND_CENTER - thisRowWidth / 2 + ELLIPSE_W / 2;
+      const y = headerY + rIdx * ROW_H + ROW_H / 2;
+      rowItems.forEach((id) => {
+        nodes[id] = { x, y };
+        x += ELLIPSE_W + GAP_X;
+      });
+    });
+    const boxH = HEADER_H + rows.length * ROW_H + GROUP_PAD_BOTTOM;
+    groupBoxes.push({ g, x: BOUND_X1 + BOUND_PAD, y: boxTop, w: rowWidth + 2 * (BOUND_PAD - 10), h: boxH });
+    cursorY = boxTop + boxH + GROUP_GAP;
+  });
+  const BOUND_Y2 = cursorY - GROUP_GAP + BOUND_PAD;
+
+  const CANVAS_W = ACTOR_X_END + 60;
+  const CANVAS_H = BOUND_Y2 + 30;
+
+  const svg = document.getElementById('diagram');
+  svg.setAttribute('viewBox', `0 0 ${CANVAS_W} ${CANVAS_H}`);
+  svg.setAttribute('role', 'img');
+
+  // 1. System boundary
+  svg.appendChild(el('rect', { x: BOUND_X1, y: BOUND_Y1, width: BOUND_X2 - BOUND_X1, height: BOUND_Y2 - BOUND_Y1, rx: 14, fill: 'none', stroke: 'var(--boundary)', 'stroke-width': 2 }));
+  svg.appendChild(el('text', { x: BOUND_CENTER, y: BOUND_Y1 + 26, 'text-anchor': 'middle', class: 'boundary-label' }, 'SafeSpace System'));
+
+  // 2. Group boxes + labels
+  groupBoxes.forEach(({ g, x, y, w, h }) => {
+    svg.appendChild(el('rect', { x, y, width: w, height: h, rx: 10, fill: g.fill, stroke: g.border, 'stroke-width': 1, 'stroke-dasharray': '4,3' }));
+    svg.appendChild(el('text', { x: BOUND_CENTER, y: y + 16, 'text-anchor': 'middle', class: 'group-label' }, g.label));
+  });
+
+  // 3. Edges first (actor glyphs/ellipses drawn on top of their ends).
+  //    Routed with one gentle waypoint so a line heading to a lower group
+  //    doesn't read as crossing straight through the groups above it.
+  function drawActorEdge(x1, y1, x2, y2, color) {
+    const midY = y1 + (y2 - y1) * 0.35;
+    const path = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${y1 + (y2 - y1) * 0.15}, ${x2} ${y2}`;
+    svg.appendChild(el('path', { d: path, fill: 'none', stroke: color, 'stroke-width': 1.3, opacity: 0.55 }));
+  }
+  EDGES.forEach(([actorId, ucId]) => {
+    const a = ACTORS[actorId];
+    const target = nodes[ucId];
+    if (!target) return;
+    drawActorEdge(actorX[actorId], ACTOR_ANCHOR_Y, target.x, target.y, a.color);
+  });
+
+  // 4. Use-case ellipses
+  Object.entries(nodes).forEach(([id, n]) => {
+    svg.appendChild(el('ellipse', { cx: n.x, cy: n.y, rx: ELLIPSE_W / 2, ry: ELLIPSE_H / 2, fill: 'var(--surface)', stroke: 'var(--accent)', 'stroke-width': 1.4 }));
+    const label = UC_LABELS[id];
+    const words = label.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((w) => {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > 17) { lines.push(line); line = w; } else { line = test; }
+    });
+    lines.push(line);
+    const startY = n.y - (lines.length - 1) * 6.5;
+    lines.forEach((ln, i) => {
+      svg.appendChild(el('text', { x: n.x, y: startY + i * 13, 'text-anchor': 'middle', class: 'uc-label' }, ln));
+    });
+  });
+
+  // 5. Actors (UML stick figure), each tinted its own color
+  function drawActor(a, cx) {
+    const topY = ACTOR_Y;
+    const g = el('g');
+    g.appendChild(el('circle', { cx, cy: topY + 8, r: 8, fill: 'var(--surface)', stroke: a.color, 'stroke-width': 1.8 }));
+    g.appendChild(el('line', { x1: cx, y1: topY + 16, x2: cx, y2: topY + 38, stroke: a.color, 'stroke-width': 1.8 }));
+    g.appendChild(el('line', { x1: cx - 13, y1: topY + 22, x2: cx + 13, y2: topY + 22, stroke: a.color, 'stroke-width': 1.8 }));
+    g.appendChild(el('line', { x1: cx, y1: topY + 38, x2: cx - 13, y2: topY + 58, stroke: a.color, 'stroke-width': 1.8 }));
+    g.appendChild(el('line', { x1: cx, y1: topY + 38, x2: cx + 13, y2: topY + 58, stroke: a.color, 'stroke-width': 1.8 }));
+    const labelLines = a.label.split('\n');
+    labelLines.forEach((ln, i) => {
+      g.appendChild(el('text', { x: cx, y: topY + 72 + i * 12, 'text-anchor': 'middle', class: 'actor-label', fill: a.color }, ln));
+    });
+    svg.appendChild(g);
+  }
+  ACTOR_ORDER.forEach((id) => drawActor(ACTORS[id], actorX[id]));
+
+  // Legend — actors (the color key) first, then the use-case category key.
+  const legend = document.getElementById('legend');
+  ACTOR_ORDER.forEach((id) => {
+    const a = ACTORS[id];
+    const span = document.createElement('span');
+    span.innerHTML = `<i style="background:${a.color}"></i>${a.label.replace('\n', ' ')}`;
+    legend.appendChild(span);
+  });
+  const divider = document.createElement('div');
+  divider.className = 'legend-divider';
+  divider.textContent = 'Use-case categories';
+  legend.appendChild(divider);
+  Object.values(GROUPS).forEach((g) => {
+    const span = document.createElement('span');
+    span.innerHTML = `<i style="background:${g.fill};border:1px solid ${g.border};border-radius:3px"></i>${g.label}`;
+    legend.appendChild(span);
+  });
+</script>

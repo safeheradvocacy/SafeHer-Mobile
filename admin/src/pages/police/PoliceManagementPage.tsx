@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
-import { EmptyState, Modal, PageHeader, StatusBadge, StatCard } from '../../components/ui';
+import { ConfirmDialog, EmptyState, Modal, PageHeader, StatusBadge, StatCard } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import { type AdminMetadata, formatDateTime, extractInvokeError } from '../../lib/adminUserHelpers';
+import { formatFullName, SUFFIX_OPTIONS } from '../../lib/personName';
+import { sanitizePhoneInput, PH_PHONE_RE } from '../../lib/validators';
 import type { Municipality, UserProfile } from '../../types/database.types';
 
 /**
@@ -87,7 +89,7 @@ export function PoliceManagementPage() {
     let rows = officers;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      rows = rows.filter((o) => `${o.first_name} ${o.last_name}`.toLowerCase().includes(q) || (metadata[o.profile_id]?.email ?? '').toLowerCase().includes(q));
+      rows = rows.filter((o) => formatFullName(o).toLowerCase().includes(q) || (metadata[o.profile_id]?.email ?? '').toLowerCase().includes(q));
     }
     if (statusFilter) rows = rows.filter((o) => (statusFilter === 'active' ? o.is_active : !o.is_active));
     if (municipalityFilter) rows = rows.filter((o) => o.municipality_id === municipalityFilter);
@@ -111,7 +113,16 @@ export function PoliceManagementPage() {
       return;
     }
     setOfficers((prev) => prev.map((x) => (x.profile_id === o.profile_id ? { ...x, is_active: !x.is_active } : x)));
-    showToast('success', `${o.first_name} ${o.last_name} ${o.is_active ? 'deactivated' : 'activated'}.`);
+    showToast('success', `${formatFullName(o)} ${o.is_active ? 'deactivated' : 'activated'}.`);
+  };
+
+  // Deactivating an officer account immediately blocks their sign-in —
+  // materially consequential, so it gets a confirm step. Reactivating
+  // does not (it only restores access they already had).
+  const [pendingDeactivate, setPendingDeactivate] = useState<UserProfile | null>(null);
+  const onToggleActiveClick = (o: UserProfile) => {
+    if (o.is_active) setPendingDeactivate(o);
+    else toggleActive(o);
   };
 
   const resendAccess = async (o: UserProfile) => {
@@ -124,18 +135,22 @@ export function PoliceManagementPage() {
 
   // ---- Add Police Officer (create — province-admin tier only) ----
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '', phoneNumber: '', municipalityId: '' });
+  const [form, setForm] = useState({ email: '', password: '', firstName: '', middleName: '', lastName: '', suffix: '', phoneNumber: '', municipalityId: '' });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ email: '', password: '', firstName: '', lastName: '', phoneNumber: '', municipalityId: '' });
+    setForm({ email: '', password: '', firstName: '', middleName: '', lastName: '', suffix: '', phoneNumber: '', municipalityId: '' });
     setCreateError(null);
   };
 
   const submitCreate = async () => {
     if (!form.email || !form.password || !form.firstName || !form.lastName) {
       setCreateError('Please fill in all required fields.');
+      return;
+    }
+    if (form.phoneNumber.trim() && !PH_PHONE_RE.test(form.phoneNumber.trim())) {
+      setCreateError('Enter a valid Philippine mobile number (e.g. 09XXXXXXXXX) or leave it blank.');
       return;
     }
     setCreating(true);
@@ -145,7 +160,9 @@ export function PoliceManagementPage() {
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim(),
+        middleName: form.middleName.trim() || undefined,
         lastName: form.lastName.trim(),
+        suffix: form.suffix.trim() || undefined,
         phoneNumber: form.phoneNumber.trim() || undefined,
         role: 'law_enforcement',
         municipalityId: form.municipalityId || undefined,
@@ -165,12 +182,19 @@ export function PoliceManagementPage() {
 
   // ---- Edit officer (update — provincial_admin/super_admin/provincial_staff) ----
   const [editTarget, setEditTarget] = useState<UserProfile | null>(null);
-  const [editForm, setEditForm] = useState({ firstName: '', lastName: '', phoneNumber: '', municipalityId: '' });
+  const [editForm, setEditForm] = useState({ firstName: '', middleName: '', lastName: '', suffix: '', phoneNumber: '', municipalityId: '' });
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
   const openEdit = (o: UserProfile) => {
-    setEditForm({ firstName: o.first_name, lastName: o.last_name, phoneNumber: o.phone_number ?? '', municipalityId: o.municipality_id ?? '' });
+    setEditForm({
+      firstName: o.first_name,
+      middleName: o.middle_name ?? '',
+      lastName: o.last_name,
+      suffix: o.suffix ?? '',
+      phoneNumber: o.phone_number ?? '',
+      municipalityId: o.municipality_id ?? '',
+    });
     setEditError(null);
     setEditTarget(o);
   };
@@ -181,6 +205,10 @@ export function PoliceManagementPage() {
       setEditError('Please fill in all required fields.');
       return;
     }
+    if (editForm.phoneNumber.trim() && !PH_PHONE_RE.test(editForm.phoneNumber.trim())) {
+      setEditError('Enter a valid Philippine mobile number (e.g. 09XXXXXXXXX) or leave it blank.');
+      return;
+    }
     setEditing(true);
     setEditError(null);
     const { data, error } = await supabase.functions.invoke('create-admin-user', {
@@ -189,7 +217,9 @@ export function PoliceManagementPage() {
         profileId: editTarget.profile_id,
         role: 'law_enforcement',
         firstName: editForm.firstName.trim(),
+        middleName: editForm.middleName.trim() || undefined,
         lastName: editForm.lastName.trim(),
+        suffix: editForm.suffix.trim() || undefined,
         phoneNumber: editForm.phoneNumber.trim() || undefined,
         municipalityId: editForm.municipalityId || undefined,
       },
@@ -207,6 +237,11 @@ export function PoliceManagementPage() {
 
   return (
     <div>
+      <datalist id="suffix-options">
+        {SUFFIX_OPTIONS.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
       <PageHeader
         title="Police Management"
         subtitle="Police Officer accounts across Aurora Province. Account creation is restricted to provincial administrators."
@@ -283,7 +318,7 @@ export function PoliceManagementPage() {
               <tbody>
                 {filtered.map((o) => (
                   <tr key={o.profile_id}>
-                    <td>{o.first_name} {o.last_name}</td>
+                    <td>{formatFullName(o)}</td>
                     <td style={{ fontSize: 12.5 }}>{metadata[o.profile_id]?.email ?? '—'}</td>
                     <td>{o.phone_number ?? '—'}</td>
                     <td>{municipalityName(o.municipality_id)}</td>
@@ -306,7 +341,7 @@ export function PoliceManagementPage() {
                         >
                           {resetState[o.profile_id] === 'sending' ? 'Sending...' : resetState[o.profile_id] === 'sent' ? 'Sent' : 'Reset Access'}
                         </button>
-                        <button className="btn btn-outline btn-sm" onClick={() => toggleActive(o)}>
+                        <button className="btn btn-outline btn-sm" onClick={() => onToggleActiveClick(o)}>
                           {o.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                       </div>
@@ -343,14 +378,30 @@ export function PoliceManagementPage() {
               <input className="input" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
             </div>
             <div className="field">
+              <label className="label">Middle name</label>
+              <input className="input" value={form.middleName} onChange={(e) => setForm((f) => ({ ...f, middleName: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="field">
               <label className="label">Last name</label>
               <input className="input" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label className="label">Suffix (optional)</label>
+              <input className="input" list="suffix-options" placeholder="e.g. Jr., Sr., III" value={form.suffix} onChange={(e) => setForm((f) => ({ ...f, suffix: e.target.value }))} />
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="field">
               <label className="label">Phone number</label>
-              <input className="input" value={form.phoneNumber} onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))} />
+              <input
+                className="input"
+                type="tel"
+                inputMode="tel"
+                value={form.phoneNumber}
+                onChange={(e) => setForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
+              />
             </div>
             <div className="field">
               <label className="label">Email</label>
@@ -399,13 +450,35 @@ export function PoliceManagementPage() {
               <input className="input" value={editForm.firstName} onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))} />
             </div>
             <div className="field">
+              <label className="label">Middle name</label>
+              <input className="input" value={editForm.middleName} onChange={(e) => setEditForm((f) => ({ ...f, middleName: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="field">
               <label className="label">Last name</label>
               <input className="input" value={editForm.lastName} onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label className="label">Suffix (optional)</label>
+              <input
+                className="input"
+                list="suffix-options"
+                placeholder="e.g. Jr., Sr., III"
+                value={editForm.suffix}
+                onChange={(e) => setEditForm((f) => ({ ...f, suffix: e.target.value }))}
+              />
             </div>
           </div>
           <div className="field">
             <label className="label">Phone number</label>
-            <input className="input" value={editForm.phoneNumber} onChange={(e) => setEditForm((f) => ({ ...f, phoneNumber: e.target.value }))} />
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              value={editForm.phoneNumber}
+              onChange={(e) => setEditForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
+            />
           </div>
           <div className="field">
             <label className="label">Assigned municipality</label>
@@ -422,6 +495,20 @@ export function PoliceManagementPage() {
 
           {editError && <p style={{ color: 'var(--color-danger)', fontSize: 13 }}>{editError}</p>}
         </Modal>
+      )}
+
+      {pendingDeactivate && (
+        <ConfirmDialog
+          title="Deactivate this account?"
+          body={`${formatFullName(pendingDeactivate)} will immediately lose sign-in access. You can reactivate this account at any time.`}
+          confirmLabel="Deactivate"
+          danger
+          onCancel={() => setPendingDeactivate(null)}
+          onConfirm={() => {
+            toggleActive(pendingDeactivate);
+            setPendingDeactivate(null);
+          }}
+        />
       )}
     </div>
   );

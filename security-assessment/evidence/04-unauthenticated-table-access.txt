@@ -1,0 +1,53 @@
+============================================================
+SafeSpace security assessment — evidence capture
+Test     : Unauthenticated REST read test — all 35 tables
+Target   : https://qhhcqehgwpzeycejgevk.supabase.co/rest/v1/*
+Captured : 2026-10-21T15:12:36Z (UTC)
+Method   : non-destructive, unauthenticated
+============================================================
+
+Anon API key only. No user session. HTTP 200/206 with rows = exposed.
+
+TABLE                        HTTP    RESULT
+announcements                401     denied
+audit_logs                   401     denied
+backup_schedule              401     denied
+barangay_action_requests     401     denied
+barangays                    200     DATA RETURNED
+case_access_tokens           401     denied
+case_assignments             401     denied
+case_client_links            401     denied
+case_referrals               401     denied
+case_reports                 401     denied
+case_services                401     denied
+case_status_history          401     denied
+chat_messages                401     denied
+chat_sessions                401     denied
+evidence                     401     denied
+expert_support_requests      401     denied
+faqs                         401     denied
+law_enforcement_referrals    401     denied
+municipalities               200     DATA RETURNED
+notifications                401     denied
+profile_photo_changes        401     denied
+protected_access_grants      401     denied
+push_tokens                  401     denied
+saved_reports                401     denied
+security_passcodes           401     denied
+shelter_referrals            401     denied
+shelter_requests             401     denied
+shelters                     401     denied
+sos_alerts                   401     denied
+survivors                    401     denied
+system_backups               401     denied
+system_restores              401     denied
+terms_acceptances            401     denied
+user_profiles                401     denied
+user_verifications           401     denied
+
+--- Denial mechanism (case_reports) -----------------------------
+{"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.case_reports TO anon;","message":"permission denied for table case_reports"}
+
+--- Scope of permitted public reads -----------------------------
+  municipalities total rows: Content-Range: 0-0/8
+  barangays total rows     : Content-Range: 0-0/151

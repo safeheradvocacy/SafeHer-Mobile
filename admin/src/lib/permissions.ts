@@ -158,8 +158,11 @@ const ROLE_PERMISSIONS: Record<UserRole, ReadonlySet<PermissionKey>> = {
   // key only gates the NEW dedicated Police Management nav item/page,
   // a focused alternative to the generic Administrator Management
   // table, not a new capability.
-  provincial_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'reports.view', 'police.manage']),
-  super_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'reports.view', 'police.manage']),
+  // reports.view removed (provincial_admin/super_admin are the
+  // technical/system-administration tier — reports, analytics, and
+  // announcements stay with municipal_admin and provincial_staff).
+  provincial_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'police.manage']),
+  super_admin: new Set<PermissionKey>(['admins.manage', 'audit.view', 'roles.view', 'backups.manage', 'police.manage']),
   // reports.view only (module24) — each gets its own role-scoped
   // Reports & Analytics page (ReportsRouter.tsx), not the shared
   // case_reports-centric ReportsPage above.
