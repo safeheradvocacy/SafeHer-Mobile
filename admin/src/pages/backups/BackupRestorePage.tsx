@@ -11,14 +11,24 @@ import {
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { ConfirmDialog, EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
+import { BackupSecurityPanel, useBackupAuthorization } from '../../components/backups/BackupAuthorization';
+// Non-2xx responses from an Edge Function put the real body on
+// error.context, NOT on error.message — which is just the generic
+// "Edge Function returned a non-2xx status code". Reading error.message
+// here is why a precise server-side refusal (a missing authorization
+// grant, an unusable encryption key) reached the operator as an
+// unactionable toast.
+import { extractInvokeError } from '../../lib/adminUserHelpers';
 import type { BackupFrequency, RestoreValidationCheck, SystemBackup, SystemRestore } from '../../types/database.types';
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -27,7 +37,16 @@ const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Fri
 // the real backend lock (see begin_restore_operation in module23) — the
 // UI mirrors that same list rather than inventing its own notion of
 // what counts as active.
-const TERMINAL_RESTORE_STATUSES = ['validation_failed', 'safety_backup_failed', 'restore_failed', 'verification_failed', 'verified'];
+const TERMINAL_RESTORE_STATUSES = [
+  'validation_failed',
+  'safety_backup_failed',
+  'restore_failed',
+  'verification_failed',
+  'verified',
+  // module44 — must be here, or a cancelled operation still shows the
+  // "RECOVERY IN PROGRESS" banner and still blocks every action.
+  'cancelled',
+];
 
 const BACKUP_TYPE_LABEL: Record<string, string> = { manual: 'Manual', scheduled: 'Scheduled', pre_restore: 'Pre-Restore Safety Backup' };
 const BACKUP_STATUS_LABEL: Record<string, string> = { running: 'Running', completed: 'Completed', failed: 'Failed' };
@@ -44,6 +63,7 @@ const RESTORE_STATUS_LABEL: Record<string, string> = {
   verifying: 'Verifying',
   verification_failed: 'Verification Failed',
   verified: 'Verified',
+  cancelled: 'Cancelled',
 };
 
 function formatBytes(bytes: number | null): string {
@@ -92,6 +112,22 @@ function ValidationChecklist({ checklist }: { checklist: RestoreValidationCheck[
 
 type WizardStep = 'validating' | 'preview' | 'confirm' | 'ready' | 'executing' | 'result';
 
+/** Shape of the measured restore plan returned by backup-restore's 'plan' action. */
+interface RestorePlan {
+  archiveFormat?: string;
+  legacy?: boolean;
+  sourceEnvironment?: string | null;
+  targetEnvironment?: string;
+  crossEnvironment?: boolean;
+  coverageComplete?: boolean | null;
+  isEncrypted?: boolean;
+  tables?: { table: string; order: number; archiveRows: number; liveRows: number; wouldOverwrite: number; wouldInsert: number }[];
+  excludedByPolicy?: { table: string; reason: string }[];
+  foreignKeyCycles?: string[];
+  tablesWithoutPrimaryKey?: string[];
+  notes?: string[];
+}
+
 interface WizardState {
   step: WizardStep;
   backup: SystemBackup;
@@ -100,7 +136,15 @@ interface WizardState {
   checklist?: RestoreValidationCheck[];
   valid?: boolean;
   typedPhrase: string;
-  result?: { status: string; message: string; checks?: RestoreValidationCheck[] };
+  plan?: RestorePlan;
+  planError?: string;
+  result?: {
+    status: string;
+    message: string;
+    checks?: RestoreValidationCheck[];
+    skippedTables?: { table: string; reason: string }[];
+    manualActionsRequired?: string[];
+  };
 }
 
 /**
@@ -127,16 +171,38 @@ export function BackupRestorePage() {
   const [frequency, setFrequency] = useState<BackupFrequency>('daily');
   const [hourUtc, setHourUtc] = useState(2);
   const [dayOfWeek, setDayOfWeek] = useState(0);
+  const [dayOfMonth, setDayOfMonth] = useState(1);
   const [retentionDays, setRetentionDays] = useState(30);
   const [scheduleUpdatedAt, setScheduleUpdatedAt] = useState<string | null>(null);
+  const [nextRunAt, setNextRunAt] = useState<string | null>(null);
+  const [lastRunAt, setLastRunAt] = useState<string | null>(null);
+  const [lastRunStatus, setLastRunStatus] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [confirmCreate, setConfirmCreate] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [busyBackupId, setBusyBackupId] = useState<string | null>(null);
-  const [validationResult, setValidationResult] = useState<{ backup: SystemBackup; valid: boolean; checklist: RestoreValidationCheck[] } | null>(null);
+  const [validationResult, setValidationResult] = useState<{
+    backup: SystemBackup;
+    valid: boolean;
+    checklist: RestoreValidationCheck[];
+    // ZIP archives only — deliberately separate from `valid`, which
+    // means "the bytes and contents are sound". An archive can be
+    // perfectly intact and still not be a complete recovery source.
+    restoreReady?: boolean;
+    coverageComplete?: boolean | null;
+    warnings?: string[];
+    disclaimer?: string;
+  } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<SystemBackup | null>(null);
+  const [coverageBackup, setCoverageBackup] = useState<SystemBackup | null>(null);
   const [wizard, setWizard] = useState<WizardState | null>(null);
+  const [scheduleExists, setScheduleExists] = useState(false);
+  const [confirmCancelRestore, setConfirmCancelRestore] = useState(false);
+  const [cancellingRestore, setCancellingRestore] = useState(false);
+
+  const { requestAuthorization, authElement } = useBackupAuthorization();
 
   const load = useCallback(async () => {
     const [backupsRes, scheduleRes, restoresRes] = await Promise.all([
@@ -149,10 +215,19 @@ export function BackupRestorePage() {
     if (scheduleRes.data) {
       setEnabled(scheduleRes.data.enabled);
       setFrequency(scheduleRes.data.frequency);
+      setDayOfMonth(scheduleRes.data.day_of_month ?? 1);
       setHourUtc(scheduleRes.data.hour_utc);
       setDayOfWeek(scheduleRes.data.day_of_week ?? 0);
       setRetentionDays(scheduleRes.data.retention_days);
       setScheduleUpdatedAt(scheduleRes.data.updated_at);
+      setNextRunAt(scheduleRes.data.next_run_at ?? null);
+      setLastRunAt(scheduleRes.data.last_run_at ?? null);
+      setLastRunStatus(scheduleRes.data.last_run_status ?? null);
+      // A schedule that has never been configured still has its seed
+      // row (module16 inserts one), so "exists" means it has actually
+      // been set up — which is what decides whether this is a
+      // schedule_create or a schedule_modify authorization.
+      setScheduleExists(!!scheduleRes.data.updated_by);
     }
     setLoading(false);
   }, []);
@@ -173,31 +248,65 @@ export function BackupRestorePage() {
 
   const createBackup = async () => {
     setConfirmCreate(false);
+    // Module 42 — every protected operation gets its own single-use
+    // grant. A null return means the operator cancelled or the password
+    // was wrong; the Edge Function would refuse anyway, so we simply
+    // stop here rather than calling it and showing a second error.
+    const grantId = await requestAuthorization('create');
+    if (!grantId) return;
+
     setCreating(true);
-    const { data, error } = await supabase.functions.invoke('backup-create', { body: { action: 'create' } });
+    const { data, error } = await supabase.functions.invoke('backup-create', {
+      body: { action: 'create', grantId },
+    });
     setCreating(false);
-    if (error || data?.error) {
-      showToast('error', data?.error || error?.message || 'Backup failed. See Backup History for details.');
+    const createError = await extractInvokeError(data, error);
+    if (createError) {
+      showToast('error', createError, 9000);
       load();
       return;
     }
-    showToast('success', `Backup completed (${formatBytes(data.sizeBytes)}).`);
+    // "Completed" and "complete" are different claims — an archive can
+    // finish successfully and still not contain everything.
+    if (data.isComplete === false) {
+      showToast(
+        'error',
+        `Backup finished (${formatBytes(data.sizeBytes)}) but coverage is incomplete. Open the backup's details to see what was not captured.`,
+        9000
+      );
+    } else {
+      showToast('success', `Backup completed (${formatBytes(data.sizeBytes)}).`);
+    }
     load();
   };
 
   const saveSchedule = async () => {
     if (!profile) return;
+    const grantId = await requestAuthorization(scheduleExists ? 'schedule_modify' : 'schedule_create');
+    if (!grantId) return;
+
     setSavingSchedule(true);
-    const { error } = await supabase.rpc('set_backup_schedule', {
+    // module42's wrapper spends the grant and then delegates to
+    // module16's unchanged set_backup_schedule(), which is what keeps
+    // the backup_schedule row and the real pg_cron job in sync.
+    const { error } = await supabase.rpc('set_backup_schedule_authorized', {
+      p_grant_id: grantId,
+      p_operation: scheduleExists ? 'schedule_modify' : 'schedule_create',
       p_enabled: enabled,
       p_frequency: frequency,
       p_hour_utc: hourUtc,
       p_day_of_week: frequency === 'weekly' ? dayOfWeek : null,
       p_retention_days: retentionDays,
+      p_day_of_month: frequency === 'monthly' ? dayOfMonth : null,
     });
     setSavingSchedule(false);
     if (error) {
-      showToast('error', error.message || 'Could not update the backup schedule.');
+      showToast(
+        'error',
+        error.message?.includes('BACKUP_AUTH_REQUIRED')
+          ? 'That backup authorization is no longer valid. Please authorize again.'
+          : error.message || 'Could not update the backup schedule.'
+      );
       return;
     }
     showToast('success', enabled ? 'Scheduled backups enabled.' : 'Scheduled backups disabled.');
@@ -205,26 +314,75 @@ export function BackupRestorePage() {
   };
 
   const validateBackup = async (backup: SystemBackup) => {
+    const grantId = await requestAuthorization('validate', backup.backup_id, `Backup ${shortId(backup.backup_id)}`);
+    if (!grantId) return;
+
     setBusyBackupId(backup.backup_id);
-    const { data, error } = await supabase.functions.invoke('backup-create', { body: { action: 'validate', backupId: backup.backup_id } });
+    const { data, error } = await supabase.functions.invoke('backup-create', {
+      body: { action: 'validate', backupId: backup.backup_id, grantId },
+    });
     setBusyBackupId(null);
-    if (error) {
-      showToast('error', error.message || 'Validation could not be completed.');
+    const validateError = await extractInvokeError(data, error);
+    if (validateError) {
+      showToast('error', validateError, 9000);
       return;
     }
-    setValidationResult({ backup, valid: !!data.valid, checklist: data.checklist ?? [] });
+    // ZIP archives report archiveIntact/restoreReady separately; the
+    // legacy format reports a single `valid`. Both are surfaced without
+    // collapsing the ZIP's two distinct verdicts into one.
+    setValidationResult({
+      backup,
+      valid: data.archiveFormat === 'zip' ? !!data.archiveIntact : !!data.valid,
+      checklist: data.checks ?? data.checklist ?? [],
+      restoreReady: data.archiveFormat === 'zip' ? !!data.restoreReady : undefined,
+      coverageComplete: data.archiveFormat === 'zip' ? data.coverageComplete : undefined,
+      warnings: data.warnings ?? [],
+      disclaimer: data.disclaimer,
+    });
     load();
   };
 
   const downloadBackup = async (backup: SystemBackup) => {
+    const grantId = await requestAuthorization('download', backup.backup_id, `Backup ${shortId(backup.backup_id)}`);
+    if (!grantId) return;
+
     setBusyBackupId(backup.backup_id);
-    const { data, error } = await supabase.functions.invoke('backup-create', { body: { action: 'download', backupId: backup.backup_id } });
+    const { data, error } = await supabase.functions.invoke('backup-create', {
+      body: { action: 'download', backupId: backup.backup_id, grantId },
+    });
     setBusyBackupId(null);
-    if (error || !data?.url) {
-      showToast('error', data?.error || error?.message || 'Could not create a download link.');
+    const downloadError = await extractInvokeError(data, error);
+    if (downloadError || !data?.url) {
+      showToast('error', downloadError ?? 'Could not create a download link.', 9000);
       return;
     }
+    if (backup.is_encrypted) {
+      showToast(
+        'success',
+        'Download link opened. This archive is encrypted — it is not a readable ZIP until decrypted with the escrowed key.',
+        9000
+      );
+    }
     window.open(data.url, '_blank');
+  };
+
+  const deleteBackup = async (backup: SystemBackup) => {
+    setConfirmDelete(null);
+    const grantId = await requestAuthorization('delete', backup.backup_id, `Backup ${shortId(backup.backup_id)}`);
+    if (!grantId) return;
+
+    setBusyBackupId(backup.backup_id);
+    const { data, error } = await supabase.functions.invoke('backup-create', {
+      body: { action: 'delete', backupId: backup.backup_id, grantId },
+    });
+    setBusyBackupId(null);
+    const deleteError = await extractInvokeError(data, error);
+    if (deleteError) {
+      showToast('error', deleteError, 9000);
+      return;
+    }
+    showToast('success', 'Backup deleted.');
+    load();
   };
 
   // --- Restore wizard -------------------------------------------------
@@ -234,10 +392,24 @@ export function BackupRestorePage() {
       showToast('error', 'Another recovery operation is currently in progress.');
       return;
     }
+    const grantId = await requestAuthorization('restore_begin', backup.backup_id, `Backup ${shortId(backup.backup_id)}`);
+    if (!grantId) return;
+
     setWizard({ step: 'validating', backup, typedPhrase: '' });
-    const { data, error } = await supabase.functions.invoke('backup-restore', { body: { action: 'begin', backupId: backup.backup_id } });
-    if (error || data?.error) {
-      showToast('error', data?.error || error?.message || 'Could not start restore validation.');
+
+    // The plan is fetched first and separately: it is read-only, it
+    // writes nothing, and the operator should see the real blast radius
+    // before an operation row or a lock exists.
+    const planRes = await supabase.functions.invoke('backup-restore', {
+      body: { action: 'plan', backupId: backup.backup_id },
+    });
+
+    const { data, error } = await supabase.functions.invoke('backup-restore', {
+      body: { action: 'begin', backupId: backup.backup_id, grantId },
+    });
+    const beginError = await extractInvokeError(data, error);
+    if (beginError) {
+      showToast('error', beginError, 9000);
       setWizard(null);
       load();
       return;
@@ -250,6 +422,8 @@ export function BackupRestorePage() {
       checklist: data.checklist,
       valid: data.valid,
       typedPhrase: '',
+      plan: planRes.error ? undefined : planRes.data,
+      planError: planRes.error ? planRes.error.message : (planRes.data?.error as string | undefined),
       result: data.valid ? undefined : { status: data.status, message: data.message, checks: data.checklist },
     });
     load();
@@ -260,8 +434,9 @@ export function BackupRestorePage() {
     const { data, error } = await supabase.functions.invoke('backup-restore', {
       body: { action: 'confirm', operationId: wizard.operationId, confirmationPhrase: wizard.typedPhrase },
     });
-    if (error || data?.error) {
-      showToast('error', data?.error || error?.message || 'Confirmation failed.');
+    const confirmError = await extractInvokeError(data, error);
+    if (confirmError) {
+      showToast('error', confirmError, 9000);
       return;
     }
     setWizard((w) => (w ? { ...w, step: 'ready' } : w));
@@ -269,8 +444,23 @@ export function BackupRestorePage() {
 
   const executeRestore = async () => {
     if (!wizard?.operationId) return;
+
+    // A SECOND, separate authorization immediately before anything is
+    // written. The restore_begin grant was already spent and cannot be
+    // replayed here — this is the "revalidate authorization immediately
+    // before executing a destructive operation" requirement, enforced
+    // by the Edge Function consuming a distinct restore_execute grant.
+    const grantId = await requestAuthorization(
+      'restore_execute',
+      wizard.operationId,
+      `Restore operation ${shortId(wizard.operationId)} into this environment`
+    );
+    if (!grantId) return;
+
     setWizard((w) => (w ? { ...w, step: 'executing' } : w));
-    const { data, error } = await supabase.functions.invoke('backup-restore', { body: { action: 'execute', operationId: wizard.operationId } });
+    const { data, error } = await supabase.functions.invoke('backup-restore', {
+      body: { action: 'execute', operationId: wizard.operationId, grantId },
+    });
     load();
     if (error) {
       setWizard((w) => (w ? { ...w, step: 'result', result: { status: 'restore_failed', message: error.message || 'Restore failed.' } } : w));
@@ -280,11 +470,93 @@ export function BackupRestorePage() {
       setWizard((w) => (w ? { ...w, step: 'result', result: { status: 'restore_failed', message: data.error, checks: data.checklist } } : w));
       return;
     }
-    setWizard((w) => (w ? { ...w, step: 'result', result: { status: data.status, message: data.message, checks: data.checks } } : w));
+    setWizard((w) =>
+      w
+        ? {
+            ...w,
+            step: 'result',
+            result: {
+              status: data.status,
+              message: data.message,
+              checks: data.checks,
+              skippedTables: data.skippedTables,
+              manualActionsRequired: data.manualActionsRequired,
+            },
+          }
+        : w
+    );
   };
 
-  const closeWizard = () => {
+  /**
+   * Closes the wizard AND releases the operation row.
+   *
+   * This previously only cleared local state, which orphaned the
+   * system_restores row that begin_restore_operation() had already
+   * inserted — holding the restore lock forever and leaving a permanent
+   * "RECOVERY IN PROGRESS" banner. Cancelling in the UI now actually
+   * cancels the operation server-side (module44).
+   *
+   * An operation that has reached a terminal status (the 'result' step)
+   * needs no cancelling, so that case just closes.
+   */
+  const closeWizard = async () => {
+    const operationId = wizard?.operationId;
+    const alreadyFinished = wizard?.step === 'result';
     setWizard(null);
+
+    if (operationId && !alreadyFinished) {
+      const { data, error } = await supabase.rpc('cancel_restore_operation', {
+        p_operation_id: operationId,
+        p_force: false,
+      });
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error || (row && !row.ok && row.reason !== 'already_finished')) {
+        // Surfaced rather than swallowed: if the release failed, the
+        // operator needs to know the lock is still held.
+        showToast(
+          'error',
+          'The recovery operation could not be released. It may still be holding the restore lock — reopen this page and use "Cancel recovery".'
+        );
+      }
+    }
+    load();
+  };
+
+  /** Cancels the stuck operation shown in the banner. */
+  const cancelActiveRestore = async (force: boolean) => {
+    if (!activeRestore) return;
+    setCancellingRestore(true);
+    const { data, error } = await supabase.rpc('cancel_restore_operation', {
+      p_operation_id: activeRestore.operation_id,
+      p_force: force,
+    });
+    setCancellingRestore(false);
+    setConfirmCancelRestore(false);
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error) {
+      showToast('error', error.message || 'Could not cancel this recovery operation.');
+      return;
+    }
+    if (row && !row.ok) {
+      const messages: Record<string, string> = {
+        not_found: 'That recovery operation no longer exists.',
+        already_finished: 'That recovery operation has already finished.',
+        in_flight:
+          'This restore may still be writing data, so it was not cancelled. If it is genuinely stalled, wait until 30 minutes have passed since it started and then force-cancel it.',
+        too_recent_to_force:
+          'This restore started less than 30 minutes ago and may still be running. Force-cancel is refused until then.',
+      };
+      showToast('error', messages[row.reason] ?? 'Could not cancel this recovery operation.');
+      load();
+      return;
+    }
+    showToast(
+      'success',
+      row?.reason === 'force_cancelled'
+        ? 'Recovery force-cancelled. Review the restore details — partially applied changes were NOT rolled back.'
+        : 'Recovery cancelled. No data was modified.'
+    );
     load();
   };
 
@@ -296,17 +568,41 @@ export function BackupRestorePage() {
         actions={<DashboardHeaderActions lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={onRefresh} />}
       />
 
+      {/* Placed first deliberately: until this password exists, every
+          protected operation on this page is refused by the server, so
+          an operator needs to see that before trying anything else. */}
+      <div style={{ marginBottom: 20 }}>
+        <BackupSecurityPanel />
+      </div>
+
       {activeRestore && (
         <div className="card" style={{ marginBottom: 20, background: 'var(--color-danger)', color: '#fff' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Lock size={18} />
-            <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Lock size={18} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 220 }}>
               <strong>SAFESPACE RECOVERY IN PROGRESS</strong>
               <div style={{ fontSize: 12.5, opacity: 0.9 }}>
-                A restore operation is active ({RESTORE_STATUS_LABEL[activeRestore.status]}). Normal backup/restore actions are
-                unavailable until it finishes. Other application services are not affected by this restore scope.
+                A restore operation is active ({RESTORE_STATUS_LABEL[activeRestore.status] ?? activeRestore.status}). Normal
+                backup/restore actions are unavailable until it finishes. Other application services are not affected by this
+                restore scope.
               </div>
+              {/* Nothing has been written in these states, so say so —
+                  an operator staring at a red banner needs to know
+                  whether cancelling is safe. */}
+              {['pending', 'awaiting_confirmation', 'confirmed'].includes(activeRestore.status) && (
+                <div style={{ fontSize: 12, opacity: 0.9, marginTop: 5 }}>
+                  This operation has not written any data yet — it is safe to cancel. Started {formatUtc(activeRestore.created_at)}.
+                </div>
+              )}
             </div>
+            <button
+              className="btn btn-outline btn-sm"
+              style={{ background: '#fff', flexShrink: 0 }}
+              onClick={() => setConfirmCancelRestore(true)}
+              disabled={cancellingRestore}
+            >
+              {cancellingRestore ? 'Cancelling…' : 'Cancel recovery'}
+            </button>
           </div>
         </div>
       )}
@@ -392,7 +688,37 @@ export function BackupRestorePage() {
           </div>
           <div>
             <span className="label">Scheduled Backups</span>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{enabled ? `${frequency === 'daily' ? 'Daily' : `Weekly (${DAY_LABELS[dayOfWeek]})`} at ${String(hourUtc).padStart(2, '0')}:00 UTC` : 'Disabled'}</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {enabled
+                ? `${
+                    frequency === 'daily'
+                      ? 'Daily'
+                      : frequency === 'weekly'
+                        ? `Weekly (${DAY_LABELS[dayOfWeek]})`
+                        : `Monthly (day ${dayOfMonth})`
+                  } at ${String(hourUtc).padStart(2, '0')}:00 UTC`
+                : 'Disabled'}
+            </div>
+            {/* Real run state from backup_schedule, not inferred from the
+                backup list. "Never run" is shown as exactly that. */}
+            {enabled && (
+              <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 3 }}>
+                Next: {nextRunAt ? formatUtc(nextRunAt) : 'not computed'} · Last:{' '}
+                {lastRunAt ? (
+                  <>
+                    {formatUtc(lastRunAt)}
+                    {lastRunStatus && (
+                      <span style={{ color: lastRunStatus === 'failed' ? 'var(--color-danger)' : undefined }}>
+                        {' '}
+                        ({lastRunStatus.replace(/_/g, ' ')})
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  'never run'
+                )}
+              </div>
+            )}
           </div>
           <div>
             <span className="label">Retention</span>
@@ -422,6 +748,7 @@ export function BackupRestorePage() {
             <select className="input" value={frequency} onChange={(e) => setFrequency(e.target.value as BackupFrequency)}>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
             </select>
           </div>
           {frequency === 'weekly' && (
@@ -432,6 +759,24 @@ export function BackupRestorePage() {
                   <option key={d} value={i}>{d}</option>
                 ))}
               </select>
+            </div>
+          )}
+          {frequency === 'monthly' && (
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label className="label">Day of month</label>
+              <select className="input" value={dayOfMonth} onChange={(e) => setDayOfMonth(Number(e.target.value))}>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+              {/* Stated rather than silently enforced: an operator who
+                  wants the 31st deserves to know why it is absent. */}
+              <p style={{ fontSize: 11.5, color: 'var(--color-text-muted)', margin: '5px 0 0' }}>
+                Only 1–28 are offered. Cron does not fire on a day a month does not have, so a schedule set for the 29th,
+                30th or 31st would silently skip shorter months with nothing in any log to show a run was due.
+              </p>
             </div>
           )}
           <div className="field" style={{ marginBottom: 0 }}>
@@ -489,7 +834,9 @@ export function BackupRestorePage() {
                   <th>Date / Time (UTC)</th>
                   <th>Type</th>
                   <th>Status</th>
+                  <th>Format</th>
                   <th>Size</th>
+                  <th>Coverage</th>
                   <th>Integrity</th>
                   <th>Retention</th>
                   <th className="table-actions-cell"></th>
@@ -517,7 +864,39 @@ export function BackupRestorePage() {
                       <td>{formatUtc(b.started_at)}</td>
                       <td>{BACKUP_TYPE_LABEL[b.backup_type] ?? b.backup_type}</td>
                       <td><StatusBadge label={BACKUP_STATUS_LABEL[b.status] ?? b.status} /></td>
+                      <td style={{ fontSize: 12 }}>
+                        {/* Legacy rows have no archive_format and must not be
+                            displayed as ZIP archives they are not. */}
+                        {b.archive_format === 'zip' ? 'ZIP' : b.archive_format === 'json_gz' ? 'Legacy' : 'Legacy'}
+                        {b.is_encrypted && (
+                          <span title={`Encrypted (${b.encryption_algorithm ?? 'AES-256-GCM'})`} style={{ marginLeft: 5, verticalAlign: 'middle' }}>
+                            <Lock size={11} />
+                          </span>
+                        )}
+                      </td>
                       <td>{formatBytes(b.size_bytes)}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {/* Three genuinely different states, never collapsed:
+                            complete, finished-but-incomplete, and "this
+                            format never recorded coverage at all". */}
+                        {b.status !== 'completed' ? (
+                          '—'
+                        ) : b.is_complete === true ? (
+                          <span style={{ color: 'var(--color-success)' }}>Complete</span>
+                        ) : b.is_complete === false ? (
+                          <button
+                            className="btn-link"
+                            style={{ color: 'var(--color-warning)', font: 'inherit', padding: 0, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                            onClick={() => setCoverageBackup(b)}
+                          >
+                            Incomplete
+                          </button>
+                        ) : (
+                          <span style={{ color: 'var(--color-text-muted)' }} title="This backup predates coverage reporting.">
+                            Not recorded
+                          </span>
+                        )}
+                      </td>
                       <td><StatusBadge label={VERIFICATION_LABEL[b.verification_status]} /></td>
                       <td style={{ fontSize: 12 }}>{expired ? 'Expired' : `${b.retention_days}d`}</td>
                       <td className="table-actions-cell" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -539,6 +918,14 @@ export function BackupRestorePage() {
                                 <RotateCcw size={12} /> Restore
                               </button>
                             )}
+                            <button
+                              className="btn btn-outline btn-sm"
+                              onClick={() => setConfirmDelete(b)}
+                              disabled={busyBackupId === b.backup_id || !!activeRestore}
+                              title={activeRestore ? 'A recovery operation is currently in progress' : 'Permanently delete this archive'}
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
                           </>
                         )}
                         {b.status === 'failed' && b.error_message && (
@@ -602,11 +989,136 @@ export function BackupRestorePage() {
       {confirmCreate && (
         <ConfirmDialog
           title="Create Backup"
-          body="This will create a new administrative configuration backup (municipalities, barangays, shelters, and administrator accounts). Do you want to continue?"
+          body="This creates a new ZIP archive of this environment: all in-scope database tables, the current schema, configuration metadata, and the Supabase Auth user inventory. Credential-bearing tables and secret values are never included. You will be asked for the backup authorization password next."
           confirmLabel="Create Backup"
           onConfirm={createBackup}
           onCancel={() => setConfirmCreate(false)}
         />
+      )}
+
+      {confirmCancelRestore && activeRestore && (
+        <ConfirmModal
+          open
+          icon={<XCircle size={18} />}
+          danger={!['pending', 'awaiting_confirmation', 'confirmed'].includes(activeRestore.status)}
+          title="Cancel this recovery operation?"
+          description={
+            ['pending', 'awaiting_confirmation', 'confirmed'].includes(activeRestore.status) ? (
+              <>
+                <p style={{ marginTop: 0 }}>
+                  Operation <strong>{shortId(activeRestore.operation_id)}</strong> is at{' '}
+                  <strong>{RESTORE_STATUS_LABEL[activeRestore.status] ?? activeRestore.status}</strong> and has{' '}
+                  <strong>not written any data</strong>.
+                </p>
+                <p style={{ marginBottom: 0 }}>
+                  Cancelling releases the recovery lock so backups and restores work normally again. Nothing in the database
+                  changes.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ marginTop: 0 }}>
+                  Operation <strong>{shortId(activeRestore.operation_id)}</strong> is at{' '}
+                  <strong>{RESTORE_STATUS_LABEL[activeRestore.status] ?? activeRestore.status}</strong>, which means it may
+                  still be <strong>actively writing data</strong>.
+                </p>
+                <p style={{ marginBottom: 0 }}>
+                  It will only be force-cancelled if it has been stalled for over 30 minutes. Partially applied changes are{' '}
+                  <strong>not rolled back</strong> — check the pre-restore safety backup before retrying.
+                </p>
+              </>
+            )
+          }
+          confirmLabel="Cancel Recovery"
+          loadingLabel="Cancelling…"
+          cancelLabel="Keep waiting"
+          loading={cancellingRestore}
+          onCancel={() => setConfirmCancelRestore(false)}
+          onConfirm={() =>
+            void cancelActiveRestore(!['pending', 'awaiting_confirmation', 'confirmed'].includes(activeRestore.status))
+          }
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          open
+          icon={<Trash2 size={18} />}
+          danger
+          title="Delete this backup permanently?"
+          description={
+            <>
+              <p style={{ marginTop: 0 }}>
+                Archive <strong>{shortId(confirmDelete.backup_id)}</strong> from {formatUtc(confirmDelete.started_at)} (
+                {formatBytes(confirmDelete.size_bytes)}) will be removed from storage and from the backup catalog.
+              </p>
+              <p style={{ marginBottom: 0 }}>
+                <strong>This cannot be undone.</strong> The server will refuse if this archive is referenced by a restore
+                operation, or if it is the only verified backup you have left. You will be asked for the backup
+                authorization password next.
+              </p>
+            </>
+          }
+          confirmLabel="Delete Backup"
+          loadingLabel="Deleting…"
+          requirePhrase={`DELETE ${shortId(confirmDelete.backup_id)}`}
+          loading={busyBackupId === confirmDelete.backup_id}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => deleteBackup(confirmDelete)}
+        />
+      )}
+
+      {coverageBackup && (
+        <Modal
+          title="Backup Coverage Report"
+          onClose={() => setCoverageBackup(null)}
+          footer={<button className="btn btn-primary" onClick={() => setCoverageBackup(null)}>Close</button>}
+        >
+          <p style={{ fontSize: 13, marginTop: 0 }}>
+            Archive <strong>{shortId(coverageBackup.backup_id)}</strong> finished successfully, but it does not contain
+            everything. Each source below was recorded from what actually happened during the run.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(coverageBackup.coverage ?? []).map((entry, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  fontSize: 12.5,
+                  paddingBottom: 8,
+                  borderBottom: '1px solid var(--color-border)',
+                }}
+              >
+                {entry.status === 'included' ? (
+                  <CheckCircle2 size={14} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-success)' }} />
+                ) : entry.status === 'partial' ? (
+                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-warning)' }} />
+                ) : (
+                  <XCircle size={14} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-text-muted)' }} />
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <div>
+                    <strong>{entry.source}</strong>
+                    <span style={{ color: 'var(--color-text-muted)' }}>
+                      {' — '}
+                      {entry.status}
+                      {entry.reason ? ` (${entry.reason.replace(/_/g, ' ')})` : ''}
+                      {typeof entry.rows === 'number' ? `, ${entry.rows.toLocaleString()} rows` : ''}
+                      {typeof entry.objects === 'number' ? `, ${entry.objects.toLocaleString()} objects` : ''}
+                    </span>
+                  </div>
+                  {entry.note && <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 2 }}>{entry.note}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 0, marginTop: 12 }}>
+            Sources excluded as <em>secret bearing</em> or <em>backup catalog</em> are deliberate and permanent — they are
+            not counted against completeness.
+          </p>
+        </Modal>
       )}
 
       {validationResult && (
@@ -614,12 +1126,47 @@ export function BackupRestorePage() {
           <p style={{ fontSize: 13, marginBottom: 10 }}>
             <strong>{formatUtc(validationResult.backup.started_at)}</strong> —{' '}
             {validationResult.valid ? (
-              <span style={{ color: 'var(--color-success)' }}>SAFE TO PROCEED</span>
+              <span style={{ color: 'var(--color-success)' }}>Archive integrity verified</span>
             ) : (
-              <span style={{ color: 'var(--color-danger)' }}>Not valid</span>
+              <span style={{ color: 'var(--color-danger)' }}>Failed integrity checks</span>
             )}
           </p>
+
+          {/* Two separate verdicts, never merged: an archive can be
+              byte-perfect and still be an incomplete recovery source.
+              The old single "SAFE TO PROCEED" line overstated the
+              first as if it proved the second. */}
+          {validationResult.restoreReady !== undefined && (
+            <p style={{ fontSize: 12.5, marginTop: 0, marginBottom: 10 }}>
+              Restore readiness:{' '}
+              {validationResult.restoreReady ? (
+                <span style={{ color: 'var(--color-success)' }}>complete archive, every source captured</span>
+              ) : (
+                <span style={{ color: 'var(--color-warning)' }}>
+                  restorable, but this archive does not contain everything
+                </span>
+              )}
+            </p>
+          )}
+
           <ValidationChecklist checklist={validationResult.checklist} />
+
+          {(validationResult.warnings ?? []).length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <h5 style={{ margin: '0 0 6px', fontSize: 12.5 }}>Warnings</h5>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                {(validationResult.warnings ?? []).map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {validationResult.disclaimer && (
+            <p style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 12, marginBottom: 0 }}>
+              {validationResult.disclaimer}
+            </p>
+          )}
         </Modal>
       )}
 
@@ -638,12 +1185,104 @@ export function BackupRestorePage() {
               <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', marginBottom: 4 }}>Selected Backup</p>
               <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>BAK-{shortId(wizard.backup.backup_id)} — {formatUtc(wizard.backup.completed_at)}</p>
               <ValidationChecklist checklist={wizard.checklist} />
+
+              {/* The measured plan. Every number is read from the actual
+                  archive and the actual target — never an estimate. */}
+              {wizard.planError && (
+                <p style={{ fontSize: 12.5, color: 'var(--color-danger)', marginTop: 14 }}>
+                  The restore plan could not be generated: {wizard.planError}. Do not proceed without it.
+                </p>
+              )}
+
+              {wizard.plan?.legacy && (
+                <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', marginTop: 14 }}>
+                  This is a legacy administrative-configuration backup. Its restore scope is municipalities, barangays and
+                  shelters only.
+                </p>
+              )}
+
+              {wizard.plan && !wizard.plan.legacy && (
+                <div style={{ marginTop: 16 }}>
+                  <h5 style={{ margin: '0 0 8px', fontSize: 13 }}>Restore Plan</h5>
+
+                  {wizard.plan.crossEnvironment && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'var(--color-surface-muted)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+                      <ShieldAlert size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--color-danger)' }} />
+                      <div style={{ fontSize: 12.5 }}>
+                        <strong>Cross-environment restore.</strong> This archive came from{' '}
+                        <code>{wizard.plan.sourceEnvironment}</code> but the target is <code>{wizard.plan.targetEnvironment}</code>.
+                      </div>
+                    </div>
+                  )}
+
+                  {wizard.plan.coverageComplete === false && (
+                    <p style={{ fontSize: 12.5, color: 'var(--color-warning)', marginTop: 0 }}>
+                      This archive's coverage is incomplete — it will restore only what it actually contains.
+                    </p>
+                  )}
+
+                  <div className="table-responsive" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Table</th>
+                          <th>In archive</th>
+                          <th>Live now</th>
+                          <th>Overwrites</th>
+                          <th>Inserts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(wizard.plan.tables ?? []).map((t) => (
+                          <tr key={t.table}>
+                            <td style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{t.order}</td>
+                            <td style={{ fontSize: 12 }}>{t.table}</td>
+                            <td style={{ fontSize: 12 }}>{t.archiveRows.toLocaleString()}</td>
+                            <td style={{ fontSize: 12 }}>{t.liveRows.toLocaleString()}</td>
+                            <td style={{ fontSize: 12, color: t.wouldOverwrite > 0 ? 'var(--color-danger)' : undefined }}>
+                              {t.wouldOverwrite.toLocaleString()}
+                            </td>
+                            <td style={{ fontSize: 12 }}>{t.wouldInsert.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p style={{ fontSize: 11.5, color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
+                    Tables are applied in the order shown, derived from the live foreign-key graph so parents precede
+                    children. "Overwrites" is sampled over the first 1,000 identifiers per table — a measured lower bound.
+                  </p>
+
+                  {(wizard.plan.excludedByPolicy ?? []).length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <h5 style={{ margin: '0 0 6px', fontSize: 12.5 }}>Present in the archive but never restored</h5>
+                      {(wizard.plan.excludedByPolicy ?? []).map((x) => (
+                        <div key={x.table} style={{ fontSize: 12, marginBottom: 5 }}>
+                          <strong>{x.table}</strong>
+                          <div style={{ color: 'var(--color-text-muted)', fontSize: 11.5 }}>{x.reason}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {(wizard.plan.foreignKeyCycles ?? []).length > 0 && (
+                    <p style={{ fontSize: 12, color: 'var(--color-danger)', marginTop: 10 }}>
+                      Skipped due to a foreign-key cycle that cannot be safely ordered:{' '}
+                      {(wizard.plan.foreignKeyCycles ?? []).join(', ')}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'var(--color-surface-muted)', borderRadius: 10, padding: 12, marginTop: 16 }}>
                 <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-danger)' }} />
                 <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                  <strong>Scope:</strong> municipalities, barangays, and shelters will be inserted/updated from this
-                  backup (rows added since the backup are not removed). Administrator accounts are never restored. A
-                  fresh safety backup of the current state will be created before any change is applied.
+                  <strong>How this restore behaves:</strong> rows are inserted or updated by primary key. Nothing is ever
+                  deleted or truncated, so anything created since the backup stays. Administrator accounts, the audit log
+                  and terms acceptances are never restored. A verified safety backup of the current state is taken first,
+                  and the restore is abandoned if that fails. Supabase Auth logins are <em>not</em> restored and must be
+                  reconciled manually afterwards.
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
@@ -709,7 +1348,12 @@ export function BackupRestorePage() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                   <CheckCircle2 size={20} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
                   <div>
-                    <strong>Restore completed and verified.</strong>
+                    {/* Deliberately NOT "fully restored". The data was
+                        applied and the health checks passed — auth
+                        identities and any skipped tables are separate,
+                        and are listed below so this cannot be read as a
+                        complete system recovery. */}
+                    <strong>Restore applied and verified.</strong>
                     <p style={{ fontSize: 13, marginTop: 6 }}>{wizard.result.message}</p>
                   </div>
                 </div>
@@ -727,6 +1371,39 @@ export function BackupRestorePage() {
                   <ValidationChecklist checklist={wizard.result.checks} />
                 </div>
               )}
+
+              {(wizard.result.skippedTables ?? []).length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <h5 style={{ margin: '0 0 6px', fontSize: 12.5 }}>Not applied</h5>
+                  {(wizard.result.skippedTables ?? []).map((s) => (
+                    <div key={`${s.table}-${s.reason}`} style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                      <strong>{s.table}</strong> — {s.reason.replace(/_/g, ' ')}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(wizard.result.manualActionsRequired ?? []).length > 0 && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    background: 'var(--color-surface-muted)',
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <h5 style={{ margin: '0 0 6px', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <AlertTriangle size={14} style={{ color: 'var(--color-warning)' }} />
+                    Still required — this restore is not a complete recovery on its own
+                  </h5>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.55 }}>
+                    {(wizard.result.manualActionsRequired ?? []).map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
                 <button className="btn btn-primary" onClick={closeWizard}>Close</button>
               </div>
@@ -734,6 +1411,11 @@ export function BackupRestorePage() {
           )}
         </Modal>
       )}
+
+      {/* The dedicated-password prompt. Rendered once; every protected
+          operation above routes through its promise. This is a UI
+          affordance only — the enforcement is server-side. */}
+      {authElement}
     </div>
   );
 }

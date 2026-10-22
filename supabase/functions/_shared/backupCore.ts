@@ -11,6 +11,13 @@
 // by backup-create's action dispatcher instead of backup-restore's.)
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import {
+  ARCHIVE_FORMAT,
+  ARCHIVE_FORMAT_VERSION,
+  buildArchive,
+  validateArchiveBytes,
+  type ArchiveValidation,
+} from './archiveBuilder.ts';
 
 // Administrative/reference data ONLY — never survivors, case_reports,
 // case_*, user_verifications, case_access_tokens/case_client_links,
@@ -252,6 +259,257 @@ export async function createBackupExport(
 
     return { ok: false, backupId: backupRow.backup_id, status: 'failed', error: message };
   }
+}
+
+// =====================================================================
+// Module 42 — the ZIP export path.
+//
+// Deliberately a SEPARATE function from createBackupExport above rather
+// than a rewrite of it: module16/23 backups already in the bucket are
+// .json.gz and must stay readable/validatable/restorable exactly as they
+// are. Which path a backup took is recorded in system_backups.
+// archive_format, so nothing has to be inferred from a filename.
+// =====================================================================
+export async function createZipBackupExport(
+  adminClient: SupabaseClient,
+  backupType: 'manual' | 'scheduled' | 'pre_restore',
+  callerProfileId: string | null,
+  includeStorageBinaries: boolean,
+  /**
+   * module43 — for a scheduled run, the backup row already claimed by
+   * claim_scheduled_backup_occurrence(). Passing it makes this function
+   * REUSE that row instead of inserting another, which is what keeps the
+   * duplicate-occurrence guard meaningful: if this inserted its own row
+   * the claimed one would be orphaned in 'running' forever.
+   */
+  existingBackupId?: string
+): Promise<BackupExportResult & { isComplete?: boolean; coverage?: unknown }> {
+  const startedAt = Date.now();
+
+  const { data: scheduleRow } = await adminClient
+    .from('backup_schedule')
+    .select('retention_days')
+    .eq('schedule_id', '00000000-0000-0000-0000-000000000001')
+    .single();
+  const retentionDays = scheduleRow?.retention_days ?? 30;
+
+  // Resolved to a definite id before anything else runs, so the catch
+  // block below (which must always be able to mark the row 'failed')
+  // never has to deal with a nullable binding.
+  let resolvedBackupId: string;
+  if (existingBackupId) {
+    resolvedBackupId = existingBackupId;
+    // The claimed row was created by the RPC without an initiator (cron
+    // has no human caller); stamp the retention actually in force.
+    await adminClient
+      .from('system_backups')
+      .update({ initiated_by: callerProfileId, retention_days: retentionDays })
+      .eq('backup_id', existingBackupId);
+  } else {
+    const { data: inserted, error: insertErr } = await adminClient
+      .from('system_backups')
+      .insert({ backup_type: backupType, status: 'running', initiated_by: callerProfileId, retention_days: retentionDays })
+      .select('backup_id')
+      .single();
+    if (insertErr || !inserted) {
+      return { ok: false, backupId: '', status: 'failed', error: insertErr?.message ?? 'Could not start backup' };
+    }
+    resolvedBackupId = inserted.backup_id;
+  }
+  const backupRow = { backup_id: resolvedBackupId };
+
+  const projectRef = projectRefFromUrl(Deno.env.get('SUPABASE_URL') ?? '');
+
+  try {
+    const archive = await buildArchive(adminClient, {
+      backupId: backupRow.backup_id,
+      backupType,
+      projectRef,
+      schemaVersion: SCHEMA_VERSION,
+      includeStorageBinaries,
+      initiatedBy: callerProfileId,
+    });
+
+    const { error: uploadErr } = await adminClient.storage
+      .from('system-backups')
+      .upload(archive.fileName, archive.bytes, {
+        contentType: archive.isEncrypted ? 'application/octet-stream' : 'application/zip',
+      });
+    if (uploadErr) throw new Error(`Failed to store backup archive: ${uploadErr.message}`);
+
+    // Read the object back and re-digest it before declaring success —
+    // this is what catches a truncated or partially-written upload.
+    // Without it, "upload returned no error" would be the only evidence
+    // the bytes actually landed intact.
+    const { data: verifyBlob, error: verifyErr } = await adminClient.storage.from('system-backups').download(archive.fileName);
+    if (verifyErr || !verifyBlob) throw new Error(`Stored archive could not be read back for verification: ${verifyErr?.message ?? 'unknown error'}`);
+    const storedBack = await sha256Hex(new Uint8Array(await verifyBlob.arrayBuffer()));
+    if (storedBack !== archive.storedChecksum) {
+      throw new Error('Stored archive failed read-back verification — the uploaded bytes do not match what was generated (incomplete or corrupt upload).');
+    }
+
+    const rowCounts: Record<string, number> = {};
+    for (const entry of archive.coverage) {
+      if (entry.category === 'database' && entry.status === 'included' && typeof entry.rows === 'number') {
+        rowCounts[entry.source.replace(/^public\./, '')] = entry.rows;
+      }
+    }
+
+    const durationMs = Date.now() - startedAt;
+    await adminClient
+      .from('system_backups')
+      .update({
+        status: 'completed',
+        storage_path: archive.fileName,
+        size_bytes: archive.bytes.byteLength,
+        row_counts: rowCounts,
+        completed_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + retentionDays * 86_400_000).toISOString(),
+        checksum_sha256: archive.storedChecksum,
+        manifest_sha256: archive.manifestChecksum,
+        archive_format: ARCHIVE_FORMAT,
+        format_version: ARCHIVE_FORMAT_VERSION,
+        coverage: archive.coverage,
+        excluded: archive.excluded,
+        table_count: archive.tableCount,
+        storage_object_count: archive.storageObjectCount,
+        is_encrypted: archive.isEncrypted,
+        encryption_algorithm: archive.encryptionAlgorithm,
+        is_complete: archive.isComplete,
+        // A fresh archive has been read back and digest-matched, but it
+        // has NOT had its internal manifest/member checksums walked yet
+        // — that is what the Validate action does. Marking it 'verified'
+        // here would claim a check that has not run. The pre_restore
+        // exception from module16 is kept for the same reason stated
+        // there (created and consumed seconds apart inside one restore).
+        verification_status: backupType === 'pre_restore' ? 'verified' : 'unverified',
+        verified_at: backupType === 'pre_restore' ? new Date().toISOString() : null,
+        schema_version: SCHEMA_VERSION,
+        project_ref: projectRef,
+      })
+      .eq('backup_id', backupRow.backup_id);
+
+    await adminClient.from('audit_logs').insert({
+      profile_id: callerProfileId,
+      action: archive.isComplete ? 'BACKUP_CREATED' : 'BACKUP_CREATED_INCOMPLETE',
+      table_name: 'system_backups',
+      record_id: backupRow.backup_id,
+      new_values: {
+        backup_type: backupType,
+        archive_format: ARCHIVE_FORMAT,
+        size_bytes: archive.bytes.byteLength,
+        duration_ms: durationMs,
+        table_count: archive.tableCount,
+        storage_object_count: archive.storageObjectCount,
+        is_complete: archive.isComplete,
+        encrypted: archive.isEncrypted,
+        excluded: archive.excluded.map((e) => ({ source: e.source, reason: e.reason })),
+      },
+    });
+
+    // An incomplete archive is a real operational problem even though
+    // the run itself finished — the technical admins are told, per §7.
+    if (!archive.isComplete && backupType !== 'pre_restore') {
+      await notifyTechnicalAdmins(
+        adminClient,
+        'Backup Completed With Incomplete Coverage',
+        `A ${backupType} backup finished but did not capture everything: ${archive.excluded
+          .filter((e) => e.reason !== 'secret_bearing' && e.reason !== 'backup_catalog')
+          .map((e) => e.source)
+          .slice(0, 5)
+          .join(', ')}. Open Backup & Restore to review the coverage report.`
+      );
+    }
+
+    if (backupType !== 'pre_restore') await pruneExpired(adminClient);
+
+    return {
+      ok: true,
+      backupId: backupRow.backup_id,
+      status: 'completed',
+      sizeBytes: archive.bytes.byteLength,
+      durationMs,
+      rowCounts,
+      isComplete: archive.isComplete,
+      coverage: archive.coverage,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[backupCore] ZIP export failed:', message);
+    await adminClient
+      .from('system_backups')
+      .update({ status: 'failed', completed_at: new Date().toISOString(), error_message: message.slice(0, 500) })
+      .eq('backup_id', backupRow.backup_id);
+    await adminClient.from('audit_logs').insert({
+      profile_id: callerProfileId,
+      action: 'BACKUP_FAILED',
+      table_name: 'system_backups',
+      record_id: backupRow.backup_id,
+      new_values: { backup_type: backupType, archive_format: ARCHIVE_FORMAT, error_message: message.slice(0, 500) },
+    });
+    await notifyTechnicalAdmins(
+      adminClient,
+      backupType === 'pre_restore' ? 'Pre-Restore Safety Backup Failed' : 'Backup Failed',
+      `The ${backupType} system backup failed: ${message.slice(0, 200)}`
+    );
+    return { ok: false, backupId: backupRow.backup_id, status: 'failed', error: message };
+  }
+}
+
+async function notifyTechnicalAdmins(adminClient: SupabaseClient, title: string, message: string): Promise<void> {
+  const { data: techAdmins } = await adminClient
+    .from('user_profiles')
+    .select('profile_id')
+    .in('role', ['provincial_admin', 'super_admin'])
+    .eq('is_active', true);
+  for (const admin of techAdmins ?? []) {
+    await adminClient.from('notifications').insert({
+      profile_id: admin.profile_id,
+      notification_type: 'System',
+      title,
+      message,
+      is_read: false,
+    });
+  }
+}
+
+/**
+ * Module 42 — content validation for a ZIP archive. Kept separate from
+ * runBackupValidation below (which validates the legacy .json.gz shape)
+ * and routed by system_backups.archive_format, never by filename.
+ */
+export async function runZipArchiveValidation(
+  adminClient: SupabaseClient,
+  backup: Record<string, any>
+): Promise<ArchiveValidation | { archiveIntact: false; restoreReady: false; checks: { label: string; passed: boolean; blocking: boolean; detail?: string }[]; manifest: null; coverageComplete: null; warnings: string[] }> {
+  if (backup.status !== 'completed' || !backup.storage_path) {
+    return {
+      archiveIntact: false,
+      restoreReady: false,
+      checks: [{ label: 'Backup completed successfully', passed: false, blocking: true, detail: `status: ${backup.status}` }],
+      manifest: null,
+      coverageComplete: null,
+      warnings: [],
+    };
+  }
+
+  const { data: blob, error: dlErr } = await adminClient.storage.from('system-backups').download(backup.storage_path);
+  if (dlErr || !blob) {
+    return {
+      archiveIntact: false,
+      restoreReady: false,
+      checks: [{ label: 'Archive is accessible in storage', passed: false, blocking: true, detail: dlErr?.message }],
+      manifest: null,
+      coverageComplete: null,
+      warnings: [],
+    };
+  }
+
+  return await validateArchiveBytes(new Uint8Array(await blob.arrayBuffer()), {
+    storedChecksum: backup.checksum_sha256,
+    schemaVersion: SCHEMA_VERSION,
+    projectRef: projectRefFromUrl(Deno.env.get('SUPABASE_URL') ?? ''),
+  });
 }
 
 // Shared by backup-create's handleValidate (Backup History's own

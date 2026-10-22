@@ -49,7 +49,8 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { createBackupExport, runBackupValidation } from '../_shared/backupCore.ts';
+import { createBackupExport, createZipBackupExport, runBackupValidation, runZipArchiveValidation } from '../_shared/backupCore.ts';
+import { openArchiveTables, restoreStorageObjects } from '../_shared/archiveBuilder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,13 +58,85 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Table -> primary key column, for the upsert. Deliberately NOT
-// `administrators` — see file header.
+// LEGACY (.json.gz, module16/23) restore scope: table -> primary key.
+// Deliberately NOT `administrators` — see file header.
 const RESTORABLE_TABLES: Record<string, string> = {
   municipalities: 'municipality_id',
   barangays: 'barangay_id',
   shelters: 'shelter_id',
 };
+
+// ZIP (module42) restore scope.
+//
+// Tables NEVER restored, regardless of being present in the archive.
+// Each exclusion is a decision, not an oversight:
+//
+//   user_profiles  — reverting an administrator's role or is_active
+//                    could silently reinstate access that was
+//                    deliberately revoked after the backup was taken.
+//                    That is an access-control regression, not a
+//                    recovery. Individual account recovery is a
+//                    reviewed action in Roles & Permissions. (This is
+//                    module23's original reasoning, unchanged, now
+//                    stated as data rather than prose.)
+//   audit_logs     — the audit trail of what happened must not be
+//                    rewritten by a restore. Overwriting it with an
+//                    older snapshot would erase the record of the
+//                    very incident being recovered from, and the
+//                    restore's own audit rows along with it.
+//   terms_acceptances — a legal attestation of what a specific person
+//                    agreed to at a specific time. Re-asserting an old
+//                    snapshot could claim consent that was since
+//                    withdrawn.
+const NEVER_RESTORED = new Set(['user_profiles', 'audit_logs', 'terms_acceptances']);
+
+interface TableDependency {
+  table_name: string;
+  pk_columns: string[];
+  depends_on: string[];
+}
+
+/**
+ * Orders tables parents-first using the REAL foreign-key graph, so a
+ * child row is never inserted before the row it references.
+ *
+ * Returns `cycles` separately rather than throwing: a genuine FK cycle
+ * cannot be ordered, and silently appending those tables at the end
+ * would produce a restore that fails deep into execution. Naming them
+ * up front lets the plan preview disclose them before anything is
+ * written.
+ */
+function topologicallyOrder(
+  deps: TableDependency[],
+  present: Set<string>
+): { ordered: string[]; cycles: string[] } {
+  const inScope = deps.filter((d) => present.has(d.table_name) && !NEVER_RESTORED.has(d.table_name));
+  const byName = new Map(inScope.map((d) => [d.table_name, d]));
+  const ordered: string[] = [];
+  const state = new Map<string, 'visiting' | 'done'>();
+  const cycles = new Set<string>();
+
+  const visit = (name: string, trail: string[]): void => {
+    if (state.get(name) === 'done') return;
+    if (state.get(name) === 'visiting') {
+      // Everything from where the cycle started is part of it.
+      const start = trail.indexOf(name);
+      trail.slice(start === -1 ? 0 : start).forEach((t) => cycles.add(t));
+      return;
+    }
+    const node = byName.get(name);
+    if (!node) return; // parent not in this restore's scope — fine, upsert-only
+    state.set(name, 'visiting');
+    for (const parent of node.depends_on) {
+      if (byName.has(parent)) visit(parent, [...trail, name]);
+    }
+    state.set(name, 'done');
+    ordered.push(name);
+  };
+
+  for (const d of inScope) visit(d.table_name, []);
+  return { ordered: ordered.filter((t) => !cycles.has(t)), cycles: [...cycles] };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -121,7 +194,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const body = await req.json().catch(() => null);
   const action: string | undefined = body?.action;
-  if (!action || !['begin', 'confirm', 'execute'].includes(action)) {
+  if (!action || !['plan', 'begin', 'confirm', 'execute'].includes(action)) {
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400 });
   }
 
@@ -131,9 +204,135 @@ async function handleRequest(req: Request): Promise<Response> {
   const caller = await authorize(req, supabaseUrl, serviceRoleKey);
   if (caller instanceof Response) return caller;
 
-  if (action === 'begin') return handleBegin(adminClient, caller, body?.backupId);
+  // Module 42 — the dedicated password gates 'begin' and 'execute',
+  // each with its OWN single-use grant. 'confirm' is not separately
+  // gated because it only checks the typed phrase against the one this
+  // function generated and changes nothing; the authorization that
+  // matters is re-taken at 'execute', immediately before anything is
+  // written, per §5's "revalidate authorization immediately before
+  // executing a restore or destructive operation". A 'restore_begin'
+  // grant therefore cannot be replayed to execute.
+  // 'plan' is read-only — it writes nothing, creates no operation, and
+  // takes no lock — so it is role-gated but not grant-gated: the
+  // operator must be able to SEE what a restore would do before being
+  // asked to authorize it. It is still audited.
+  if (action === 'plan') return handlePlan(adminClient, caller, body?.backupId);
+
+  if (action === 'begin') {
+    const refusal = await consumeGrant(adminClient, body?.grantId, caller.profileId, 'restore_begin', body?.backupId ?? null);
+    if (refusal) return refusal;
+    return handleBegin(adminClient, caller, body?.backupId);
+  }
   if (action === 'confirm') return handleConfirm(adminClient, caller, body?.operationId, body?.confirmationPhrase);
-  return handleExecute(adminClient, caller, body?.operationId);
+
+  const refusal = await consumeGrant(adminClient, body?.grantId, caller.profileId, 'restore_execute', body?.operationId ?? null);
+  if (refusal) return refusal;
+  // Conflict policy is an explicit caller decision, validated against a
+  // closed set. An unrecognised value falls back to the SAFE option
+  // ('skip'), never to overwrite — a typo must not become data loss.
+  const conflictPolicy: 'skip' | 'overwrite' = body?.storageConflictPolicy === 'overwrite' ? 'overwrite' : 'skip';
+  return handleExecute(adminClient, caller, body?.operationId, conflictPolicy);
+}
+
+/**
+ * Spends a module42 authorization grant, same contract as
+ * backup-create's copy: Response on refusal, null when consumed.
+ * Intentionally duplicated in both functions rather than shared,
+ * because _shared/ modules are imported by BOTH and an authorization
+ * helper is the last place to introduce a cross-function import whose
+ * failure mode is "the gate silently didn't run".
+ */
+async function consumeGrant(
+  adminClient: SupabaseClient,
+  grantId: unknown,
+  profileId: string,
+  operation: 'restore_begin' | 'restore_execute',
+  targetId: string | null
+): Promise<Response | null> {
+  if (typeof grantId !== 'string' || grantId.length === 0) {
+    return new Response(
+      JSON.stringify({ error: 'Backup authorization is required for this operation.', reason: 'grant_required' }),
+      { status: 401, headers: { 'content-type': 'application/json' } }
+    );
+  }
+  const { data, error } = await adminClient
+    .rpc('consume_backup_grant', {
+      p_grant_id: grantId,
+      p_profile_id: profileId,
+      p_operation: operation,
+      p_target_id: targetId,
+    })
+    .single();
+
+  if (error) {
+    console.error(`[backup-restore] consume_backup_grant failed (code=${error.code}): ${error.message}`);
+    return new Response(JSON.stringify({ error: 'Could not verify backup authorization.', reason: 'grant_check_failed' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  const row = data as { ok: boolean; reason: string };
+  if (!row.ok) {
+    await adminClient.from('audit_logs').insert({
+      profile_id: profileId,
+      action: 'BACKUP_AUTH_GRANT_REJECTED',
+      table_name: 'backup_auth_grants',
+      new_values: { operation, target_id: targetId, reason: row.reason },
+    });
+    return new Response(JSON.stringify({ error: 'Backup authorization is not valid for this operation.', reason: row.reason }), {
+      status: 403,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  return null;
+}
+
+/**
+ * Format-aware pre-restore validation, so both archive generations are
+ * validated by the logic actually written for them. Routed on the
+ * RECORDED archive_format, never on the filename.
+ *
+ * For a ZIP, `valid` is deliberately tied to archiveIntact (the bytes
+ * and contents are sound) and NOT to restoreReady (which additionally
+ * demands complete coverage). An intentionally Phase-1 archive is a
+ * legitimate restore source for the data it does contain; refusing to
+ * restore it because it lacks storage binaries would make incomplete
+ * backups useless rather than merely partial. Coverage is surfaced to
+ * the operator in the plan and confirmation screens instead.
+ */
+async function validateForRestore(
+  adminClient: SupabaseClient,
+  backup: Record<string, any>
+): Promise<{
+  valid: boolean;
+  checklist: unknown;
+  // Carried through deliberately: handleBegin reports it in its
+  // backupPreview. An earlier version of this wrapper dropped it, which
+  // typed as an error AND would have serialized `schemaVersion:
+  // undefined` into the response at run time — the preview would have
+  // silently shown no schema version at all.
+  schemaVersion: string | null;
+  coverageComplete?: boolean | null;
+  warnings?: string[];
+}> {
+  if (backup.archive_format === 'zip') {
+    const outcome = await runZipArchiveValidation(adminClient, backup);
+    const manifestVersion =
+      outcome.manifest && typeof outcome.manifest.data_schema_version === 'string'
+        ? outcome.manifest.data_schema_version
+        : null;
+    return {
+      valid: outcome.archiveIntact,
+      checklist: outcome.checks,
+      // Prefer the version recorded INSIDE the archive over the catalog
+      // row: the manifest is what a restore would actually be applying.
+      schemaVersion: manifestVersion ?? backup.schema_version ?? null,
+      coverageComplete: outcome.coverageComplete,
+      warnings: outcome.warnings,
+    };
+  }
+  const legacy = await runBackupValidation(adminClient, backup);
+  return { valid: legacy.valid, checklist: legacy.checklist, schemaVersion: legacy.schemaVersion };
 }
 
 async function audit(adminClient: SupabaseClient, profileId: string, action: string, operationId: string, values: Record<string, unknown>) {
@@ -144,6 +343,143 @@ async function audit(adminClient: SupabaseClient, profileId: string, action: str
     record_id: operationId,
     new_values: values, // metadata only — operation/backup IDs, status, counts, sanitized errors. Never file contents.
   });
+}
+
+/**
+ * Stage 3 — the restore plan. Every number here is measured, not
+ * estimated: archive row counts come from the archive's own members,
+ * live row counts from exact count queries against the target, and the
+ * ordering from the target's real FK graph. Nothing is hardcoded.
+ *
+ * Reports `wouldOverwrite` per table — rows whose primary key exists in
+ * BOTH the archive and the live table. Those are the rows an upsert
+ * actually changes, and they are the real blast radius an operator needs
+ * to see before authorizing anything.
+ */
+async function handlePlan(adminClient: SupabaseClient, caller: Caller, backupId: string | undefined): Promise<Response> {
+  if (!backupId) return new Response(JSON.stringify({ error: 'backupId is required' }), { status: 400 });
+
+  const { data: backup, error } = await adminClient.from('system_backups').select('*').eq('backup_id', backupId).single();
+  if (error || !backup) return new Response(JSON.stringify({ error: 'Backup not found' }), { status: 404 });
+  if (backup.status !== 'completed' || !backup.storage_path) {
+    return new Response(JSON.stringify({ error: 'This backup did not complete and cannot be planned against.' }), { status: 409 });
+  }
+
+  if (backup.archive_format !== 'zip') {
+    // The legacy format's scope is fixed and tiny; its plan is the three
+    // reference tables. Reported honestly rather than pretending the
+    // richer plan below applies to it.
+    return new Response(
+      JSON.stringify({
+        archiveFormat: 'json_gz',
+        legacy: true,
+        tables: Object.keys(RESTORABLE_TABLES).map((t) => ({ table: t, archiveRows: (backup.row_counts ?? {})[t] ?? 0 })),
+        notes: ['This is a legacy administrative-configuration backup. Its restore scope is municipalities, barangays and shelters only.'],
+      }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  const { data: blob, error: dlErr } = await adminClient.storage.from('system-backups').download(backup.storage_path);
+  if (dlErr || !blob) return new Response(JSON.stringify({ error: 'The archive could not be read.' }), { status: 500 });
+
+  const opened = await openArchiveTables(new Uint8Array(await blob.arrayBuffer()));
+  if ('error' in opened) return new Response(JSON.stringify({ error: opened.error }), { status: 409 });
+
+  const { data: depRows, error: depErr } = await adminClient.rpc('list_table_dependencies');
+  if (depErr) return new Response(JSON.stringify({ error: `Could not read the dependency graph: ${depErr.message}` }), { status: 500 });
+  const deps = (depRows ?? []) as TableDependency[];
+
+  const present = new Set(Object.keys(opened.tables));
+  const { ordered, cycles } = topologicallyOrder(deps, present);
+
+  const tables: {
+    table: string;
+    order: number;
+    archiveRows: number;
+    liveRows: number;
+    wouldOverwrite: number;
+    wouldInsert: number;
+    primaryKey: string[];
+  }[] = [];
+
+  for (const [i, table] of ordered.entries()) {
+    const rows = opened.tables[table] ?? [];
+    const pk = deps.find((d) => d.table_name === table)?.pk_columns ?? [];
+    const { count: liveCount } = await adminClient.from(table).select('*', { count: 'exact', head: true });
+
+    // Overlap is computed by actually asking the target which of the
+    // archive's primary keys already exist — capped so a huge table
+    // cannot turn a preview into a long scan. Single-column PKs only;
+    // a composite key is reported as unknown rather than guessed at.
+    let wouldOverwrite = 0;
+    if (pk.length === 1 && rows.length > 0) {
+      const ids = rows
+        .map((r) => (r as Record<string, unknown>)[pk[0]])
+        .filter((v) => v !== null && v !== undefined)
+        .slice(0, 1000);
+      if (ids.length > 0) {
+        const { count: hitCount } = await adminClient
+          .from(table)
+          .select(pk[0], { count: 'exact', head: true })
+          .in(pk[0], ids as never[]);
+        wouldOverwrite = hitCount ?? 0;
+      }
+    }
+
+    tables.push({
+      table,
+      order: i + 1,
+      archiveRows: rows.length,
+      liveRows: liveCount ?? 0,
+      wouldOverwrite,
+      wouldInsert: Math.max(rows.length - wouldOverwrite, 0),
+      primaryKey: pk,
+    });
+  }
+
+  const excludedByPolicy = [...present].filter((t) => NEVER_RESTORED.has(t));
+  const noPrimaryKey = ordered.filter((t) => (deps.find((d) => d.table_name === t)?.pk_columns ?? []).length === 0);
+
+  await audit(adminClient, caller.profileId, 'RESTORE_PLAN_GENERATED', backupId, {
+    backup_id: backupId,
+    tables_planned: tables.length,
+    excluded_by_policy: excludedByPolicy,
+    fk_cycles: cycles,
+  });
+
+  return new Response(
+    JSON.stringify({
+      archiveFormat: 'zip',
+      backupId,
+      sourceEnvironment: backup.project_ref,
+      targetEnvironment: (Deno.env.get('SUPABASE_URL') ?? '').split('//')[1]?.split('.')[0] ?? 'unknown',
+      crossEnvironment: !!backup.project_ref && backup.project_ref !== ((Deno.env.get('SUPABASE_URL') ?? '').split('//')[1]?.split('.')[0] ?? ''),
+      coverageComplete: backup.is_complete,
+      isEncrypted: backup.is_encrypted,
+      strategy: 'controlled_upsert',
+      tables,
+      excludedByPolicy: excludedByPolicy.map((t) => ({
+        table: t,
+        reason:
+          t === 'user_profiles'
+            ? 'Reverting roles or active status could reinstate access that was deliberately revoked. Recover individual accounts via Roles & Permissions instead.'
+            : t === 'audit_logs'
+              ? 'The audit trail must not be rewritten by a restore — doing so would erase the record of the incident being recovered from.'
+              : 'Legal attestation tied to a specific person and time; an older snapshot could assert consent that was since withdrawn.',
+      })),
+      foreignKeyCycles: cycles,
+      tablesWithoutPrimaryKey: noPrimaryKey,
+      willNotDelete: true,
+      notes: [
+        'Restore is upsert-only. No row is ever deleted or truncated, so anything created after this backup is left untouched.',
+        'Schema objects in the archive (database/schema/) are NOT executed. Schema recovery is a separate operator-reviewed procedure.',
+        'Supabase Auth identities are NOT restored. Profile rows may be restored without their matching login existing — see authentication/RESTORATION-INSTRUCTIONS.md in the archive.',
+        'wouldOverwrite is sampled over the first 1,000 primary keys per table; it is a measured lower bound, not a full-table count.',
+      ],
+    }),
+    { headers: { 'content-type': 'application/json' } }
+  );
 }
 
 async function handleBegin(adminClient: SupabaseClient, caller: Caller, backupId: string | undefined): Promise<Response> {
@@ -171,7 +507,7 @@ async function handleBegin(adminClient: SupabaseClient, caller: Caller, backupId
   await audit(adminClient, caller.profileId, 'RESTORE_REQUESTED', operationId, { backup_id: backupId, outcome: 'in_progress' });
   await audit(adminClient, caller.profileId, 'RESTORE_VALIDATION_STARTED', operationId, { backup_id: backupId });
 
-  const validation = await runBackupValidation(adminClient, backup);
+  const validation = await validateForRestore(adminClient, backup);
 
   if (!validation.valid) {
     await adminClient
@@ -240,7 +576,12 @@ async function handleConfirm(
   return new Response(JSON.stringify({ operationId, status: 'confirmed' }), { headers: { 'content-type': 'application/json' } });
 }
 
-async function handleExecute(adminClient: SupabaseClient, caller: Caller, operationId: string | undefined): Promise<Response> {
+async function handleExecute(
+  adminClient: SupabaseClient,
+  caller: Caller,
+  operationId: string | undefined,
+  restoreStorageConflictPolicy: 'skip' | 'overwrite' = 'skip'
+): Promise<Response> {
   if (!operationId) return new Response(JSON.stringify({ error: 'operationId is required' }), { status: 400 });
 
   // Atomic compare-and-swap — only ONE call (concurrent duplicate clicks
@@ -267,7 +608,7 @@ async function handleExecute(adminClient: SupabaseClient, caller: Caller, operat
 
   // Re-validate immediately before touching data — never trust a
   // validation result from the earlier 'begin' step, however recent.
-  const revalidation = await runBackupValidation(adminClient, backup);
+  const revalidation = await validateForRestore(adminClient, backup);
   if (!revalidation.valid) {
     await failOperation(adminClient, caller, operationId, 'restore_failed', 'Backup failed re-validation immediately before restore.', revalidation.checklist);
     return new Response(
@@ -277,7 +618,15 @@ async function handleExecute(adminClient: SupabaseClient, caller: Caller, operat
   }
 
   // --- Pre-restore safety backup — mandatory, not optional. ---
-  const safetyResult = await createBackupExport(adminClient, 'pre_restore', caller.profileId);
+  // The checkpoint must be able to undo what this restore is about to
+  // do, so it is taken in the SAME format/scope as the archive being
+  // applied. A .json.gz checkpoint (admin-reference only) could not roll
+  // back a ZIP restore that touched case data — it would look like a
+  // rollback plan while silently covering a fraction of the blast radius.
+  const safetyResult =
+    backup.archive_format === 'zip'
+      ? await createZipBackupExport(adminClient, 'pre_restore', caller.profileId, (backup.storage_object_count ?? 0) > 0)
+      : await createBackupExport(adminClient, 'pre_restore', caller.profileId);
   if (!safetyResult.ok) {
     await adminClient
       .from('system_restores')
@@ -297,23 +646,70 @@ async function handleExecute(adminClient: SupabaseClient, caller: Caller, operat
   await audit(adminClient, caller.profileId, 'RESTORE_STARTED', operationId, { backup_id: claimed.backup_id, outcome: 'in_progress' });
 
   let restoredCounts: Record<string, number> = {};
+  const skippedTables: { table: string; reason: string }[] = [];
   try {
     const { data: fileBlob, error: dlErr } = await adminClient.storage.from('system-backups').download(backup.storage_path);
     if (dlErr || !fileBlob) throw new Error('Backup file could not be retrieved for restore.');
     const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    const json = await new Response(stream).text();
-    const parsed = JSON.parse(json) as { tables?: Record<string, unknown[]> };
 
-    for (const [table, pkColumn] of Object.entries(RESTORABLE_TABLES)) {
-      const rows = parsed.tables?.[table];
-      if (!Array.isArray(rows) || rows.length === 0) {
-        restoredCounts[table] = 0;
-        continue;
+    if (backup.archive_format === 'zip') {
+      // --- ZIP (module42): dependency-ordered, upsert-only. ---
+      const opened = await openArchiveTables(bytes);
+      if ('error' in opened) throw new Error(opened.error);
+
+      const { data: depRows, error: depErr } = await adminClient.rpc('list_table_dependencies');
+      if (depErr) throw new Error(`Could not read the table dependency graph: ${depErr.message}`);
+      const deps = (depRows ?? []) as TableDependency[];
+
+      const present = new Set(Object.keys(opened.tables));
+      const { ordered, cycles } = topologicallyOrder(deps, present);
+
+      for (const t of cycles) skippedTables.push({ table: t, reason: 'foreign_key_cycle' });
+      for (const t of present) {
+        if (NEVER_RESTORED.has(t)) skippedTables.push({ table: t, reason: 'excluded_by_policy' });
       }
-      const { error: upsertErr } = await adminClient.from(table).upsert(rows, { onConflict: pkColumn });
-      if (upsertErr) throw new Error(`Failed to restore ${table}: ${upsertErr.message}`);
-      restoredCounts[table] = rows.length;
+
+      for (const table of ordered) {
+        const rows = opened.tables[table];
+        if (!Array.isArray(rows) || rows.length === 0) {
+          restoredCounts[table] = 0;
+          continue;
+        }
+        const pk = deps.find((d) => d.table_name === table)?.pk_columns ?? [];
+        if (pk.length === 0) {
+          // No primary key means no safe conflict target — an upsert
+          // would duplicate rows on every restore. Skipped loudly.
+          skippedTables.push({ table, reason: 'no_primary_key' });
+          continue;
+        }
+        // Chunked so one large table cannot exceed the request body
+        // limit or hold the whole payload in a single statement.
+        const CHUNK = 500;
+        let applied = 0;
+        for (let i = 0; i < rows.length; i += CHUNK) {
+          const slice = rows.slice(i, i + CHUNK);
+          const { error: upsertErr } = await adminClient.from(table).upsert(slice, { onConflict: pk.join(',') });
+          if (upsertErr) throw new Error(`Failed to restore ${table} (rows ${i}-${i + slice.length - 1}): ${upsertErr.message}`);
+          applied += slice.length;
+        }
+        restoredCounts[table] = applied;
+      }
+    } else {
+      // --- LEGACY (.json.gz, module16/23) — unchanged. ---
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      const json = await new Response(stream).text();
+      const parsed = JSON.parse(json) as { tables?: Record<string, unknown[]> };
+
+      for (const [table, pkColumn] of Object.entries(RESTORABLE_TABLES)) {
+        const rows = parsed.tables?.[table];
+        if (!Array.isArray(rows) || rows.length === 0) {
+          restoredCounts[table] = 0;
+          continue;
+        }
+        const { error: upsertErr } = await adminClient.from(table).upsert(rows, { onConflict: pkColumn });
+        if (upsertErr) throw new Error(`Failed to restore ${table}: ${upsertErr.message}`);
+        restoredCounts[table] = rows.length;
+      }
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -322,9 +718,66 @@ async function handleExecute(adminClient: SupabaseClient, caller: Caller, operat
     return new Response(JSON.stringify({ error: 'Restore failed while applying data. See Recovery Activity for details.' }), { status: 500 });
   }
 
+  // --- Storage objects — after tables, before verification. ---
+  //
+  // Deliberately AFTER the database: a restored evidence row pointing at
+  // a file is recoverable (the file can be re-restored), whereas a
+  // restored file with no owning row is an orphan nobody can find. Order
+  // chosen so a partial failure leaves the recoverable shape.
+  //
+  // Conflict policy defaults to 'skip' — a restore must not clobber
+  // evidence uploaded after the backup was taken unless asked to.
+  let storageResult: Awaited<ReturnType<typeof restoreStorageObjects>> | null = null;
+  let storageError: string | null = null;
+  if (backup.archive_format === 'zip' && (backup.storage_object_count ?? 0) > 0) {
+    try {
+      const { data: blob, error: dlErr } = await adminClient.storage.from('system-backups').download(backup.storage_path);
+      if (dlErr || !blob) throw new Error(dlErr?.message ?? 'archive could not be re-read for storage restore');
+      storageResult = await restoreStorageObjects(adminClient, new Uint8Array(await blob.arrayBuffer()), {
+        conflictPolicy: restoreStorageConflictPolicy,
+      });
+      await audit(adminClient, caller.profileId, 'RESTORE_STORAGE_APPLIED', operationId, {
+        backup_id: claimed.backup_id,
+        restored: storageResult.restored,
+        overwritten: storageResult.overwritten,
+        skipped_existing: storageResult.skippedExisting,
+        checksum_failures: storageResult.checksumFailures.length,
+        failures: storageResult.failures.length,
+        verified: storageResult.verified,
+      });
+    } catch (e) {
+      // A storage failure does NOT silently pass: it is recorded and
+      // reported, and the operation cannot be called a full recovery.
+      storageError = e instanceof Error ? e.message : String(e);
+      console.error('[backup-restore] storage restore failed:', storageError);
+      await audit(adminClient, caller.profileId, 'RESTORE_STORAGE_FAILED', operationId, {
+        backup_id: claimed.backup_id,
+        error_message: storageError.slice(0, 500),
+      });
+    }
+  }
+
   await adminClient
     .from('system_restores')
-    .update({ restored_row_counts: restoredCounts })
+    .update({
+      restored_row_counts: {
+        tables: restoredCounts,
+        skipped: skippedTables,
+        storage: storageResult
+          ? {
+              restored: storageResult.restored,
+              overwritten: storageResult.overwritten,
+              skipped_existing: storageResult.skippedExisting,
+              checksum_failures: storageResult.checksumFailures,
+              failures: storageResult.failures,
+              missing_buckets: storageResult.missingBuckets,
+              verified: storageResult.verified,
+            }
+          : storageError
+            ? { error: storageError }
+            : null,
+      },
+    })
     .eq('operation_id', operationId);
   await audit(adminClient, caller.profileId, 'RESTORE_COMPLETED', operationId, { backup_id: claimed.backup_id, restored_row_counts: restoredCounts, outcome: 'completed' });
 
@@ -357,8 +810,50 @@ async function handleExecute(adminClient: SupabaseClient, caller: Caller, operat
     .eq('operation_id', operationId);
   await audit(adminClient, caller.profileId, 'RESTORE_VERIFIED', operationId, { backup_id: claimed.backup_id, checks: verification.checks, outcome: 'verified' });
 
+  // "Verified" means the data was applied and the post-restore health
+  // checks passed — NOT that the system is fully recovered. Anything
+  // skipped, and the auth reconciliation that this process structurally
+  // cannot perform, is returned alongside so the caller cannot present
+  // this as a complete recovery.
   return new Response(
-    JSON.stringify({ operationId, status: 'verified', message: 'Restore completed and verified.', restoredCounts, checks: verification.checks }),
+    JSON.stringify({
+      operationId,
+      status: 'verified',
+      message: 'Restore applied and post-restore verification passed.',
+      restoredCounts,
+      skippedTables,
+      storage: storageResult
+        ? {
+            restored: storageResult.restored,
+            overwritten: storageResult.overwritten,
+            skippedExisting: storageResult.skippedExisting,
+            verified: storageResult.verified,
+            checksumFailures: storageResult.checksumFailures.length,
+            failures: storageResult.failures.length,
+            missingBuckets: storageResult.missingBuckets,
+            conflictPolicy: restoreStorageConflictPolicy,
+          }
+        : storageError
+          ? { error: storageError }
+          : null,
+      // A clean database restore with failed storage is NOT a clean
+      // restore. This flag is what the UI reads, so the two cannot be
+      // conflated into one green tick.
+      storageFullyRestored:
+        storageResult === null && storageError === null
+          ? null
+          : !!storageResult &&
+            storageResult.checksumFailures.length === 0 &&
+            storageResult.failures.length === 0 &&
+            storageError === null,
+      checks: verification.checks,
+      manualActionsRequired: [
+        'Reconcile Supabase Auth identities against user_profiles — recreated accounts get new ids and cannot reuse old ones.',
+        'Administrator accounts (user_profiles) were deliberately not restored; review Roles & Permissions if an account is missing.',
+        'If schema objects were lost, recover them from the archive\'s database/schema/ reference material as a separate reviewed procedure.',
+      ],
+      isFullSystemRecovery: false,
+    }),
     { headers: { 'content-type': 'application/json' } }
   );
 }

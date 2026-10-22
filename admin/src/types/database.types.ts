@@ -121,7 +121,10 @@ export type NotificationType = 'Case Update' | 'SOS' | 'Assignment' | 'Referral'
 // module16 — Provincial Admin technical control center.
 export type BackupRunType = 'manual' | 'scheduled' | 'pre_restore';
 export type BackupRunStatus = 'running' | 'completed' | 'failed';
-export type BackupFrequency = 'daily' | 'weekly';
+// 'monthly' added by module42 Part A; set_backup_schedule() gained real
+// monthly cron support in module43 (before that, monthly fell through
+// to the weekly branch and produced a malformed expression).
+export type BackupFrequency = 'daily' | 'weekly' | 'monthly';
 
 // module23 — backup integrity verification + restore.
 export type BackupVerificationStatus = 'unverified' | 'verified' | 'corrupted';
@@ -802,6 +805,38 @@ export interface SystemBackup {
   verified_at: string | null;
   schema_version: string | null;
   project_ref: string | null;
+  // module42 — versioned ZIP archive metadata. All nullable: rows
+  // created before module42 are legacy .json.gz backups and must render
+  // as such, never as if they were ZIP archives with coverage reports.
+  archive_format: 'json_gz' | 'zip' | null;
+  format_version: string | null;
+  /** Per-source outcome actually observed during the run. */
+  coverage: BackupCoverageEntry[] | null;
+  /** Sources left out, each with a machine-readable reason. */
+  excluded: BackupCoverageEntry[] | null;
+  manifest_sha256: string | null;
+  table_count: number | null;
+  storage_object_count: number | null;
+  is_encrypted: boolean;
+  encryption_algorithm: string | null;
+  /**
+   * TRUE only when every in-scope source was captured in full.
+   * Deliberately distinct from `status`: a run can finish successfully
+   * (status 'completed') and still not hold everything (is_complete
+   * false). Null on legacy rows, which never recorded coverage.
+   */
+  is_complete: boolean | null;
+}
+
+export interface BackupCoverageEntry {
+  source: string;
+  category: 'database' | 'storage' | 'schema' | 'configuration' | 'authentication' | 'edge_functions' | 'migrations';
+  status: 'included' | 'partial' | 'excluded';
+  rows?: number;
+  objects?: number;
+  bytes?: number;
+  reason?: 'secret_bearing' | 'backup_catalog' | 'size_budget_exceeded' | 'unsupported_by_platform' | 'inaccessible' | 'not_in_selected_scope';
+  note?: string;
 }
 
 export interface RestoreValidationCheck {
@@ -844,6 +879,17 @@ export interface BackupSchedule {
   retention_days: number;
   updated_by: string | null; // FK -> user_profiles.profile_id
   updated_at: string;
+  // module42 columns + module43 behaviour.
+  name: string | null;
+  /** 1-28 only; 29-31 are rejected because cron silently skips short months. */
+  day_of_month: number | null;
+  notify_on_failure: boolean;
+  last_run_at: string | null;
+  /** 'completed' | 'completed_with_warnings' | 'failed' — written by module43's record_scheduled_run_outcome(). */
+  last_run_status: string | null;
+  last_run_backup_id: string | null;
+  /** Informational mirror for display only; cron.job remains authoritative for execution. */
+  next_run_at: string | null;
 }
 
 // The QR credential (module14). token_hash/raw token are NEVER exposed
@@ -951,7 +997,10 @@ export interface Database {
           barangay_name: string | null;
         }[];
       };
-      // module16 — see supabase/module16_technical_admin_backup.sql.
+      // module16, replaced by module43 to add real monthly support.
+      // NOTE: the browser should call set_backup_schedule_authorized
+      // below, not this — this one has no dedicated-password gate and is
+      // reached only via that wrapper (which is SECURITY DEFINER).
       set_backup_schedule: {
         Args: {
           p_enabled: boolean;
@@ -959,8 +1008,35 @@ export interface Database {
           p_hour_utc: number;
           p_day_of_week?: number | null;
           p_retention_days?: number;
+          /** 1-28 only; required when p_frequency is 'monthly'. */
+          p_day_of_month?: number | null;
         };
         Returns: undefined;
+      };
+      // module42 wrapper, extended by module43 with p_day_of_month.
+      // This is the only schedule-change path the admin UI uses.
+      set_backup_schedule_authorized: {
+        Args: {
+          p_grant_id: string;
+          p_operation: 'schedule_create' | 'schedule_modify';
+          p_enabled: boolean;
+          p_frequency: BackupFrequency;
+          p_hour_utc: number;
+          p_day_of_week?: number | null;
+          p_retention_days?: number;
+          p_day_of_month?: number | null;
+        };
+        Returns: undefined;
+      };
+      // module42 — booleans only; never returns the stored verifier.
+      has_backup_password: {
+        Args: Record<string, never>;
+        Returns: { configured: boolean; locked: boolean; retry_after_seconds: number | null }[];
+      };
+      // module42 — run-time data-source discovery.
+      list_backup_tables: {
+        Args: Record<string, never>;
+        Returns: { table_name: string; in_scope: boolean; exclusion_reason: string | null; estimated_rows: number }[];
       };
     };
   };

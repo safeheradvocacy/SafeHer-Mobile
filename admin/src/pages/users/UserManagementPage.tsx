@@ -3,6 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import { ConfirmDialog, EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
+import { ConfirmModal } from '../../components/ConfirmModal';
+import { ShieldAlert } from 'lucide-react';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import { hasPermission } from '../../lib/permissions';
@@ -49,6 +51,10 @@ import type { Barangay, Municipality, Shelter, UserProfile, UserRole } from '../
 // 'provincial_staff' (RBAC split, module11) is province-tier-only to
 // create, same as provincial_admin itself — it carries no municipality/
 // barangay/shelter jurisdiction (province-wide operational scope).
+// Roles whose grant reaches province-wide data or system administration.
+// Escalating INTO one of these requires typed confirmation below.
+const PROVINCE_TIER_ROLES: UserRole[] = ['provincial_staff', 'provincial_admin', 'super_admin'];
+
 function creatableRoles(roleTier: 'province' | 'municipality' | 'barangay' | null): UserRole[] {
   if (roleTier === 'province') return ['municipal_admin', 'barangay_admin', 'shelter_admin', 'support_expert', 'law_enforcement', 'provincial_staff', 'provincial_admin'];
   if (roleTier === 'municipality') return ['municipal_admin', 'barangay_admin'];
@@ -84,6 +90,11 @@ export function UserManagementPage() {
 
   // ---- Edit (RBAC split addition) ----
   const [editModalOpen, setEditModalOpen] = useState(false);
+  // Role-change confirmation state. originalRole is the role the account
+  // held when the edit dialog opened; pendingRoleChange holds a change
+  // awaiting explicit acknowledgement.
+  const [originalRole, setOriginalRole] = useState<UserRole | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ from: UserRole; to: UserRole } | null>(null);
   const [editForm, setEditForm] = useState({
     profileId: '',
     firstName: '',
@@ -304,6 +315,10 @@ export function UserManagementPage() {
   };
 
   const openEdit = (u: UserProfile) => {
+    // Captured so submitEdit can tell a ROLE CHANGE apart from an
+    // ordinary name/phone edit. Without it the form cannot know whether
+    // this save alters what the account can reach.
+    setOriginalRole(u.role);
     setEditForm({
       profileId: u.profile_id,
       firstName: u.first_name,
@@ -320,7 +335,7 @@ export function UserManagementPage() {
     setEditModalOpen(true);
   };
 
-  const submitEdit = async () => {
+  const submitEdit = async (roleChangeConfirmed = false) => {
     if (!editForm.firstName || !editForm.lastName || !editForm.role) {
       setEditError('Please fill in all required fields.');
       return;
@@ -335,6 +350,16 @@ export function UserManagementPage() {
     }
     if (editForm.role === 'barangay_admin' && (isProvincial ? !editForm.municipalityId : true) && !editForm.barangayId) {
       setEditError('Please select a barangay.');
+      return;
+    }
+
+    // A role change is an ACCESS-CONTROL change, so it is confirmed
+    // separately from the rest of the form rather than riding along with
+    // a name correction. Escalation into the province tier additionally
+    // requires typed confirmation (see the dialog below) — those roles
+    // reach province-wide data or system administration.
+    if (originalRole && editForm.role !== originalRole && !roleChangeConfirmed) {
+      setPendingRoleChange({ from: originalRole, to: editForm.role });
       return;
     }
 
@@ -647,7 +672,11 @@ export function UserManagementPage() {
               <button className="btn btn-outline" onClick={() => setEditModalOpen(false)} disabled={editing}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={submitEdit} disabled={editing}>
+              {/* Wrapped, NOT passed directly: onClick would hand the
+                  MouseEvent to the roleChangeConfirmed parameter, and a
+                  MouseEvent is truthy — which would skip the role-change
+                  confirmation on every save. */}
+              <button className="btn btn-primary" onClick={() => void submitEdit()} disabled={editing}>
                 {editing ? 'Saving...' : 'Save changes'}
               </button>
             </>
@@ -761,6 +790,49 @@ export function UserManagementPage() {
 
           {editError && <p style={{ color: 'var(--color-danger)', fontSize: 13 }}>{editError}</p>}
         </Modal>
+      )}
+
+      {/* Role change — an access-control change, confirmed separately
+          from an ordinary name/phone edit. Escalation into the province
+          tier (province-wide operational data, or technical/system
+          administration including Backup & Restore) additionally
+          requires the role name to be typed, because those grants are
+          the ones worth slowing down. */}
+      {pendingRoleChange && (
+        <ConfirmModal
+          open
+          icon={<ShieldAlert size={18} />}
+          danger
+          title="Change this account's role?"
+          description={
+            <>
+              <p style={{ marginTop: 0 }}>
+                <strong>{ROLE_LABEL[pendingRoleChange.from]}</strong> → <strong>{ROLE_LABEL[pendingRoleChange.to]}</strong>
+              </p>
+              <p>
+                This changes what this account can see and do immediately, including which cases and survivor records it
+                can reach. Jurisdiction fields are reset to match the new role.
+              </p>
+              {PROVINCE_TIER_ROLES.includes(pendingRoleChange.to) && (
+                <p style={{ marginBottom: 0 }}>
+                  <strong>This grants province-tier access.</strong>
+                  {pendingRoleChange.to === 'provincial_admin' || pendingRoleChange.to === 'super_admin'
+                    ? ' That includes system administration — administrator accounts, the audit log, and Backup & Restore.'
+                    : ' That includes province-wide case, SOS and shelter data.'}
+                </p>
+              )}
+            </>
+          }
+          confirmLabel="Change Role"
+          loadingLabel="Saving…"
+          requirePhrase={PROVINCE_TIER_ROLES.includes(pendingRoleChange.to) ? ROLE_LABEL[pendingRoleChange.to] : undefined}
+          loading={editing}
+          onCancel={() => setPendingRoleChange(null)}
+          onConfirm={() => {
+            setPendingRoleChange(null);
+            void submitEdit(true);
+          }}
+        />
       )}
 
       {pendingDeactivate && (

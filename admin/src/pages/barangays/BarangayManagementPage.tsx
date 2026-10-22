@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
+import { ConfirmDialog, EmptyState, Modal, PageHeader, StatusBadge } from '../../components/ui';
 import { DashboardHeaderActions } from '../../components/dashboard/DashboardHeaderActions';
 import { useHeaderRefresh } from '../../hooks/useHeaderRefresh';
 import type { Barangay, Municipality } from '../../types/database.types';
@@ -16,6 +16,7 @@ export function BarangayManagementPage() {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [pendingDeactivate, setPendingDeactivate] = useState<Barangay | null>(null);
   const [newName, setNewName] = useState('');
   const [newContact, setNewContact] = useState('');
   const [newMunicipalityId, setNewMunicipalityId] = useState('');
@@ -44,7 +45,20 @@ export function BarangayManagementPage() {
 
   const municipalityName = (id: string) => municipalities.find((m) => m.municipality_id === id)?.municipality_name ?? '—';
 
+  // Deactivation is confirmed; reactivation is not — same reasoning as
+  // MunicipalityManagementPage. A deactivated barangay disappears from
+  // the jurisdiction pickers that barangay admin accounts and incident
+  // locations are chosen from.
   const toggleActive = async (b: Barangay) => {
+    if (b.is_active) {
+      setPendingDeactivate(b);
+      return;
+    }
+    await applyToggle(b);
+  };
+
+  const applyToggle = async (b: Barangay) => {
+    setPendingDeactivate(null);
     await supabase.from('barangays').update({ is_active: !b.is_active }).eq('barangay_id', b.barangay_id);
     setBarangays((prev) => prev.map((x) => (x.barangay_id === b.barangay_id ? { ...x, is_active: !x.is_active } : x)));
     // No manual logAudit() call here — trg_audit_barangays (see
@@ -175,6 +189,17 @@ export function BarangayManagementPage() {
           </div>
           {error && <p style={{ color: 'var(--color-danger)', fontSize: 13 }}>{error}</p>}
         </Modal>
+      )}
+
+      {pendingDeactivate && (
+        <ConfirmDialog
+          title="Deactivate this barangay?"
+          body={`${pendingDeactivate.barangay_name} will stop appearing as a selectable barangay for new incident locations and barangay administrator jurisdictions. Existing cases and accounts keep their current barangay and are not changed. You can reactivate it at any time.`}
+          confirmLabel="Deactivate"
+          danger
+          onConfirm={() => applyToggle(pendingDeactivate)}
+          onCancel={() => setPendingDeactivate(null)}
+        />
       )}
     </div>
   );
