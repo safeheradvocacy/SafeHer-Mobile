@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { markSessionEnded } from '../lib/sessionNotice';
 import type { Barangay, Municipality, Shelter, UserProfile } from '../types/database.types';
 
 /** One shared source of truth for "which of the three admin tiers is this
@@ -227,6 +228,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const resetIdleTimer = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
+        // Recorded BEFORE signOut so the login screen can say why the
+        // session ended rather than just reappearing.
+        markSessionEnded('idle');
         signOut();
       }, readSessionTimeoutMinutes() * 60 * 1000);
     };

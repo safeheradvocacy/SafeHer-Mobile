@@ -4,6 +4,7 @@ import { Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle, Loader2, ArrowLeft }
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthBackground } from './components/AuthBackground';
 import { LogoMark } from '../../components/branding/Logo';
+import { consumeSessionEndNotice, markSessionEnded, SESSION_END_MESSAGE } from '../../lib/sessionNotice';
 
 // Defensive, client-side belt-and-suspenders check — real HTTPS
 // enforcement belongs at the hosting/CDN layer (HSTS + redirect rules),
@@ -339,6 +340,15 @@ function formatLockoutRemaining(msRemaining: number): string {
   return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
+/** True when Supabase currently has a persisted session token on this origin. */
+function hasPersistedSupabaseSession(): boolean {
+  try {
+    return Object.keys(localStorage).some((key) => key.startsWith('sb-') && key.endsWith('-auth-token'));
+  } catch {
+    return false;
+  }
+}
+
 function clearPersistedSupabaseSession() {
   try {
     Object.keys(localStorage)
@@ -363,7 +373,19 @@ function armSessionOnlyCleanup() {
   const w = window as typeof window & { __safeherSessionOnlyArmed?: boolean };
   if (w.__safeherSessionOnlyArmed) return;
   w.__safeherSessionOnlyArmed = true;
-  window.addEventListener('pagehide', clearPersistedSupabaseSession);
+  window.addEventListener('pagehide', () => {
+    // Only announce a session end if one was actually live. pagehide
+    // fires on EVERY tab close, so marking unconditionally would greet
+    // someone who had already signed out manually with "your session
+    // ended when the browser was closed" — true of the tab, misleading
+    // about them.
+    const hadSession = hasPersistedSupabaseSession();
+    clearPersistedSupabaseSession();
+    // Written in the same synchronous handler that drops the session;
+    // localStorage writes complete even as the tab unloads, which is
+    // why this cannot live in React state.
+    if (hadSession) markSessionEnded('closed');
+  });
 }
 
 export function LoginPage() {
@@ -372,7 +394,6 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [emailFieldError, setEmailFieldError] = useState<string | null>(null);
   const [passwordFieldError, setPasswordFieldError] = useState<string | null>(null);
@@ -382,6 +403,9 @@ export function LoginPage() {
   const [cardShaking, setCardShaking] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  // Why the PREVIOUS session ended, read once on mount so the operator
+  // is told rather than left guessing why they are back at a login form.
+  const [sessionEndReason] = useState(() => consumeSessionEndNotice());
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -525,7 +549,15 @@ export function LoginPage() {
     }
 
     clearLoginAttempts();
-    if (!rememberMe) armSessionOnlyCleanup();
+    // Always armed, no longer opt-in.
+    //
+    // This used to be gated on an unchecked "Remember me" box that
+    // defaulted to CHECKED, so the normal path left an admin signed in
+    // across browser restarts. On a portal holding survivor and case
+    // records, a session that outlives the browser is a standing risk —
+    // a shared or unattended machine stays authenticated indefinitely.
+    // Closing the browser now ends the session for everyone.
+    armSessionOnlyCleanup();
     setShowConfirm(false);
     navigate('/admin/dashboard', { replace: true });
   };
@@ -598,15 +630,41 @@ export function LoginPage() {
           )}
         </div>
 
-        <label className="auth-remember-row">
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            disabled={loading}
-          />
-          Remember me
-        </label>
+        {/* "Remember me" removed rather than left ticked-but-inert:
+            sessions now always end when the browser closes, so a control
+            promising otherwise would be misleading. */}
+        <p className="auth-session-note">
+          For security, your session ends when you close the browser.
+        </p>
+
+        {/* Shown once, only when the last session ended on its own.
+            A deliberate sign-out produces no notice — the operator knows
+            why they are here. role="status" rather than "alert": this is
+            informational, not an error, and should not interrupt a
+            screen reader mid-sentence. */}
+        {sessionEndReason && (
+          <p
+            className="auth-session-ended"
+            role="status"
+            aria-live="polite"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 7,
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: 'var(--color-text-muted)',
+              background: 'var(--color-surface-muted)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              margin: '10px 0 0',
+            }}
+          >
+            <ShieldCheck size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--color-primary)' }} />
+            {SESSION_END_MESSAGE[sessionEndReason]}
+          </p>
+        )}
 
         {lockoutMessage ? (
           <p className="error-text" style={{ display: 'flex', alignItems: 'center', gap: 6 }} role="alert" aria-live="assertive" aria-atomic="true">
