@@ -462,12 +462,31 @@ export function BackupRestorePage() {
       body: { action: 'execute', operationId: wizard.operationId, grantId },
     });
     load();
-    if (error) {
-      setWizard((w) => (w ? { ...w, step: 'result', result: { status: 'restore_failed', message: error.message || 'Restore failed.' } } : w));
-      return;
-    }
-    if (data?.error) {
-      setWizard((w) => (w ? { ...w, step: 'result', result: { status: 'restore_failed', message: data.error, checks: data.checklist } } : w));
+
+    // The real refusal is on error.context, not error.message — without
+    // this the operator sees only "Edge Function returned a non-2xx
+    // status code" for every failure mode, which is unactionable during
+    // a recovery. This handler was missed when the other six were
+    // converted.
+    const executeError = await extractInvokeError(data, error);
+    if (executeError) {
+      setWizard((w) =>
+        w
+          ? {
+              ...w,
+              step: 'result',
+              result: {
+                status: 'restore_failed',
+                // The server's own state is authoritative, not this
+                // local label — Recovery Activity shows what actually
+                // happened, including a timeout that never reached our
+                // error handler at all.
+                message: `${executeError}\n\nCheck the Recovery Activity table below for this operation's recorded status — if it is still "Restoring" or "Creating Safety Backup", the function was cut short rather than refusing cleanly.`,
+                checks: (data as { checklist?: RestoreValidationCheck[] } | null)?.checklist,
+              },
+            }
+          : w
+      );
       return;
     }
     setWizard((w) =>

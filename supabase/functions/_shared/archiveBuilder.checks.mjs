@@ -373,6 +373,25 @@ console.log('\n4. resolveEncryptionKey — fail closed, never downgrade to plain
     trimmed = `threw: ${e.message}`;
   }
   check('key with trailing newline is accepted (trimmed)', trimmed instanceof Uint8Array ? trimmed.byteLength : trimmed, 32);
+
+  // Regression guard for a real incident: an escrowed key came back 43
+  // characters because its single '=' pad had been stripped. Those 43
+  // characters still unambiguously encode the same 32 bytes, so the
+  // key must be accepted rather than failing a backup over padding.
+  const unpadded = validKey.replace(/=+$/, '');
+  check('stripped-padding key is 43 chars (precondition)', unpadded.length, 43);
+  let repadded = null;
+  try {
+    repadded = makeFn(unpadded)();
+  } catch (e) {
+    repadded = `threw: ${e.message}`;
+  }
+  check('key missing its "=" padding is re-padded and accepted', repadded instanceof Uint8Array ? repadded.byteLength : repadded, 32);
+  check(
+    're-padded key decodes to the SAME bytes as the padded form',
+    repadded instanceof Uint8Array ? Buffer.from(repadded).toString('base64') : repadded,
+    validKey
+  );
 }
 
 console.log('\n5. Mandatory encryption — no plaintext fallback remains in source');

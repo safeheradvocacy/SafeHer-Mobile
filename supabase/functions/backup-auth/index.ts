@@ -47,6 +47,7 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { auditContextFrom } from '../_shared/requestContext.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -187,15 +188,20 @@ async function handleRequest(req: Request, correlationId: string): Promise<Respo
   const caller = await authorizeTechnicalAdmin(req, supabaseUrl, serviceRoleKey);
   if (caller instanceof Response) return caller;
 
+  // Captured from the OPERATOR's inbound request. The database default
+  // on audit_logs.ip_address cannot help here — this function's own
+  // PostgREST calls carry its headers, not the operator's.
+  const auditCtx = auditContextFrom(req);
+
   switch (action) {
     case 'status':
       return handleStatus(caller, correlationId);
     case 'provision':
-      return handleSetPassword(adminClient, caller, body, correlationId, false);
+      return handleSetPassword(adminClient, caller, body, correlationId, false, auditCtx);
     case 'rotate':
-      return handleSetPassword(adminClient, caller, body, correlationId, true);
+      return handleSetPassword(adminClient, caller, body, correlationId, true, auditCtx);
     default:
-      return handleAuthorize(adminClient, caller, body, correlationId);
+      return handleAuthorize(adminClient, caller, body, correlationId, auditCtx);
   }
 }
 
@@ -226,7 +232,8 @@ async function handleSetPassword(
   caller: Caller,
   body: Record<string, unknown> | null,
   correlationId: string,
-  isRotation: boolean
+  isRotation: boolean,
+  auditCtx: { ip_address: string | null; user_agent: string | null }
 ): Promise<Response> {
   const newPassword = typeof body?.newPassword === 'string' ? body.newPassword : '';
   const currentPassword = typeof body?.currentPassword === 'string' ? body.currentPassword : null;
@@ -255,7 +262,7 @@ async function handleSetPassword(
   if (!row.ok) {
     // Audited as a failure, with the REASON CODE only — never the
     // submitted password, and never the stored verifier.
-    await writeAudit(adminClient, caller.profileId, 'BACKUP_PASSWORD_CHANGE_DENIED', { reason: row.reason, correlationId });
+    await writeAudit(adminClient, caller.profileId, 'BACKUP_PASSWORD_CHANGE_DENIED', { reason: row.reason, correlationId }, auditCtx);
 
     const messages: Record<string, string> = {
       not_authorized: 'Not authorized — technical administrator access required.',
@@ -271,7 +278,8 @@ async function handleSetPassword(
     adminClient,
     caller.profileId,
     row.reason === 'rotated' ? 'BACKUP_PASSWORD_ROTATED' : 'BACKUP_PASSWORD_PROVISIONED',
-    { correlationId }
+    { correlationId },
+    auditCtx
   );
 
   return json({ ok: true, outcome: row.reason, correlationId }, 200);
@@ -284,7 +292,8 @@ async function handleAuthorize(
   adminClient: SupabaseClient,
   caller: Caller,
   body: Record<string, unknown> | null,
-  correlationId: string
+  correlationId: string,
+  auditCtx: { ip_address: string | null; user_agent: string | null }
 ): Promise<Response> {
   const password = typeof body?.password === 'string' ? body.password : '';
   const operation = typeof body?.operation === 'string' ? body.operation : '';
@@ -330,7 +339,7 @@ async function handleAuthorize(
       reason: row.reason,
       retry_after_seconds: row.retry_after_seconds,
       correlationId,
-    });
+    }, auditCtx);
 
     if (row.reason === 'not_configured') {
       return json(
@@ -361,7 +370,7 @@ async function handleAuthorize(
     grant_id: row.grant_id,
     expires_at: row.expires_at,
     correlationId,
-  });
+  }, auditCtx);
 
   return json({ ok: true, grantId: row.grant_id, expiresAt: row.expires_at, operation, correlationId }, 200);
 }
@@ -377,13 +386,17 @@ async function writeAudit(
   adminClient: SupabaseClient,
   profileId: string,
   action: string,
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown>,
+  auditCtx: { ip_address: string | null; user_agent: string | null }
 ): Promise<void> {
   const { error } = await adminClient.from('audit_logs').insert({
     profile_id: profileId,
     action,
     table_name: 'backup_authorization',
     new_values: metadata,
+    // Explicit: the DB default would record this function's own
+    // address, not the operator's browser.
+    ...auditCtx,
   });
   if (error) console.error(`[backup-auth] failed to write audit row for '${action}':`, error.message);
 }

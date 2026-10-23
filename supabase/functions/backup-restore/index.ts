@@ -51,6 +51,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { createBackupExport, createZipBackupExport, runBackupValidation, runZipArchiveValidation } from '../_shared/backupCore.ts';
 import { openArchiveTables, restoreStorageObjects } from '../_shared/archiveBuilder.ts';
+import { auditContextFrom } from '../_shared/requestContext.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -160,7 +161,12 @@ serve(async (req) => {
 
 interface Caller {
   profileId: string;
-  callerClient: SupabaseClient; // authenticated AS the human caller — needed so begin_restore_operation's internal is_provincial_technical_admin() check resolves auth.uid() correctly.
+  callerClient: SupabaseClient;
+  // The OPERATOR's request context, captured once in authorize().
+  // audit_logs' database default cannot see it: this function reaches
+  // PostgREST over its own HTTP call, so request.headers there
+  // describes this function, not the operator's browser.
+  auditCtx: { ip_address: string | null; user_agent: string | null }; // authenticated AS the human caller — needed so begin_restore_operation's internal is_provincial_technical_admin() check resolves auth.uid() correctly.
 }
 
 async function authorize(req: Request, supabaseUrl: string, serviceRoleKey: string): Promise<Caller | Response> {
@@ -181,7 +187,7 @@ async function authorize(req: Request, supabaseUrl: string, serviceRoleKey: stri
     // this is the exact same technical-admin boundary, not a second one.
     return new Response(JSON.stringify({ error: 'Not authorized — technical administrator access required' }), { status: 403 });
   }
-  return { profileId: callerProfile.profile_id, callerClient };
+  return { profileId: callerProfile.profile_id, callerClient, auditCtx: auditContextFrom(req) };
 }
 
 async function handleRequest(req: Request): Promise<Response> {
@@ -335,12 +341,13 @@ async function validateForRestore(
   return { valid: legacy.valid, checklist: legacy.checklist, schemaVersion: legacy.schemaVersion };
 }
 
-async function audit(adminClient: SupabaseClient, profileId: string, action: string, operationId: string, values: Record<string, unknown>) {
+async function audit(adminClient: SupabaseClient, caller: Caller, action: string, operationId: string, values: Record<string, unknown>) {
   await adminClient.from('audit_logs').insert({
-    profile_id: profileId,
+    profile_id: caller.profileId,
     action,
     table_name: 'system_restores',
     record_id: operationId,
+    ...caller.auditCtx,
     new_values: values, // metadata only — operation/backup IDs, status, counts, sanitized errors. Never file contents.
   });
 }
@@ -441,7 +448,7 @@ async function handlePlan(adminClient: SupabaseClient, caller: Caller, backupId:
   const excludedByPolicy = [...present].filter((t) => NEVER_RESTORED.has(t));
   const noPrimaryKey = ordered.filter((t) => (deps.find((d) => d.table_name === t)?.pk_columns ?? []).length === 0);
 
-  await audit(adminClient, caller.profileId, 'RESTORE_PLAN_GENERATED', backupId, {
+  await audit(adminClient, caller, 'RESTORE_PLAN_GENERATED', backupId, {
     backup_id: backupId,
     tables_planned: tables.length,
     excluded_by_policy: excludedByPolicy,
@@ -504,8 +511,8 @@ async function handleBegin(adminClient: SupabaseClient, caller: Caller, backupId
   const operationId: string = beginResult[0].operation_id;
   const confirmationPhrase: string = beginResult[0].confirmation_phrase;
 
-  await audit(adminClient, caller.profileId, 'RESTORE_REQUESTED', operationId, { backup_id: backupId, outcome: 'in_progress' });
-  await audit(adminClient, caller.profileId, 'RESTORE_VALIDATION_STARTED', operationId, { backup_id: backupId });
+  await audit(adminClient, caller, 'RESTORE_REQUESTED', operationId, { backup_id: backupId, outcome: 'in_progress' });
+  await audit(adminClient, caller, 'RESTORE_VALIDATION_STARTED', operationId, { backup_id: backupId });
 
   const validation = await validateForRestore(adminClient, backup);
 
@@ -514,7 +521,7 @@ async function handleBegin(adminClient: SupabaseClient, caller: Caller, backupId
       .from('system_restores')
       .update({ status: 'validation_failed', validation_result: validation.checklist, completed_at: new Date().toISOString() })
       .eq('operation_id', operationId);
-    await audit(adminClient, caller.profileId, 'RESTORE_VALIDATION_FAILED', operationId, { backup_id: backupId, checklist: validation.checklist, outcome: 'failed' });
+    await audit(adminClient, caller, 'RESTORE_VALIDATION_FAILED', operationId, { backup_id: backupId, checklist: validation.checklist, outcome: 'failed' });
     return new Response(
       JSON.stringify({
         operationId,
@@ -571,7 +578,7 @@ async function handleConfirm(
   }
 
   await adminClient.from('system_restores').update({ status: 'confirmed' }).eq('operation_id', operationId).eq('status', 'awaiting_confirmation');
-  await audit(adminClient, caller.profileId, 'RESTORE_CONFIRMED', operationId, { backup_id: op.backup_id, outcome: 'confirmed' });
+  await audit(adminClient, caller, 'RESTORE_CONFIRMED', operationId, { backup_id: op.backup_id, outcome: 'confirmed' });
 
   return new Response(JSON.stringify({ operationId, status: 'confirmed' }), { headers: { 'content-type': 'application/json' } });
 }
@@ -632,18 +639,18 @@ async function handleExecute(
       .from('system_restores')
       .update({ status: 'safety_backup_failed', completed_at: new Date().toISOString(), error_message: 'Pre-restore safety backup could not be created.' })
       .eq('operation_id', operationId);
-    await audit(adminClient, caller.profileId, 'RESTORE_FAILED', operationId, { backup_id: claimed.backup_id, stage: 'pre_restore_backup', outcome: 'failed' });
+    await audit(adminClient, caller, 'RESTORE_FAILED', operationId, { backup_id: claimed.backup_id, stage: 'pre_restore_backup', outcome: 'failed' });
     return new Response(
       JSON.stringify({ error: 'Pre-restore safety backup could not be created. Restore cannot safely continue.' }),
       { status: 500 }
     );
   }
   await adminClient.from('system_restores').update({ safety_backup_id: safetyResult.backupId }).eq('operation_id', operationId);
-  await audit(adminClient, caller.profileId, 'PRE_RESTORE_BACKUP_CREATED', operationId, { backup_id: claimed.backup_id, safety_backup_id: safetyResult.backupId, outcome: 'completed' });
+  await audit(adminClient, caller, 'PRE_RESTORE_BACKUP_CREATED', operationId, { backup_id: claimed.backup_id, safety_backup_id: safetyResult.backupId, outcome: 'completed' });
 
   // --- Apply the restore (upsert-only — see file header for why). ---
   await adminClient.from('system_restores').update({ status: 'restoring' }).eq('operation_id', operationId);
-  await audit(adminClient, caller.profileId, 'RESTORE_STARTED', operationId, { backup_id: claimed.backup_id, outcome: 'in_progress' });
+  await audit(adminClient, caller, 'RESTORE_STARTED', operationId, { backup_id: claimed.backup_id, outcome: 'in_progress' });
 
   let restoredCounts: Record<string, number> = {};
   const skippedTables: { table: string; reason: string }[] = [];
@@ -686,12 +693,43 @@ async function handleExecute(
         // limit or hold the whole payload in a single statement.
         const CHUNK = 500;
         let applied = 0;
+        let tableError: string | null = null;
         for (let i = 0; i < rows.length; i += CHUNK) {
           const slice = rows.slice(i, i + CHUNK);
           const { error: upsertErr } = await adminClient.from(table).upsert(slice, { onConflict: pk.join(',') });
-          if (upsertErr) throw new Error(`Failed to restore ${table} (rows ${i}-${i + slice.length - 1}): ${upsertErr.message}`);
+          if (upsertErr) {
+            tableError = `rows ${i}-${i + slice.length - 1}: ${upsertErr.message}`;
+            break;
+          }
           applied += slice.length;
         }
+
+        if (tableError) {
+          // A PER-TABLE failure no longer aborts the whole restore.
+          //
+          // Several tables carry BEFORE-UPDATE guard triggers that
+          // raise their own authorization exceptions (observed:
+          // expert_support_requests -> "Not authorized to update this
+          // expert support request"). service_role bypasses RLS but it
+          // does NOT bypass a trigger that calls raise, and the Edge
+          // Function has no end-user JWT for those guards to inspect.
+          //
+          // Previously the first such table threw and killed the run,
+          // so everything ordered after it was never attempted — one
+          // guarded table made the entire restore unusable. Now the
+          // table is recorded as skipped with its real error and the
+          // remaining tables still restore.
+          //
+          // This is deliberately NOT silent: every skip is returned to
+          // the caller, shown in the result screen, and persisted in
+          // system_restores.restored_row_counts, and the operation can
+          // never be reported as a full recovery while any skip exists.
+          console.error(`[backup-restore] skipping ${table}: ${tableError}`);
+          skippedTables.push({ table, reason: `blocked: ${tableError}` });
+          if (applied > 0) restoredCounts[table] = applied;
+          continue;
+        }
+
         restoredCounts[table] = applied;
       }
     } else {
@@ -736,7 +774,7 @@ async function handleExecute(
       storageResult = await restoreStorageObjects(adminClient, new Uint8Array(await blob.arrayBuffer()), {
         conflictPolicy: restoreStorageConflictPolicy,
       });
-      await audit(adminClient, caller.profileId, 'RESTORE_STORAGE_APPLIED', operationId, {
+      await audit(adminClient, caller, 'RESTORE_STORAGE_APPLIED', operationId, {
         backup_id: claimed.backup_id,
         restored: storageResult.restored,
         overwritten: storageResult.overwritten,
@@ -750,7 +788,7 @@ async function handleExecute(
       // reported, and the operation cannot be called a full recovery.
       storageError = e instanceof Error ? e.message : String(e);
       console.error('[backup-restore] storage restore failed:', storageError);
-      await audit(adminClient, caller.profileId, 'RESTORE_STORAGE_FAILED', operationId, {
+      await audit(adminClient, caller, 'RESTORE_STORAGE_FAILED', operationId, {
         backup_id: claimed.backup_id,
         error_message: storageError.slice(0, 500),
       });
@@ -779,11 +817,11 @@ async function handleExecute(
       },
     })
     .eq('operation_id', operationId);
-  await audit(adminClient, caller.profileId, 'RESTORE_COMPLETED', operationId, { backup_id: claimed.backup_id, restored_row_counts: restoredCounts, outcome: 'completed' });
+  await audit(adminClient, caller, 'RESTORE_COMPLETED', operationId, { backup_id: claimed.backup_id, restored_row_counts: restoredCounts, outcome: 'completed' });
 
   // --- Post-restore verification — read-only health checks only. ---
   await adminClient.from('system_restores').update({ status: 'verifying' }).eq('operation_id', operationId);
-  await audit(adminClient, caller.profileId, 'RESTORE_VERIFICATION_STARTED', operationId, { backup_id: claimed.backup_id });
+  await audit(adminClient, caller, 'RESTORE_VERIFICATION_STARTED', operationId, { backup_id: claimed.backup_id });
 
   const verification = await verifyRestoredSystem(adminClient);
 
@@ -792,7 +830,7 @@ async function handleExecute(
       .from('system_restores')
       .update({ status: 'verification_failed', verification_result: verification.checks, completed_at: new Date().toISOString() })
       .eq('operation_id', operationId);
-    await audit(adminClient, caller.profileId, 'RESTORE_VERIFICATION_FAILED', operationId, { backup_id: claimed.backup_id, checks: verification.checks, outcome: 'failed' });
+    await audit(adminClient, caller, 'RESTORE_VERIFICATION_FAILED', operationId, { backup_id: claimed.backup_id, checks: verification.checks, outcome: 'failed' });
     return new Response(
       JSON.stringify({
         operationId,
@@ -808,7 +846,7 @@ async function handleExecute(
     .from('system_restores')
     .update({ status: 'verified', verification_result: verification.checks, completed_at: new Date().toISOString() })
     .eq('operation_id', operationId);
-  await audit(adminClient, caller.profileId, 'RESTORE_VERIFIED', operationId, { backup_id: claimed.backup_id, checks: verification.checks, outcome: 'verified' });
+  await audit(adminClient, caller, 'RESTORE_VERIFIED', operationId, { backup_id: claimed.backup_id, checks: verification.checks, outcome: 'verified' });
 
   // "Verified" means the data was applied and the post-restore health
   // checks passed — NOT that the system is fully recovered. Anything
@@ -870,7 +908,7 @@ async function failOperation(
     .from('system_restores')
     .update({ status, error_message: errorMessage.slice(0, 500), completed_at: new Date().toISOString(), ...(validationResult ? { validation_result: validationResult } : {}) })
     .eq('operation_id', operationId);
-  await audit(adminClient, caller.profileId, 'RESTORE_FAILED', operationId, { error: errorMessage.slice(0, 200), outcome: 'failed' });
+  await audit(adminClient, caller, 'RESTORE_FAILED', operationId, { error: errorMessage.slice(0, 200), outcome: 'failed' });
 }
 
 interface HealthCheck {

@@ -65,6 +65,13 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { createZipBackupExport, runBackupValidation, runZipArchiveValidation } from '../_shared/backupCore.ts';
+import { auditContextFrom } from '../_shared/requestContext.ts';
+
+// Carried into every audit insert in this file. The database default on
+// audit_logs.ip_address would record THIS function's address rather
+// than the operator's browser, so the real client context is passed
+// explicitly instead.
+type AuditCtx = { ip_address: string | null; user_agent: string | null };
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -152,10 +159,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (refusal) return refusal;
   }
 
+  const auditCtx = auditContextFrom(req);
+
   if (action === 'create') return handleCreate(adminClient, callerProfileId, isScheduledCaller, body?.includeStorageBinaries === true);
-  if (action === 'validate') return handleValidate(adminClient, body?.backupId, callerProfileId);
-  if (action === 'delete') return handleDelete(adminClient, body?.backupId, callerProfileId);
-  return handleDownload(adminClient, body?.backupId, callerProfileId);
+  if (action === 'validate') return handleValidate(adminClient, body?.backupId, callerProfileId, auditCtx);
+  if (action === 'delete') return handleDelete(adminClient, body?.backupId, callerProfileId, auditCtx);
+  return handleDownload(adminClient, body?.backupId, callerProfileId, auditCtx);
 }
 
 /**
@@ -304,7 +313,12 @@ async function handleCreate(
  * "avoid allowing a backup to be deleted while a restore or validation
  * job is actively using it", enforced here rather than hoped for.
  */
-async function handleDelete(adminClient: SupabaseClient, backupId: string | undefined, callerProfileId: string | null): Promise<Response> {
+async function handleDelete(
+  adminClient: SupabaseClient,
+  backupId: string | undefined,
+  callerProfileId: string | null,
+  auditCtx: AuditCtx
+): Promise<Response> {
   if (!backupId) return new Response(JSON.stringify({ error: 'backupId is required' }), { status: 400 });
 
   const { data: backup, error } = await adminClient.from('system_backups').select('*').eq('backup_id', backupId).single();
@@ -376,12 +390,18 @@ async function handleDelete(adminClient: SupabaseClient, backupId: string | unde
     table_name: 'system_backups',
     record_id: backupId,
     old_values: { storage_path: backup.storage_path, size_bytes: backup.size_bytes, verification_status: backup.verification_status },
+    ...auditCtx,
   });
 
   return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
 }
 
-async function handleValidate(adminClient: SupabaseClient, backupId: string | undefined, callerProfileId: string | null): Promise<Response> {
+async function handleValidate(
+  adminClient: SupabaseClient,
+  backupId: string | undefined,
+  callerProfileId: string | null,
+  auditCtx: AuditCtx
+): Promise<Response> {
   if (!backupId) return new Response(JSON.stringify({ error: 'backupId is required' }), { status: 400 });
   const { data: backup, error } = await adminClient.from('system_backups').select('*').eq('backup_id', backupId).single();
   if (error || !backup) return new Response(JSON.stringify({ error: 'Backup not found' }), { status: 404 });
@@ -418,6 +438,7 @@ async function handleValidate(adminClient: SupabaseClient, backupId: string | un
         checks: outcome.checks,
         warnings: outcome.warnings,
       },
+      ...auditCtx,
     });
 
     return new Response(
@@ -454,6 +475,7 @@ async function handleValidate(adminClient: SupabaseClient, backupId: string | un
     record_id: backupId,
     // Metadata only — pass/fail per named check, never file contents.
     new_values: { valid: outcome.valid, checklist: outcome.checklist },
+    ...auditCtx,
   });
 
   return new Response(
@@ -462,7 +484,12 @@ async function handleValidate(adminClient: SupabaseClient, backupId: string | un
   );
 }
 
-async function handleDownload(adminClient: SupabaseClient, backupId: string | undefined, callerProfileId: string | null): Promise<Response> {
+async function handleDownload(
+  adminClient: SupabaseClient,
+  backupId: string | undefined,
+  callerProfileId: string | null,
+  auditCtx: AuditCtx
+): Promise<Response> {
   if (!backupId) return new Response(JSON.stringify({ error: 'backupId is required' }), { status: 400 });
   const { data: backup, error } = await adminClient.from('system_backups').select('*').eq('backup_id', backupId).single();
   if (error || !backup || backup.status !== 'completed' || !backup.storage_path) {
@@ -479,6 +506,7 @@ async function handleDownload(adminClient: SupabaseClient, backupId: string | un
     action: 'BACKUP_DOWNLOADED',
     table_name: 'system_backups',
     record_id: backupId,
+    ...auditCtx,
   });
 
   return new Response(JSON.stringify({ url: signed.signedUrl, expiresInSeconds: 60 }), { headers: { 'content-type': 'application/json' } });

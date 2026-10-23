@@ -821,13 +821,28 @@ export function resolveEncryptionKey(): Uint8Array {
   // Trimmed because a key pasted or piped into `supabase secrets set`
   // very commonly carries a trailing newline; without this, a correct
   // 32-byte key fails length validation for a reason nobody can see.
-  const candidate = raw.trim();
+  let candidate = raw.trim();
+
+  // Re-pad before validating. base64 of 32 bytes is 44 characters
+  // ending in a single '=', and that '=' is very easily lost — password
+  // managers, copy/paste selections and some config tools strip it. The
+  // remaining 43 characters still unambiguously encode the same 32
+  // bytes, so rejecting them would fail a backup over a cosmetic nit.
+  // (Observed for real: an escrowed key came back 43 characters.)
+  //
+  // This is deliberately asymmetric with the rest of this function,
+  // which stays strict: a key that is genuinely the wrong SIZE or
+  // contains invalid characters is still refused. Only ambiguity-free
+  // padding is repaired.
+  if (candidate.length % 4 !== 0) {
+    candidate = candidate.padEnd(candidate.length + ((4 - (candidate.length % 4)) % 4), '=');
+  }
 
   // Strict base64 shape check BEFORE atob, so a malformed value gives a
   // precise diagnosis instead of a bare InvalidCharacterError.
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(candidate) || candidate.length % 4 !== 0) {
     throw new EncryptionKeyError(
-      'BACKUP_ENCRYPTION_KEY is not valid base64. Generate it with `openssl rand -base64 32` and set it verbatim, with no quotes or line breaks.'
+      'BACKUP_ENCRYPTION_KEY is not valid base64. Generate it with `openssl rand -base64 32` and set it verbatim — no surrounding quotes, no line breaks.'
     );
   }
 

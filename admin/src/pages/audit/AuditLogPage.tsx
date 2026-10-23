@@ -278,7 +278,29 @@ export function AuditLogPage() {
                       </button>
                       {techOn && (
                         <div style={{ marginTop: 8, fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>
-                          Action: {log.action} · Internal Resource: {log.table_name} · Record Reference: {maskedReference(log.record_id)}
+                          <div>
+                            Action: {log.action} · Internal Resource: {log.table_name} · Record Reference:{' '}
+                            {maskedReference(log.record_id)}
+                          </div>
+                          {/* Shown only when present. An absent IP is not
+                              a gap: survivor-originated actions never
+                              record one (module45), and neither do
+                              scheduled jobs, which have no HTTP request. */}
+                          {log.ip_address && (
+                            <div style={{ marginTop: 4 }}>
+                              Client IP: {log.ip_address}
+                              {log.user_agent && (
+                                <span title={log.user_agent}> · Agent: {log.user_agent.slice(0, 60)}
+                                  {log.user_agent.length > 60 ? '…' : ''}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {log.ip_address && (
+                            <div style={{ marginTop: 4, fontFamily: 'inherit', fontStyle: 'italic' }}>
+                              Reported by the client via proxy header — not a verified source address.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

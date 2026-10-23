@@ -737,6 +737,23 @@ export interface AuditLog {
   old_values: Record<string, unknown> | null;
   new_values: Record<string, unknown> | null;
   created_at: string;
+  /**
+   * module45 — client IP reported via the x-forwarded-for proxy header.
+   *
+   * NULL is a normal, expected value, not a gap:
+   *  - survivor-originated actions NEVER record an IP (deliberate — an
+   *    IP at the moment someone files an abuse report or triggers an
+   *    SOS is a locating risk; see module45's header and RA 10173)
+   *  - pg_cron and SQL-editor actions have no HTTP request at all
+   *  - rows written before module45
+   *
+   * CLIENT-REPORTED, NOT VERIFIED: x-forwarded-for can be set by the
+   * caller, so treat this as evidence of what was reported rather than
+   * an established source address. The UI labels it as such.
+   */
+  ip_address: string | null;
+  /** Client user-agent, same scope and same trust caveat as ip_address. */
+  user_agent: string | null;
 }
 
 // A reusable REPORT DEFINITION (filters + metadata), never a fixed
