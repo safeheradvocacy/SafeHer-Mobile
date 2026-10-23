@@ -36,7 +36,12 @@ interface AuthContextValue {
   roleTier: RoleTier | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
+  /**
+   * `reason` only affects what the login screen says afterwards.
+   * 'manual' (the default, and what every Sign Out button passes)
+   * shows nothing; 'idle' explains the inactivity timeout.
+   */
+  signOut: (reason?: 'manual' | 'idle') => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
@@ -209,7 +214,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (reason: 'manual' | 'idle' = 'manual') => {
+    // Recording 'manual' deliberately SUPPRESSES the login notice —
+    // consumeSessionEndNotice() returns null for it. Someone who pressed
+    // Sign Out does not need to be told their session ended, and it also
+    // overwrites any stale 'closed'/'idle' marker so a later visit can't
+    // surface a notice for a session that was already closed on purpose.
+    markSessionEnded(reason);
     await supabase.auth.signOut();
     setProfile(null);
     setMunicipality(null);
@@ -228,10 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const resetIdleTimer = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
-        // Recorded BEFORE signOut so the login screen can say why the
-        // session ended rather than just reappearing.
-        markSessionEnded('idle');
-        signOut();
+        signOut('idle');
       }, readSessionTimeoutMinutes() * 60 * 1000);
     };
     IDLE_ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, resetIdleTimer, { passive: true }));

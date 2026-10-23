@@ -41,7 +41,7 @@ export function markSessionEnded(reason: SessionEndReason): void {
  * notice left behind by a long-forgotten session cannot resurface days
  * later looking like something just happened.
  */
-export function consumeSessionEndNotice(): SessionEndReason | null {
+export function consumeSessionEndNotice(): 'closed' | 'idle' | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;

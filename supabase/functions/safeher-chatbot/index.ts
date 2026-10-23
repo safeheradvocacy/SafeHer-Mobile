@@ -32,7 +32,7 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { classifyMessageRuleBased, maxRiskLevel } from './safety.ts';
+import { classifyMessage, maxRiskLevel, priorityForLevel, requiresExpertHandoff, type RiskCategory } from './safety.ts';
 import { matchFaq } from './faq.ts';
 import { detectGuidedIntent } from './guidedActions.ts';
 import { createGroqProvider } from './providers/groq.ts';
@@ -120,12 +120,111 @@ function unavailableResponse(debugDetail?: string): ChatbotResponse & { debugDet
   };
 }
 
-function safetyPanelResponse(riskLevel: MessageRiskLevel): Omit<ChatbotResponse, 'messageId'> {
+/** Outcome of the automatic handoff — drives what the user is told. */
+type HandoffOutcome = 'queued' | 'already_queued' | 'with_expert' | 'failed';
+
+/**
+ * Creates or reuses the expert support request for this conversation.
+ *
+ * Idempotency is enforced by the DATABASE, not by checking first:
+ * module6's `idx_expert_requests_one_active_per_conversation` is a
+ * unique partial index on conversation_id WHERE status != 'CLOSED'. A
+ * concurrent duplicate therefore loses with 23505 rather than creating a
+ * second queue entry — a check-then-insert would race.
+ *
+ * Never touches `status` or `assigned_expert_id` on an existing row. If
+ * an expert has already been assigned or has accepted, that assignment
+ * is theirs; repeated high-risk messages may raise the PRIORITY of a
+ * still-waiting request but must not disturb the workflow around it.
+ */
+async function ensureExpertRequest(
+  // Typed `any` to match insertReply() below — the generated Database
+  // types are not wired into this function, and a half-typed client here
+  // only produces noise at the call sites.
+  serviceClient: any,
+  sessionId: string,
+  profileId: string,
+  level: MessageRiskLevel,
+  category: RiskCategory
+): Promise<HandoffOutcome> {
+  const priority = priorityForLevel(level);
+  // `reason` is a category label, never the user's words — this string
+  // is shown in the expert queue and must not leak message content.
+  const reason = `Automatic safety escalation (${category ?? 'UNSPECIFIED'})`;
+
+  const { error } = await serviceClient
+    .from('expert_support_requests')
+    .insert({ conversation_id: sessionId, profile_id: profileId, reason, priority });
+
+  if (!error) return 'queued';
+
+  // 23505 = unique violation: an active request already exists.
+  if (error.code !== '23505') {
+    console.error('[safeher-chatbot] expert request insert failed:', error.code, error.message);
+    return 'failed';
+  }
+
+  const { data: existing } = await serviceClient
+    .from('expert_support_requests')
+    .select('request_id, status, priority')
+    .eq('conversation_id', sessionId)
+    .neq('status', 'CLOSED')
+    .maybeSingle();
+
+  if (!existing) return 'failed';
+  const row = existing as { request_id: string; status: string; priority: string | null };
+
+  // Raise priority only — and only upward. Attempted separately and
+  // tolerated on failure: the request already being in the queue is the
+  // outcome that matters, and module6's update trigger is deliberately
+  // strict about who may change these rows.
+  const RANK = { NORMAL: 0, HIGH: 1, URGENT: 2 } as const;
+  const current = (row.priority ?? 'NORMAL') as keyof typeof RANK;
+  if (RANK[priority] > RANK[current]) {
+    const { error: bumpErr } = await serviceClient
+      .from('expert_support_requests')
+      .update({ priority })
+      .eq('request_id', row.request_id);
+    if (bumpErr) console.error('[safeher-chatbot] priority bump failed (non-fatal):', bumpErr.code);
+  }
+
+  // An already-accepted conversation is told the truth: a person is
+  // already on it, rather than "you have been added to the queue".
+  return row.status === 'EXPERT_ASSIGNED' || row.status === 'EXPERT_ACTIVE' ? 'with_expert' : 'already_queued';
+}
+
+/**
+ * The safety reply. Wording is driven by the REAL handoff outcome, so
+ * the assistant never claims a human is involved unless the database
+ * says so — and says plainly when the request could not be confirmed.
+ */
+function safetyPanelResponse(
+  riskLevel: MessageRiskLevel,
+  category: RiskCategory,
+  handoff: HandoffOutcome
+): Omit<ChatbotResponse, 'messageId'> {
+  const opening =
+    category === 'SELF_HARM'
+      ? "I'm really glad you told me, and I'm concerned about your safety. You deserve support from a person right now."
+      : riskLevel === 'EMERGENCY'
+        ? "I'm concerned about your safety. If you are in immediate danger, move to a safer place if you can."
+        : 'It sounds like things feel unsafe right now. You are not alone, and you decide what happens next.';
+
+  const handoffLine =
+    handoff === 'queued' || handoff === 'already_queued'
+      ? 'I have requested a SafeSpace support expert — your conversation is waiting for someone to join. You do not need to share more than you are comfortable sharing.'
+      : handoff === 'with_expert'
+        ? 'A SafeSpace support expert is already connected to this conversation.'
+        : // Never claims a queue position that was not confirmed.
+          'I could not confirm a support request just now. Please use the "Talk to an Expert" button below, or contact local emergency services if you are in immediate danger.';
+
+  const closing =
+    category === 'SELF_HARM'
+      ? 'If you might act on these thoughts, please reach out to someone nearby you trust, or local emergency services, right away.'
+      : 'If you are in immediate danger, contact local emergency services or someone you trust when it is safe to do so.';
+
   return {
-    reply:
-      riskLevel === 'EMERGENCY'
-        ? "It sounds like you may be in danger right now. You're not alone — here are ways to get help immediately."
-        : "You may need additional support right now. Here are some options — you're still in control of what happens next.",
+    reply: `${opening}\n\n${handoffLine}\n\n${closing}`,
     senderType: 'System',
     source: 'safety',
     riskLevel,
@@ -199,14 +298,27 @@ async function handleRequest(req: Request): Promise<Response> {
     );
   }
 
-  const ruleLevel = classifyMessageRuleBased(message);
+  const classification = classifyMessage(message);
+  const ruleLevel = classification.level;
 
   // Layer 1 result alone is enough to short-circuit straight to the
   // safety panel — no FAQ lookup, no AI call, for the two most severe
   // levels. Speed matters here, and a third-party AI outage must never
   // delay this.
-  if (ruleLevel === 'EMERGENCY' || ruleLevel === 'URGENT') {
-    const built = safetyPanelResponse(ruleLevel);
+  //
+  // The handoff is created BEFORE the reply is composed, so what the
+  // user is told reflects what actually happened in the database rather
+  // than what was intended. This path never calls Groq, which is the
+  // whole point: a provider outage cannot disable escalation.
+  if (requiresExpertHandoff(ruleLevel)) {
+    const handoff = await ensureExpertRequest(
+      serviceClient,
+      sessionId,
+      callerProfile.profile_id,
+      ruleLevel,
+      classification.category
+    );
+    const built = safetyPanelResponse(ruleLevel, classification.category, handoff);
     const messageId = await insertReply(serviceClient, sessionId, built, ruleLevel);
     return jsonResponse({ ...built, messageId });
   }
@@ -252,8 +364,18 @@ async function handleRequest(req: Request): Promise<Response> {
     const parsed = parseAiJson(rawText);
     const finalLevel = maxRiskLevel(ruleLevel, parsed.riskLevel);
 
-    if (finalLevel === 'URGENT' || finalLevel === 'EMERGENCY') {
-      const built = safetyPanelResponse(finalLevel);
+    // The AI may only ESCALATE (maxRiskLevel), so this catches danger
+    // the rules worded differently — indirect phrasing, an unfamiliar
+    // dialect — and escalates it the same way.
+    if (requiresExpertHandoff(finalLevel)) {
+      const handoff = await ensureExpertRequest(
+        serviceClient,
+        sessionId,
+        callerProfile.profile_id,
+        finalLevel,
+        classification.category
+      );
+      const built = safetyPanelResponse(finalLevel, classification.category, handoff);
       const messageId = await insertReply(serviceClient, sessionId, built, finalLevel);
       return jsonResponse({ ...built, messageId });
     }

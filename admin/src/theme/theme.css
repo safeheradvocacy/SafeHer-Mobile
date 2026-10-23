@@ -3349,22 +3349,16 @@ html { scroll-behavior: smooth; }
   100% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(10,26,48,0.04), 0 12px 28px -14px rgba(10,26,48,0.14); }
 }
 
-.auth-remember-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: -6px 0 16px;
-  font-size: 13px;
-  font-weight: 500;
+/* Replaces .auth-remember-row. The "Remember me" checkbox was removed
+   when sessions became browser-session-only for everyone — a control
+   that no longer changed anything would have been a false promise on a
+   portal holding survivor and case records. This states the behaviour
+   instead of offering a choice that isn't one. */
+.auth-session-note {
+  margin: -6px 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--color-text-muted);
-  cursor: pointer;
-  user-select: none;
-}
-.auth-remember-row input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--color-primary);
-  cursor: pointer;
 }
 
 /* Security cue under the login form's forgot-password link — a soft
