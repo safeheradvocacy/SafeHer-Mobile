@@ -48,7 +48,16 @@ const TERMINAL_RESTORE_STATUSES = [
   'cancelled',
 ];
 
-const BACKUP_TYPE_LABEL: Record<string, string> = { manual: 'Manual', scheduled: 'Scheduled', pre_restore: 'Pre-Restore Safety Backup' };
+// Short enough not to wrap in a table cell. The full wording is kept as
+// a tooltip rather than dropped — "Pre-Restore Safety Backup" across
+// three wrapped lines was costing an entire row's height on every
+// checkpoint.
+const BACKUP_TYPE_LABEL: Record<string, string> = { manual: 'Manual', scheduled: 'Scheduled', pre_restore: 'Pre-Restore' };
+const BACKUP_TYPE_FULL: Record<string, string> = {
+  manual: 'Created manually by an administrator',
+  scheduled: 'Created automatically by the backup schedule',
+  pre_restore: 'Pre-Restore Safety Backup — taken automatically before a restore',
+};
 const BACKUP_STATUS_LABEL: Record<string, string> = { running: 'Running', completed: 'Completed', failed: 'Failed' };
 const VERIFICATION_LABEL: Record<string, string> = { verified: 'Verified', unverified: 'Unverified', corrupted: 'Corrupted' };
 const RESTORE_STATUS_LABEL: Record<string, string> = {
@@ -80,9 +89,53 @@ function formatDuration(startedAt: string | null, completedAt: string | null): s
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
-function formatUtc(iso: string | null): string {
+/**
+ * Renders an observed event time in Philippine Standard Time.
+ *
+ * Every operator of this system is in Aurora Province, so showing UTC
+ * for "when did this happen" was off by 8 hours from the wall clock
+ * they were reading it against — a backup taken at 9:08 AM displayed as
+ * 1:08 AM, which reads as broken rather than as a different timezone.
+ *
+ * Asia/Manila is pinned EXPLICITLY rather than using the browser's
+ * locale: a laptop with a mis-set timezone would otherwise render
+ * misleading times in a recovery log, and PHT has no DST, so the +8
+ * offset is constant year-round with no ambiguous or skipped hours.
+ *
+ * The timestamps themselves are `timestamptz` and were always stored
+ * correctly — this only changes how they are displayed.
+ */
+function formatPht(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC';
+  return (
+    new Date(iso).toLocaleString('en-PH', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Manila',
+    }) + ' PHT'
+  );
+}
+
+/**
+ * Table-cell variant: date and time as two short, non-wrapping lines.
+ *
+ * The full `formatPht` string ("Oct 23, 2026, 9:08 AM PHT") was wrapping
+ * to five lines inside a narrow column, which inflated every row and
+ * pushed the action buttons off-screen. The column header already says
+ * PHT, so repeating it on every row was pure width for no information.
+ */
+function formatPhtCell(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: '—', time: '' };
+  const d = new Date(iso);
+  return {
+    date: d.toLocaleDateString('en-PH', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Manila' }),
+    time: d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }),
+  };
+}
+
+/** 0-23 UTC hour -> the Philippine hour it fires at. PHT is UTC+8, no DST. */
+function utcHourToPht(hourUtc: number): string {
+  return `${String((hourUtc + 8) % 24).padStart(2, '0')}:00`;
 }
 
 function shortId(id: string | null): string {
@@ -150,16 +203,25 @@ interface WizardState {
 /**
  * Provincial Administrator — Backup & Restore (module16 + module23).
  *
- * Three panels that stay deliberately separate, never blurred together:
- *  1. Platform Recovery Infrastructure — a real, verified, dated fact
- *     about this Supabase project's PITR status (unchanged from before).
- *  2. Administrative Configuration Backup — the existing, unchanged
- *     create/schedule feature (module16).
- *  3. Recovery (module23) — the new, controlled, multi-step Restore
+ * Panels that stay deliberately separate, never blurred together:
+ *  1. Backup Authorization Password (module42) — the dedicated second
+ *     factor, shown first because nothing else on this page works
+ *     until it exists.
+ *  2. Information Security — confidentiality/integrity/availability,
+ *     every value computed from real rows, never a hardcoded green.
+ *  3. Administrative Configuration Backup — the create/schedule
+ *     feature (module16, monthly scheduling added in module43).
+ *  4. Recovery (module23) — the controlled, multi-step Restore
  *     capability: select -> validate -> preview -> confirm -> execute
  *     -> post-restore verify, never a single destructive click. Every
  *     status shown here comes from a real system_backups/system_restores
  *     row — nothing is fabricated to make a badge look green.
+ *
+ * The former "Platform Recovery Infrastructure" panel (a static note
+ * that Supabase PITR was not enabled) was removed on request. The fact
+ * itself is unchanged and still recorded in module16's file header —
+ * it was a one-off verification, never a live monitor, which is part
+ * of why it did not belong on an operational page.
  */
 export function BackupRestorePage() {
   const { profile } = useAuth();
@@ -610,7 +672,7 @@ export function BackupRestorePage() {
                   whether cancelling is safe. */}
               {['pending', 'awaiting_confirmation', 'confirmed'].includes(activeRestore.status) && (
                 <div style={{ fontSize: 12, opacity: 0.9, marginTop: 5 }}>
-                  This operation has not written any data yet — it is safe to cancel. Started {formatUtc(activeRestore.created_at)}.
+                  This operation has not written any data yet — it is safe to cancel. Started {formatPht(activeRestore.created_at)}.
                 </div>
               )}
             </div>
@@ -625,21 +687,6 @@ export function BackupRestorePage() {
           </div>
         </div>
       )}
-
-      {/* Panel 1 — real, verified, dated platform fact. Not live-polled. */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 12 }}>Platform Recovery Infrastructure</h3>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'var(--color-surface-muted)', borderRadius: 10, padding: 14 }}>
-          <ShieldAlert size={18} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-warning)' }} />
-          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <strong>Point-in-Time Recovery: Not Enabled.</strong> Verified directly against this project's Supabase
-            infrastructure (<code>supabase backups list</code>): no physical/PITR backups are currently active. PITR
-            provides continuous, full-database recovery to any point within a retention window, but enabling it is a
-            Supabase plan/billing action taken in the Supabase Dashboard (Settings → Add-ons) — it cannot be toggled
-            from this application. This status is a point-in-time verification, not a live monitor.
-          </div>
-        </div>
-      </div>
 
       {/* CIA status — every value below is computed from real rows loaded above. */}
       <div className="card" style={{ marginBottom: 20 }}>
@@ -703,7 +750,7 @@ export function BackupRestorePage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 16 }}>
           <div>
             <span className="label">Last Successful Backup</span>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{lastSuccessful ? formatUtc(lastSuccessful.completed_at) : 'No backups yet'}</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{lastSuccessful ? formatPht(lastSuccessful.completed_at) : 'No backups yet'}</div>
           </div>
           <div>
             <span className="label">Scheduled Backups</span>
@@ -715,17 +762,17 @@ export function BackupRestorePage() {
                       : frequency === 'weekly'
                         ? `Weekly (${DAY_LABELS[dayOfWeek]})`
                         : `Monthly (day ${dayOfMonth})`
-                  } at ${String(hourUtc).padStart(2, '0')}:00 UTC`
+                  } at ${utcHourToPht(hourUtc)} PHT`
                 : 'Disabled'}
             </div>
             {/* Real run state from backup_schedule, not inferred from the
                 backup list. "Never run" is shown as exactly that. */}
             {enabled && (
               <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 3 }}>
-                Next: {nextRunAt ? formatUtc(nextRunAt) : 'not computed'} · Last:{' '}
+                Next: {nextRunAt ? formatPht(nextRunAt) : 'not computed'} · Last:{' '}
                 {lastRunAt ? (
                   <>
-                    {formatUtc(lastRunAt)}
+                    {formatPht(lastRunAt)}
                     {lastRunStatus && (
                       <span style={{ color: lastRunStatus === 'failed' ? 'var(--color-danger)' : undefined }}>
                         {' '}
@@ -799,10 +846,16 @@ export function BackupRestorePage() {
             </div>
           )}
           <div className="field" style={{ marginBottom: 0 }}>
-            <label className="label">Time (UTC)</label>
+            {/* This one stays UTC: backup_schedule.hour_utc and the
+                pg_cron expression are both literally UTC, so relabelling
+                the control would misdescribe what is stored. Each option
+                shows the Philippine time it actually fires at instead. */}
+            <label className="label">Time</label>
             <select className="input" value={hourUtc} onChange={(e) => setHourUtc(Number(e.target.value))}>
               {Array.from({ length: 24 }).map((_, h) => (
-                <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                <option key={h} value={h}>
+                  {utcHourToPht(h)} PHT ({String(h).padStart(2, '0')}:00 UTC)
+                </option>
               ))}
             </select>
           </div>
@@ -819,21 +872,66 @@ export function BackupRestorePage() {
           </button>
         </div>
         {scheduleUpdatedAt && (
-          <p style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 10 }}>Last changed: {formatUtc(scheduleUpdatedAt)}</p>
+          <p style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 10 }}>Last changed: {formatPht(scheduleUpdatedAt)}</p>
         )}
       </div>
 
       {/* Recovery — the new, controlled restore capability. */}
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ marginBottom: 12 }}>Recovery</h3>
+        {/* Rewritten for the module42 ZIP scope. The previous copy still
+            described module23's legacy scope ("municipalities, barangays
+            and shelters… never touches case data"), which is now the
+            opposite of what a ZIP restore does — a misleading thing for
+            an operator to read immediately before authorizing one. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14, marginBottom: 14 }}>
+          <div style={{ background: 'var(--color-surface-muted)', borderRadius: 10, padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+              <ShieldCheck size={15} style={{ color: 'var(--color-success)' }} />
+              <strong style={{ fontSize: 12.5 }}>How a restore runs</strong>
+            </div>
+            <ol style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, lineHeight: 1.7, color: 'var(--color-text-muted)' }}>
+              <li>Archive integrity is re-verified</li>
+              <li>A plan shows what would change</li>
+              <li>A safety checkpoint is taken first</li>
+              <li>Password + typed phrase to confirm</li>
+              <li>Applied, then verified</li>
+            </ol>
+          </div>
+
+          <div style={{ background: 'var(--color-surface-muted)', borderRadius: 10, padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+              <Database size={15} style={{ color: 'var(--color-accent, var(--color-text))' }} />
+              <strong style={{ fontSize: 12.5 }}>What gets restored</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.7, color: 'var(--color-text-muted)' }}>
+              Every in-scope table in the archive — reference data, <strong>cases, services, referrals, SOS alerts
+              and shelter records</strong> — inserted or updated by primary key.
+              <br />
+              <strong>Nothing is ever deleted.</strong> Rows created after the backup are left untouched.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--color-surface-muted)', borderRadius: 10, padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+              <Lock size={15} style={{ color: 'var(--color-warning)' }} />
+              <strong style={{ fontSize: 12.5 }}>Never restored</strong>
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, lineHeight: 1.7, color: 'var(--color-text-muted)' }}>
+              <li>Administrator accounts &amp; roles</li>
+              <li>The audit log itself</li>
+              <li>Terms acceptances</li>
+              <li>Sign-in credentials &amp; MFA</li>
+            </ul>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'var(--color-surface-muted)', borderRadius: 10, padding: 14, marginBottom: 4 }}>
           <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-danger)' }} />
           <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            Restore applies a selected backup's <strong>municipalities, barangays, and shelters</strong> rows back
-            into the live database by inserting/updating them (an <strong>upsert</strong>) — it never deletes rows
-            created after the backup, and it never touches administrator accounts, survivor records, case data, or
-            credentials. Use <strong>Restore</strong> on a specific backup in Backup History below to begin — it is a
-            several-step, confirmed process, never a single click.
+            Because a restore rewrites rows to their backed-up state, any edit made <em>after</em> that backup is
+            reverted. The plan preview counts exactly how many rows that affects before you confirm. Start from{' '}
+            <strong>Restore</strong> on a specific backup in Backup History below.
           </div>
         </div>
       </div>
@@ -850,13 +948,17 @@ export function BackupRestorePage() {
             <table>
               <thead>
                 <tr>
-                  <th>Date / Time (UTC)</th>
+                  <th>Date / Time (PHT)</th>
                   <th>Type</th>
                   <th>Status</th>
-                  <th>Format</th>
-                  <th>Size</th>
-                  <th>Coverage</th>
-                  <th>Integrity</th>
+                  {/* Format+Size merged, and Coverage+Integrity share one
+                      column — but as TWO separate badges stacked, not one
+                      combined verdict. They remain distinct facts ("the
+                      bytes are sound" vs "the archive holds everything");
+                      this only stops them each claiming a full column
+                      width on a table that had run off-screen. */}
+                  <th>Archive</th>
+                  <th>Checks</th>
                   <th>Retention</th>
                   <th className="table-actions-cell"></th>
                 </tr>
@@ -880,72 +982,132 @@ export function BackupRestorePage() {
                     : undefined;
                   return (
                     <tr key={b.backup_id}>
-                      <td>{formatUtc(b.started_at)}</td>
-                      <td>{BACKUP_TYPE_LABEL[b.backup_type] ?? b.backup_type}</td>
-                      <td><StatusBadge label={BACKUP_STATUS_LABEL[b.status] ?? b.status} /></td>
-                      <td style={{ fontSize: 12 }}>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: 12.5 }}>
+                        {formatPhtCell(b.started_at).date}
+                        <div style={{ color: 'var(--color-text-muted)', fontSize: 11.5 }}>
+                          {formatPhtCell(b.started_at).time}
+                        </div>
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: 12.5 }} title={BACKUP_TYPE_FULL[b.backup_type] ?? ''}>
+                        {BACKUP_TYPE_LABEL[b.backup_type] ?? b.backup_type}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}><StatusBadge label={BACKUP_STATUS_LABEL[b.status] ?? b.status} /></td>
+                      <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                         {/* Legacy rows have no archive_format and must not be
                             displayed as ZIP archives they are not. */}
-                        {b.archive_format === 'zip' ? 'ZIP' : b.archive_format === 'json_gz' ? 'Legacy' : 'Legacy'}
-                        {b.is_encrypted && (
-                          <span title={`Encrypted (${b.encryption_algorithm ?? 'AES-256-GCM'})`} style={{ marginLeft: 5, verticalAlign: 'middle' }}>
-                            <Lock size={11} />
-                          </span>
-                        )}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {b.archive_format === 'zip' ? 'ZIP' : 'Legacy'}
+                          {b.is_encrypted && (
+                            <Lock
+                              size={11}
+                              aria-label="Encrypted"
+                              style={{ color: 'var(--color-success)' }}
+                            >
+                              <title>{`Encrypted (${b.encryption_algorithm ?? 'AES-256-GCM'})`}</title>
+                            </Lock>
+                          )}
+                        </span>
+                        <div style={{ color: 'var(--color-text-muted)', fontSize: 11.5 }}>{formatBytes(b.size_bytes)}</div>
                       </td>
-                      <td>{formatBytes(b.size_bytes)}</td>
-                      <td style={{ fontSize: 12 }}>
-                        {/* Three genuinely different states, never collapsed:
-                            complete, finished-but-incomplete, and "this
-                            format never recorded coverage at all". */}
-                        {b.status !== 'completed' ? (
-                          '—'
-                        ) : b.is_complete === true ? (
-                          <span style={{ color: 'var(--color-success)' }}>Complete</span>
-                        ) : b.is_complete === false ? (
-                          <button
-                            className="btn-link"
-                            style={{ color: 'var(--color-warning)', font: 'inherit', padding: 0, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                            onClick={() => setCoverageBackup(b)}
-                          >
-                            Incomplete
-                          </button>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-muted)' }} title="This backup predates coverage reporting.">
-                            Not recorded
-                          </span>
-                        )}
+                      {/* Both checks in one column, still as two distinct
+                          lines. Integrity first (is the archive sound?),
+                          coverage second (does it hold everything?). */}
+                      <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                        <StatusBadge label={VERIFICATION_LABEL[b.verification_status]} />
+                        <div style={{ marginTop: 3 }}>
+                          {b.status !== 'completed' ? (
+                            <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                          ) : b.is_complete === true ? (
+                            <span style={{ color: 'var(--color-success)', fontSize: 11.5 }}>Complete</span>
+                          ) : b.is_complete === false ? (
+                            <button
+                              style={{
+                                color: 'var(--color-warning)',
+                                font: 'inherit',
+                                fontSize: 11.5,
+                                padding: 0,
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                              }}
+                              onClick={() => setCoverageBackup(b)}
+                              title="See exactly what this archive does not contain"
+                            >
+                              Incomplete
+                            </button>
+                          ) : (
+                            <span
+                              style={{ color: 'var(--color-text-muted)', fontSize: 11.5 }}
+                              title="This backup predates coverage reporting."
+                            >
+                              No coverage data
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td><StatusBadge label={VERIFICATION_LABEL[b.verification_status]} /></td>
-                      <td style={{ fontSize: 12 }}>{expired ? 'Expired' : `${b.retention_days}d`}</td>
-                      <td className="table-actions-cell" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{expired ? 'Expired' : `${b.retention_days}d`}</td>
+                      {/* Ordered and weighted by RISK, which the previous
+                          layout had inverted: Delete looked identical to
+                          Validate/Download, while Restore was the only red
+                          button despite being the page's primary action.
+                          Now the two read-only actions are quiet icons,
+                          Restore is the labelled primary, and Delete — the
+                          only irreversible one — is separated by a rule so
+                          it cannot be hit by a mis-aimed click. */}
+                      <td className="table-actions-cell" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
                         {b.status === 'completed' && (
-                          <>
-                            <button className="btn btn-outline btn-sm" onClick={() => validateBackup(b)} disabled={busyBackupId === b.backup_id}>
-                              <RefreshCw size={12} /> Validate
-                            </button>
-                            <button className="btn btn-outline btn-sm" onClick={() => downloadBackup(b)} disabled={busyBackupId === b.backup_id}>
-                              <Download size={12} /> Download
-                            </button>
-                            {b.backup_type !== 'pre_restore' && (
-                              <button
-                                className="btn btn-danger btn-sm"
-                                onClick={() => startRestore(b)}
-                                disabled={restoreDisabled}
-                                title={restoreDisabledReason}
-                              >
-                                <RotateCcw size={12} /> Restore
-                              </button>
-                            )}
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {/* Read-only. Outline = safe, nothing changes. */}
                             <button
                               className="btn btn-outline btn-sm"
+                              onClick={() => validateBackup(b)}
+                              disabled={busyBackupId === b.backup_id}
+                              title="Verify this archive's checksums and contents"
+                            >
+                              <RefreshCw size={13} /> Validate
+                            </button>
+                            <button
+                              className="btn btn-outline btn-sm"
+                              onClick={() => downloadBackup(b)}
+                              disabled={busyBackupId === b.backup_id}
+                              title="Download this archive (encrypted)"
+                            >
+                              <Download size={13} /> Download
+                            </button>
+
+                            {/* Primary = the page's main action. It writes
+                                data, but behind a full guarded wizard, so
+                                it reads as "the thing to do" rather than
+                                "the thing to fear". */}
+                            {b.backup_type !== 'pre_restore' && (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => startRestore(b)}
+                                disabled={restoreDisabled}
+                                title={restoreDisabledReason ?? 'Begin a guided restore from this archive'}
+                              >
+                                <RotateCcw size={13} /> Restore
+                              </button>
+                            )}
+
+                            {/* Danger red is spent HERE and nowhere else in
+                                this row — deletion is the only irreversible
+                                action. The rule gives it its own space so a
+                                mis-aimed click lands on nothing. */}
+                            <span
+                              aria-hidden="true"
+                              style={{ width: 1, height: 22, background: 'var(--color-border)', margin: '0 2px' }}
+                            />
+                            <button
+                              className="btn btn-danger btn-sm"
                               onClick={() => setConfirmDelete(b)}
                               disabled={busyBackupId === b.backup_id || !!activeRestore}
                               title={activeRestore ? 'A recovery operation is currently in progress' : 'Permanently delete this archive'}
                             >
-                              <Trash2 size={12} /> Delete
+                              <Trash2 size={13} /> Delete
                             </button>
-                          </>
+                          </div>
                         )}
                         {b.status === 'failed' && b.error_message && (
                           <span style={{ fontSize: 11.5, color: 'var(--color-danger)' }} title={b.error_message}>
@@ -985,7 +1147,10 @@ export function BackupRestorePage() {
                   <tr key={r.operation_id}>
                     <td title={r.operation_id}>REC-{shortId(r.operation_id)}</td>
                     <td title={r.backup_id}>BAK-{shortId(r.backup_id)}</td>
-                    <td>{formatUtc(r.created_at)}</td>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: 12.5 }}>
+                      {formatPhtCell(r.created_at).date}
+                      <div style={{ color: 'var(--color-text-muted)', fontSize: 11.5 }}>{formatPhtCell(r.created_at).time}</div>
+                    </td>
                     <td><StatusBadge label={RESTORE_STATUS_LABEL[r.status] ?? r.status} /></td>
                     <td>
                       {r.safety_backup_id ? (
@@ -1068,7 +1233,7 @@ export function BackupRestorePage() {
           description={
             <>
               <p style={{ marginTop: 0 }}>
-                Archive <strong>{shortId(confirmDelete.backup_id)}</strong> from {formatUtc(confirmDelete.started_at)} (
+                Archive <strong>{shortId(confirmDelete.backup_id)}</strong> from {formatPht(confirmDelete.started_at)} (
                 {formatBytes(confirmDelete.size_bytes)}) will be removed from storage and from the backup catalog.
               </p>
               <p style={{ marginBottom: 0 }}>
@@ -1143,7 +1308,7 @@ export function BackupRestorePage() {
       {validationResult && (
         <Modal title="Backup Validation Result" onClose={() => setValidationResult(null)} footer={<button className="btn btn-primary" onClick={() => setValidationResult(null)}>Close</button>}>
           <p style={{ fontSize: 13, marginBottom: 10 }}>
-            <strong>{formatUtc(validationResult.backup.started_at)}</strong> —{' '}
+            <strong>{formatPht(validationResult.backup.started_at)}</strong> —{' '}
             {validationResult.valid ? (
               <span style={{ color: 'var(--color-success)' }}>Archive integrity verified</span>
             ) : (
@@ -1202,7 +1367,7 @@ export function BackupRestorePage() {
             <div>
               <h4 style={{ marginBottom: 10 }}>Restore Preview</h4>
               <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', marginBottom: 4 }}>Selected Backup</p>
-              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>BAK-{shortId(wizard.backup.backup_id)} — {formatUtc(wizard.backup.completed_at)}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>BAK-{shortId(wizard.backup.backup_id)} — {formatPht(wizard.backup.completed_at)}</p>
               <ValidationChecklist checklist={wizard.checklist} />
 
               {/* The measured plan. Every number is read from the actual
